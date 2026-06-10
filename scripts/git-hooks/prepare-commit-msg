@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Adds a DCO Signed-off-by trailer when missing.
+# Installed by scripts/install-git-hooks.sh
+
+set -euo pipefail
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=${2:-}
+
+if [ "${COMMIT_SOURCE}" = "merge" ]; then
+  exit 0
+fi
+
+if grep -qE '^Signed-off-by:' "${COMMIT_MSG_FILE}"; then
+  exit 0
+fi
+
+NAME=$(git config user.name || true)
+EMAIL=$(git config user.email || true)
+
+if [ -z "${NAME}" ] || [ -z "${EMAIL}" ]; then
+  echo "prepare-commit-msg: set git user.name and user.email for DCO sign-off" >&2
+  exit 1
+fi
+
+git interpret-trailers \
+  --trailer "Signed-off-by: ${NAME} <${EMAIL}>" \
+  --in-place "${COMMIT_MSG_FILE}"
