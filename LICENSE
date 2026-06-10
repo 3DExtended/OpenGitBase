@@ -1,0 +1,157 @@
+OpenGitBase Source Available License
+
+Copyright (c) 2026 OpenGitBase Authors
+
+This software and associated documentation files (the "Software") are
+made available under the terms of this OpenGitBase Source Available
+License (the "License").
+
+IMPORTANT: This License is NOT an OSI-approved open source license.
+Source code is publicly available, but use in production is subject to
+the conditions below. See COMMERCIAL-LICENSE.md for paid production use
+and docs/licensing.md for examples.
+
+1. Definitions
+
+  1.1 "You" (or "Your") means an individual or legal entity exercising
+      permissions granted by this License.
+
+  1.2 "Organization" means the legal entity on whose behalf You use the
+      Software, and all entities that control, are controlled by, or are
+      under common control with that entity. For purposes of this
+      definition, "control" means (i) ownership of fifty percent (50%) or
+      more of outstanding shares or beneficial ownership, or (ii) the
+      power to direct management of the entity.
+
+  1.3 "Annual Recurring Revenue" or "ARR" means the Organization's
+      gross revenue from all sources over the trailing twelve (12) months,
+      as reasonably determined by the Organization.
+
+  1.4 "Employees" means the Organization's full-time equivalent staff
+      count, including employees, contractors working substantially
+      full-time, and affiliates counted as a single Organization under
+      Section 1.2.
+
+  1.5 "Production Environment" means any deployment of the Software
+      used to store, serve, or process data for operational purposes,
+      excluding Development and Testing Environments.
+
+  1.6 "Development and Testing Environment" means a deployment used
+      solely for local development, automated testing, continuous
+      integration, quality assurance, or staging that is not used to
+      serve production workloads or external users.
+
+  1.7 "Open-Source Project" means a software project whose source code
+      is publicly distributed under a license approved by the Open Source
+      Initiative (<https://opensource.org/licenses>), and where Your use
+      of the Software is solely to develop, build, test, or distribute
+      that Open-Source Project.
+
+  1.8 "Third-Party Access" means providing access to the Software, or
+      to repositories or services operated through the Software, to
+      individuals or organizations outside Your Organization. Internal
+      use by employees, contractors, and affiliates of Your Organization
+      does not constitute Third-Party Access.
+
+  1.9 "Commercial License" means a written agreement with the
+      copyright holders granting production rights beyond this License.
+      See COMMERCIAL-LICENSE.md.
+
+1. Grants
+
+  Subject to the terms of this License, the copyright holders grant You
+  a non-exclusive, worldwide, royalty-free license to:
+
+  (a) use, copy, and modify the Software;
+
+  (b) compile the Software into object form;
+
+  (c) distribute unmodified or modified source code of the Software;
+
+  (d) use the Software in Development and Testing Environments without
+      restriction;
+
+  (e) use the Software in a Production Environment when all of the
+      following apply:
+      (i)   the deployment is for internal use by Your Organization;
+      (ii)  the deployment does not provide Third-Party Access;
+      (iii) Your Organization has ARR below one million US dollars
+            ($1,000,000); and
+      (iv)  Your Organization has three hundred (300) or fewer
+            Employees; or
+
+  (f) use the Software in a Production Environment for an Open-Source
+      Project, regardless of Your Organization's ARR or Employee count,
+      provided the use is solely for that Open-Source Project as defined
+      in Section 1.7.
+
+  You may keep Your modifications private. You are not required to
+  publish or share modifications, subject to Section 3.
+
+1. Restrictions
+
+  Without a valid Commercial License, You may not:
+
+  (a) use the Software in a Production Environment if Your Organization
+      has ARR of one million US dollars ($1,000,000) or more, or more
+      than three hundred (300) Employees, except as permitted under
+      Section 2(f) for Open-Source Projects;
+
+  (b) use the Software in a Production Environment that provides
+      Third-Party Access, including managed hosting, software-as-a-
+      service, platform-as-a-service, resale, or any offering that
+      makes the Software available to parties outside Your Organization,
+      regardless of Your Organization's ARR or Employee count;
+
+  (c) use the OpenGitBase name, logo, or other trademarks except as
+      permitted in TRADEMARK.md;
+
+  (d) remove or obscure copyright, license, or attribution notices in
+      the Software.
+
+  Modifications to the Software remain subject to this License. You may
+  not sublicense the Software on terms that remove or conflict with
+  this License.
+
+1. Contributions
+
+  Contributions to the Software are governed by CONTRIBUTING.md. By
+  submitting a contribution with a Developer Certificate of Origin
+  sign-off, You agree Your contribution is licensed under this License.
+
+1. Third-Party Components
+
+  Third-party components incorporated into the Software remain licensed
+  under their original licenses. This License applies only to
+  OpenGitBase-authored code.
+
+1. Commercial License
+
+  Organizations that do not qualify for free production use under
+  Section 2(e) or Section 2(f), or that provide Third-Party Access,
+  must obtain a Commercial License before production use. See
+  COMMERCIAL-LICENSE.md.
+
+1. Enforcement
+
+  Compliance with this License is self-reported. The copyright holders
+  may audit compliance and pursue remedies for violations. If You need
+  terms different from this License, contact the copyright holders to
+  negotiate a Commercial License.
+
+1. Disclaimer of Warranty
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+1. Entire Agreement
+
+  This License, together with COMMERCIAL-LICENSE.md and TRADEMARK.md,
+  constitutes the entire license agreement for the Software. docs/
+  licensing.md is provided for convenience only and does not modify
+  this License.
