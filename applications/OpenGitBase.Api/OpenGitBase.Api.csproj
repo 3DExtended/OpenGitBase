@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+    <ProjectReference
+      Include="..\..\common\OpenGitBase.Common.SendGrid\OpenGitBase.Common.SendGrid.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference
+      Include="..\..\features\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
+    <ProjectReference
+      Include="..\..\features\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

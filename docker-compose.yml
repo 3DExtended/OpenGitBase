@@ -1,0 +1,57 @@
+﻿services:
+  storage-layer:
+    container_name: opengitbase_storage_layer
+    restart: unless-stopped
+    build:
+      context: ./applications/repo-storage-layer
+      dockerfile: Dockerfile
+    ports:
+      - "2222:22"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/22'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - opengitbase_storage_ssh:/home/git/.ssh
+      - opengitbase_storage_repos:/srv/git
+
+  postgres:
+    image: postgres:16
+    container_name: opengitbase_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: opengitbase
+    volumes:
+      - opengitbase_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    container_name: opengitbase_api
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: applications/OpenGitBase.Api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
+
+volumes:
+  opengitbase_pgdata:
+  opengitbase_storage_ssh:
+  opengitbase_storage_repos:

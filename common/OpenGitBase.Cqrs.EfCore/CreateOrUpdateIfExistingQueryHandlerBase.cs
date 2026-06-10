@@ -1,0 +1,97 @@
+﻿using System.Linq.Expressions;
+
+namespace OpenGitBase.Cqrs.EfCore;
+
+public abstract class CreateOrUpdateIfExistingQueryHandlerBase<
+    TQuery,
+    TModel,
+    TIdentifier,
+    TIdentifierValue,
+    TContext,
+    TEntity
+> : IQueryHandler<TQuery, TIdentifier>
+    where TQuery : CreateOrUpdateIfExistingQuery<TModel, TIdentifier, TIdentifierValue, TQuery>
+    where TModel : ModelBase<TIdentifier, TIdentifierValue>
+    where TIdentifier : Identifier<TIdentifierValue, TIdentifier>, new()
+    where TContext : DbContext
+    where TEntity : class, IIdentifiableEntity<TIdentifierValue>
+{
+    private readonly IDbContextFactory<TContext> _contextFactory;
+    private readonly MapsterMapper.IMapper _mapper;
+
+    protected CreateOrUpdateIfExistingQueryHandlerBase(
+        MapsterMapper.IMapper mapper,
+        IDbContextFactory<TContext> contextFactory
+    )
+    {
+        _mapper = mapper;
+        _contextFactory = contextFactory;
+    }
+
+    public async Task<Option<TIdentifier>> RunQueryAsync(
+        TQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        using (
+            var context = await _contextFactory
+                .CreateDbContextAsync(cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            var preparedModel = await PrepareModelAsync(
+                    query.ModelToCreate,
+                    context,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (preparedModel.IsNone)
+            {
+                return Option.None;
+            }
+
+            var entity = _mapper.Map<TEntity>(preparedModel.Get());
+
+            var existingEntity = await context
+                .Set<TEntity>()
+                .FirstOrDefaultAsync(GetPossiblyExistingEntity(query), cancellationToken)
+                .ConfigureAwait(false);
+
+            TIdentifierValue entityId;
+            if (existingEntity != null)
+            {
+                _mapper.Map(entity, existingEntity);
+                context.Update(existingEntity);
+                entityId = existingEntity.Id;
+            }
+            else
+            {
+                await context
+                    .Set<TEntity>()
+                    .AddAsync(entity, cancellationToken)
+                    .ConfigureAwait(false);
+                entityId = entity.Id;
+            }
+
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            var id = Identifier<TIdentifierValue, TIdentifier>.From(entityId);
+            await AfterCreationAsync(query, id, cancellationToken).ConfigureAwait(false);
+            return id;
+        }
+    }
+
+    protected virtual Task<Option<TModel>> PrepareModelAsync(
+        TModel modelToCreate,
+        TContext context,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(Option.From(modelToCreate));
+
+    protected abstract Expression<Func<TEntity, bool>> GetPossiblyExistingEntity(TQuery query);
+
+    protected virtual Task AfterCreationAsync(
+        TQuery query,
+        TIdentifier id,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
+}

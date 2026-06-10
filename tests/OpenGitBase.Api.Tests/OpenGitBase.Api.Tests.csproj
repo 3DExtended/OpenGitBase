@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>OpenGitBase.Api.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.9.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\applications\OpenGitBase.Api\OpenGitBase.Api.csproj" />
+    <ProjectReference Include="..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\..\common\OpenGitBase.Common.SendGrid\OpenGitBase.Common.SendGrid.csproj" />
+    <ProjectReference Include="..\..\features\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
+    <ProjectReference Include="..\..\features\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

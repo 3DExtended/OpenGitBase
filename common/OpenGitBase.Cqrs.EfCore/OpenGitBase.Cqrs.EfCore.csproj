@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenGitBase.Cqrs.EfCore</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="OpenGitBase.Cqrs" />
+    <Using Include="OpenGitBase.Cqrs.EfCore" />
+    <Using Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="7.4.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+  </ItemGroup>
+
+</Project>
