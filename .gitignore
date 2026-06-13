@@ -368,3 +368,4 @@ applications/opengitbase/android/.kotlin/
 
 docker-compose.override.yml
 coverage/*
+coverage-results/*

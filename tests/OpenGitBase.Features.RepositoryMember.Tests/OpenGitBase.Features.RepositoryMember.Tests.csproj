@@ -3,11 +3,12 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <RootNamespace>OpenGitBase.Common.Tests</RootNamespace>
+    <RootNamespace>OpenGitBase.Features.RepositoryMember.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Mapster" Version="7.4.0" />
+    <PackageReference Include="Mapster.DependencyInjection" Version="1.0.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
@@ -26,10 +27,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
-    <ProjectReference Include="..\..\common\OpenGitBase.Common.SendGrid\OpenGitBase.Common.SendGrid.csproj" />
-    <ProjectReference Include="..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember\OpenGitBase.Features.RepositoryMember.csproj" />
+    <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember.Contracts\OpenGitBase.Features.RepositoryMember.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\repository\OpenGitBase.Features.Repository\OpenGitBase.Features.Repository.csproj" />
+    <ProjectReference Include="..\..\features\repository\OpenGitBase.Features.Repository.Contracts\OpenGitBase.Features.Repository.Contracts.csproj" />
     <ProjectReference Include="..\..\features\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
+    <ProjectReference Include="..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\OpenGitBase.Common.Tests\OpenGitBase.Common.Tests.csproj" />
   </ItemGroup>
 
 </Project>

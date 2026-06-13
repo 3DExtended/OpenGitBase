@@ -22,6 +22,8 @@
     <ProjectReference Include="..\..\features\public-git-ssh-key\OpenGitBase.Features.PublicGitSshKey.Contracts\OpenGitBase.Features.PublicGitSshKey.Contracts.csproj" />
     <ProjectReference Include="..\..\features\repository\OpenGitBase.Features.Repository\OpenGitBase.Features.Repository.csproj" />
     <ProjectReference Include="..\..\features\repository\OpenGitBase.Features.Repository.Contracts\OpenGitBase.Features.Repository.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember\OpenGitBase.Features.RepositoryMember.csproj" />
+    <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember.Contracts\OpenGitBase.Features.RepositoryMember.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
