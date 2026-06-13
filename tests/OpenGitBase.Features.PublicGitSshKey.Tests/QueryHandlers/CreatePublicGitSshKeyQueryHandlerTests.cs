@@ -10,11 +10,15 @@ using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.PublicGitSshKey;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.QueryHandlers;
+using OpenGitBase.Features.Users.Contracts.Models;
+using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.PublicGitSshKey.Tests.QueryHandlers;
 
 public class CreatePublicGitSshKeyQueryHandlerTests
 {
+    private const string SamplePublicKey = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7";
+
     [Fact]
     public async Task RunQueryAsync_PersistsEntity()
     {
@@ -46,16 +50,33 @@ public class CreatePublicGitSshKeyQueryHandlerTests
         var contextFactory = scope.ServiceProvider.GetRequiredService<
             IDbContextFactory<OpenGitBaseDbContext>
         >();
+        var ownerUserId = Guid.NewGuid();
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
             await context.Database.EnsureCreatedAsync();
+            context.Set<UserEntity>().Add(
+                new UserEntity
+                {
+                    Id = ownerUserId,
+                    Username = "testuser",
+                    NormalizedUsername = "TESTUSER",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                }
+            );
+            await context.SaveChangesAsync();
         }
 
         var handler = scope.ServiceProvider.GetRequiredService<CreatePublicGitSshKeyQueryHandler>();
         var result = await handler.RunQueryAsync(
             new CreatePublicGitSshKeyQuery
             {
-                ModelToCreate = new PublicGitSshKeyDto { Name = "Sample" },
+                ModelToCreate = new PublicGitSshKeyDto
+                {
+                    OwnerUserId = UserId.From(ownerUserId),
+                    Name = "Sample",
+                    PublicSSHKey = SamplePublicKey,
+                    Fingerprint = "SHA256:testfingerprint",
+                },
             },
             CancellationToken.None
         );

@@ -12,5 +12,5 @@ public class PublicGitSshKeyDto : ModelBase<PublicGitSshKeyId, Guid>
 
     public string PublicSSHKey { get; set; } = string.Empty;
 
-    public string Fingerprint { get; set; } = string.Empty;
+    public string? Fingerprint { get; set; } = string.Empty;
 }

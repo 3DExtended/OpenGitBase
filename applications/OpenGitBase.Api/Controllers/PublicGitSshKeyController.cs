@@ -49,7 +49,10 @@ public class PublicGitSshKeyController : ControllerBase
                 return BadRequest(new { error = "Invalid SSH public key." });
             }
 
-            if (fingerprint != query.ModelToCreate.Fingerprint)
+            if (
+                fingerprint != query.ModelToCreate.Fingerprint
+                && !string.IsNullOrEmpty(query.ModelToCreate.Fingerprint)
+            )
             {
                 return BadRequest(
                     new
