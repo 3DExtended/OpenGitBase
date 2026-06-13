@@ -14,5 +14,11 @@ public class PublicGitSshKeyEntityConfiguration
         builder.HasKey(entity => entity.Id);
         builder.Property(entity => entity.Name).HasMaxLength(256).IsRequired();
         builder.Property(entity => entity.PublicSSHKey).HasMaxLength(4096).IsRequired();
+
+        builder.HasIndex(e => e.Fingerprint).IsUnique();
+        builder.HasIndex(e => e.PublicSSHKey).IsUnique();
+
+        builder.HasIndex(e => new { e.Fingerprint, e.PublicSSHKey });
+        builder.HasIndex(e => new { e.OwnerUserId, e.Fingerprint });
     }
 }

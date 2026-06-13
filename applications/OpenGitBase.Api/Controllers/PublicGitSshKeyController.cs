@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -15,10 +16,17 @@ public class PublicGitSshKeyController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
 
-    public PublicGitSshKeyController(IQueryProcessor queryProcessor, IUserContext userContext)
+    private readonly ISshKeyService _sshKeyService;
+
+    public PublicGitSshKeyController(
+        IQueryProcessor queryProcessor,
+        IUserContext userContext,
+        ISshKeyService sshKeyService
+    )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
+        _sshKeyService = sshKeyService;
     }
 
     [HttpPost]
@@ -28,6 +36,35 @@ public class PublicGitSshKeyController : ControllerBase
     )
     {
         query.ModelToCreate.OwnerUserId = UserId.From(_userContext.User.UserId);
+
+        // ensure that fingerprint is correctly calculated based on the provided public SSH key
+        try
+        {
+            var fingerprint = _sshKeyService.ValidateAndGetFingerprint(
+                query.ModelToCreate.PublicSSHKey
+            );
+
+            if (fingerprint == null)
+            {
+                return BadRequest(new { error = "Invalid SSH public key." });
+            }
+
+            if (fingerprint != query.ModelToCreate.Fingerprint)
+            {
+                return BadRequest(
+                    new
+                    {
+                        error = "Provided fingerprint does not match the calculated fingerprint of the SSH key.",
+                    }
+                );
+            }
+
+            query.ModelToCreate.Fingerprint = fingerprint;
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
 
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);
         if (result.IsNone)

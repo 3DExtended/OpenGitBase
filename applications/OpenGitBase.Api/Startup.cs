@@ -99,6 +99,7 @@ public class Startup
         services.AddHttpContextAccessor();
         services.AddMemoryCache();
         services.AddSingleton<ISystemClock, SystemClock>();
+        services.AddSingleton<ISshKeyService, SshKeyService>();
         var jwtOptions = Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
         services.AddSingleton(jwtOptions);
         services.AddSingleton(
