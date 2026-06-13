@@ -21,6 +21,8 @@
 
 | Feature | Database | API | CRUD |
 |---------|----------|-----|------|
+| PublicGitSshKey | yes | yes | CRD |
+| Repository | yes | yes | CRUD |
 | Users | no | no | — |
 
 ## Recent agentGenCli commands
@@ -28,3 +30,5 @@
 - `init project` (backend=dotnet, frontend=none, projectName=OpenGitBase) (2026-06-10 10:12 UTC)
 - `init email` (2026-06-10 10:15 UTC)
 - `init auth` (2026-06-10 10:24 UTC)
+- `new backend-feature` (crud=CRUD, feature=PublicGitSshKey, withApi=true, withDatabase=true) (2026-06-11 10:17 UTC)
+- `new backend-feature` (crud=CRUD, feature=repository, withApi=true, withDatabase=true) (2026-06-13 10:17 UTC)

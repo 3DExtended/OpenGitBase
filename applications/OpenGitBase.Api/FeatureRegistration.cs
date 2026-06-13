@@ -8,6 +8,7 @@ public static class FeatureRegistration
         [
             typeof(OpenGitBase.Features.Users.UsersMapsterConfig).Assembly,
             typeof(OpenGitBase.Features.PublicGitSshKey.PublicGitSshKeyMapsterConfig).Assembly,
+            typeof(OpenGitBase.Features.Repository.RepositoryMapsterConfig).Assembly,
             // agentGenCli:feature-assemblies
         ];
 }

@@ -60,6 +60,43 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("PublicGitSshKey", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.RepositoryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PhysicalPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("Slug", "OwnerUserId")
+                        .IsUnique();
+
+                    b.ToTable("Repository", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Users.Entities.UserCredentialsEntity", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -135,6 +172,17 @@ namespace OpenGitBase.Common.Migrations
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.PublicGitSshKey.Entities.PublicGitSshKeyEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.RepositoryEntity", b =>
                 {
                     b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "OwnerUser")
                         .WithMany()

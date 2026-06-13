@@ -76,4 +76,68 @@ public class UserRegisterQueryHandlerTests
 
         Assert.True(result.IsSome);
     }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenUsernameExists_ReturnsNone()
+    {
+        var (provider, connection) = await UsersTestFixture.CreateAsync();
+        await using (provider)
+        await using (connection)
+        {
+            var contextFactory = provider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            await UsersTestFixture.SeedUserAsync(contextFactory, "taken");
+
+            var handler = provider.GetRequiredService<UserRegisterQueryHandler>();
+            var result = await handler.RunQueryAsync(
+                new UserRegisterQuery
+                {
+                    Username = "taken",
+                    Email = "new@example.com",
+                    Password = "Password123!",
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.IsNone);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenEmailExists_ReturnsNone()
+    {
+        var (provider, connection) = await UsersTestFixture.CreateAsync();
+        await using (provider)
+        await using (connection)
+        {
+            var emailProtection = provider.GetRequiredService<IEmailProtectionService>();
+            var hasher = provider.GetRequiredService<IPasswordHasherService>();
+            var contextFactory = provider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            var userId = await UsersTestFixture.SeedUserAsync(contextFactory, "existingemail");
+            await UsersTestFixture.SeedCredentialsAsync(
+                contextFactory,
+                userId,
+                "existingemail",
+                passwordHash: hasher.HashPassword("Password123!"),
+                emailCiphertext: emailProtection.EncryptEmail("exists@example.com"),
+                emailLookupHash: emailProtection.ComputeLookupHash("exists@example.com")
+            );
+
+            var handler = provider.GetRequiredService<UserRegisterQueryHandler>();
+            var result = await handler.RunQueryAsync(
+                new UserRegisterQuery
+                {
+                    Username = "newusername",
+                    Email = "exists@example.com",
+                    Password = "Password123!",
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.IsNone);
+        }
+    }
 }

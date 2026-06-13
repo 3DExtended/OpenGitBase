@@ -8,6 +8,7 @@ using OpenGitBase.Api.Swagger;
 using OpenGitBase.Common;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 
 namespace OpenGitBase.Api;
@@ -100,6 +101,7 @@ public class Startup
         services.AddMemoryCache();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
+        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
         var jwtOptions = Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
         services.AddSingleton(jwtOptions);
         services.AddSingleton(

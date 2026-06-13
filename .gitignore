@@ -367,3 +367,4 @@ applications/opengitbase/android/.kotlin/
 .DS_Store
 
 docker-compose.override.yml
+coverage/*

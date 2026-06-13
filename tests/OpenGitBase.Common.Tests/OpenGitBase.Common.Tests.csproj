@@ -26,7 +26,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\..\common\OpenGitBase.Common.SendGrid\OpenGitBase.Common.SendGrid.csproj" />
     <ProjectReference Include="..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\features\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
   </ItemGroup>
 
 </Project>

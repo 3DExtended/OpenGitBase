@@ -1,5 +1,8 @@
-﻿namespace OpenGitBase.Api;
+﻿using System.Diagnostics.CodeAnalysis;
 
+namespace OpenGitBase.Api;
+
+[ExcludeFromCodeCoverage]
 public static partial class Program
 {
     public static void Main(string[] args)

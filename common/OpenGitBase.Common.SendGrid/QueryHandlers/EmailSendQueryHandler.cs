@@ -1,22 +1,22 @@
 ﻿using Microsoft.Extensions.Logging;
 using OpenGitBase.Cqrs;
-using SendGrid;
-using SendGrid.Helpers.Mail;
-using MailAddress = SendGrid.Helpers.Mail.EmailAddress;
 
 namespace OpenGitBase.Common.SendGrid.QueryHandlers;
 
 public class EmailSendQueryHandler : IQueryHandler<EmailSendQuery, Unit>
 {
     private readonly SendGridOptions _options;
+    private readonly ISendGridEmailSender _emailSender;
     private readonly ILogger<EmailSendQueryHandler>? _logger;
 
     public EmailSendQueryHandler(
         SendGridOptions options,
+        ISendGridEmailSender emailSender,
         ILogger<EmailSendQueryHandler>? logger = null
     )
     {
         _options = options;
+        _emailSender = emailSender;
         _logger = logger;
     }
 
@@ -44,20 +44,20 @@ public class EmailSendQueryHandler : IQueryHandler<EmailSendQuery, Unit>
             return Option<Unit>.None;
         }
 
-        var client = new SendGridClient(_options.ApiKey);
-        var from = new MailAddress(
-            _options.FromEmailAddress,
-            _options.FromSenderName ?? string.Empty
-        );
-        var to = new MailAddress(query.To.Email ?? string.Empty, query.To.Name ?? string.Empty);
-        var msg = MailHelper.CreateSingleEmail(
-            from,
-            to,
-            query.Subject,
-            query.HtmlBody,
-            query.HtmlBody
-        );
-        await client.SendEmailAsync(msg, cancellationToken).ConfigureAwait(false);
+        await _emailSender
+            .SendAsync(
+                new SendGridEmailMessage(
+                    _options.ApiKey,
+                    _options.FromEmailAddress,
+                    _options.FromSenderName,
+                    query.To.Email ?? string.Empty,
+                    query.To.Name,
+                    query.Subject,
+                    query.HtmlBody
+                ),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         return Unit.Value;
     }
 }

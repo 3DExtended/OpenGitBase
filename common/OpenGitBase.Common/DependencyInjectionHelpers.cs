@@ -99,6 +99,8 @@ public static class DependencyInjectionHelpers
 
     private static void ConfigureSendGrid(IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+
         var sendGridOptions = configuration.GetSection("SendGrid").Get<SendGridOptions>();
         if (sendGridOptions == null)
         {

@@ -90,6 +90,9 @@ internal static class AuthTestServerConfiguration
                 IsDisabled = true,
             }
         );
+
+        services.RemoveAll<ISendGridEmailSender>();
+        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
     }
 
     private sealed class PermissiveGoogleIdentityTokenValidator : IGoogleIdentityTokenValidator
