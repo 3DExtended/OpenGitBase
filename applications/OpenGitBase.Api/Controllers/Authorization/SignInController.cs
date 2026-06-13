@@ -51,13 +51,11 @@ public class SignInController : ControllerBase
             return BadRequest();
         }
 
-        var result = await _queryProcessor.RunQueryAsync(
-                new UserLoginQuery
-                {
-                    Username = loginDto.Username,
-                    Password = loginDto.Password,
-                },
-                cancellationToken)
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new UserLoginQuery { Username = loginDto.Username, Password = loginDto.Password },
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         if (result.IsNone)
@@ -75,7 +73,7 @@ public class SignInController : ControllerBase
     [HttpPost("google")]
     [AllowAnonymous]
     public async Task<ActionResult<string>> LoginWithGoogleAsync(
-        [FromBody][Required] GoogleLoginDto loginDto,
+        [FromBody] [Required] GoogleLoginDto loginDto,
         CancellationToken cancellationToken
     )
     {
@@ -97,19 +95,18 @@ public class SignInController : ControllerBase
 
         var googleIdTokenDetails = GetTokenInfo(loginDto.IdentityToken);
         var internalId = "google" + googleIdTokenDetails["sub"];
-        var email = googleIdTokenDetails.TryGetValue("email", out var emailValue) ? emailValue : string.Empty;
+        var email = googleIdTokenDetails.TryGetValue("email", out var emailValue)
+            ? emailValue
+            : string.Empty;
 
-        return await HandleProviderLoginAsync(
-            internalId,
-            email,
-            cancellationToken
-        ).ConfigureAwait(false);
+        return await HandleProviderLoginAsync(internalId, email, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     [HttpPost("apple")]
     [AllowAnonymous]
     public async Task<ActionResult<string>> LoginWithAppleAsync(
-        [FromBody][Required] AppleLoginDto loginDto,
+        [FromBody] [Required] AppleLoginDto loginDto,
         CancellationToken cancellationToken
     )
     {
@@ -120,7 +117,10 @@ public class SignInController : ControllerBase
 
         var tokenDetails = GetTokenInfo(loginDto.IdentityToken);
 
-        if (tokenDetails.TryGetValue("iss", out var issuer) && issuer != "https://appleid.apple.com")
+        if (
+            tokenDetails.TryGetValue("iss", out var issuer)
+            && issuer != "https://appleid.apple.com"
+        )
         {
             return Unauthorized();
         }
@@ -133,7 +133,10 @@ public class SignInController : ControllerBase
             return Unauthorized();
         }
 
-        if (tokenDetails.TryGetValue("exp", out var expValue) && long.TryParse(expValue, out var expSeconds))
+        if (
+            tokenDetails.TryGetValue("exp", out var expValue)
+            && long.TryParse(expValue, out var expSeconds)
+        )
         {
             var expDate = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
             if (DateTimeOffset.UtcNow > expDate)
@@ -143,9 +146,12 @@ public class SignInController : ControllerBase
         }
 
         var internalId = tokenDetails["sub"];
-        var email = tokenDetails.TryGetValue("email", out var emailValue) ? emailValue : string.Empty;
+        var email = tokenDetails.TryGetValue("email", out var emailValue)
+            ? emailValue
+            : string.Empty;
 
-        return await HandleProviderLoginAsync(internalId, email, cancellationToken).ConfigureAwait(false);
+        return await HandleProviderLoginAsync(internalId, email, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     [HttpPost("requestresetpassword")]
@@ -164,16 +170,20 @@ public class SignInController : ControllerBase
             return BadRequest();
         }
 
-        var result = await _queryProcessor.RunQueryAsync(
+        var result = await _queryProcessor
+            .RunQueryAsync(
                 new UserRequestPasswordResetQuery
                 {
                     Email = requestDto.Email,
                     Username = requestDto.Username,
                 },
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
-        return result.IsSome ? Ok("Email sent") : BadRequest("Could not create password reset mail or token!");
+        return result.IsSome
+            ? Ok("Email sent")
+            : BadRequest("Could not create password reset mail or token!");
     }
 
     [HttpPost("resetpassword")]
@@ -194,7 +204,8 @@ public class SignInController : ControllerBase
             return BadRequest();
         }
 
-        var result = await _queryProcessor.RunQueryAsync(
+        var result = await _queryProcessor
+            .RunQueryAsync(
                 new UserPasswordResetQuery
                 {
                     Email = requestDto.Email,
@@ -202,7 +213,8 @@ public class SignInController : ControllerBase
                     ResetCode = requestDto.ResetCode,
                     NewPassword = requestDto.NewPassword,
                 },
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         return result.IsSome ? Ok("New password set") : BadRequest("Could not set new password!");
@@ -240,19 +252,23 @@ public class SignInController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        var possiblyExistingUserId = await _queryProcessor.RunQueryAsync(
+        var possiblyExistingUserId = await _queryProcessor
+            .RunQueryAsync(
                 new UserGetByInternalIdQuery { InternalId = internalId },
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         if (possiblyExistingUserId.IsSome)
         {
-            var user = await _queryProcessor.RunQueryAsync(
+            var user = await _queryProcessor
+                .RunQueryAsync(
                     new UserGetByIdQuery
                     {
                         ModelId = UserId.From(possiblyExistingUserId.Get().Value),
                     },
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
 
             if (user.IsNone)
@@ -277,11 +293,7 @@ public class SignInController : ControllerBase
             entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2);
-                return new Dictionary<string, string>
-                {
-                    { "sub", internalId },
-                    { "email", email },
-                };
+                return new Dictionary<string, string> { { "sub", internalId }, { "email", email } };
             }
         );
 

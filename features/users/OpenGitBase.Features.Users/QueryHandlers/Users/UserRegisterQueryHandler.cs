@@ -34,7 +34,7 @@ public class UserRegisterQueryHandler : IQueryHandler<UserRegisterQuery, UserId>
             )
             .ConfigureAwait(false);
 
-        if (usernameExists.IsNone || usernameExists.Get())
+        if (usernameExists.IsSome)
         {
             return Option<UserId>.None;
         }

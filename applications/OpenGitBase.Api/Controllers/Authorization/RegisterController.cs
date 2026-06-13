@@ -56,7 +56,7 @@ public class RegisterController : ControllerBase
             )
             .ConfigureAwait(false);
 
-        if (usernameExists.IsNone || usernameExists.Get())
+        if (usernameExists.IsSome)
         {
             return Conflict("Username taken");
         }
@@ -134,7 +134,7 @@ public class RegisterController : ControllerBase
             )
             .ConfigureAwait(false);
 
-        if (usernameExists.IsNone || usernameExists.Get())
+        if (usernameExists.IsSome)
         {
             return Conflict("Username taken");
         }

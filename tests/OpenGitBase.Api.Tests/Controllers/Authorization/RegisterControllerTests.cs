@@ -96,7 +96,7 @@ public class RegisterControllerTests : ControllerTestBase
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option.From(false));
+            .Returns(Option<UserId>.None);
         queryProcessor
             .RunQueryAsync(Arg.Any<UserExistsByEmailQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(false));
@@ -255,7 +255,7 @@ public class RegisterControllerTests : ControllerTestBase
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option.From(false));
+            .Returns(Option<UserId>.None);
         queryProcessor
             .RunQueryAsync(Arg.Any<UserExistsByEmailQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(false));

@@ -35,7 +35,7 @@ public class UserExistsByUsernameQueryHandlerTests
             var contextFactory = provider.GetRequiredService<
                 IDbContextFactory<OpenGitBaseDbContext>
             >();
-            await UsersTestFixture.SeedUserAsync(contextFactory, "ExistingUser");
+            var userId = await UsersTestFixture.SeedUserAsync(contextFactory, "ExistingUser");
 
             var handler = provider.GetRequiredService<UserExistsByUsernameQueryHandler>();
             var result = await handler.RunQueryAsync(
@@ -44,12 +44,12 @@ public class UserExistsByUsernameQueryHandlerTests
             );
 
             Assert.True(result.IsSome);
-            Assert.True(result.Get());
+            Assert.Equal(userId, result.Get().Value);
         }
     }
 
     [Fact]
-    public async Task RunQueryAsync_WhenUserMissing_ReturnsFalse()
+    public async Task RunQueryAsync_WhenUserMissing_ReturnsNone()
     {
         var (provider, connection) = await UsersTestFixture.CreateAsync();
         await using (provider)
@@ -61,8 +61,7 @@ public class UserExistsByUsernameQueryHandlerTests
                 CancellationToken.None
             );
 
-            Assert.True(result.IsSome);
-            Assert.False(result.Get());
+            Assert.True(result.IsNone);
         }
     }
 }
