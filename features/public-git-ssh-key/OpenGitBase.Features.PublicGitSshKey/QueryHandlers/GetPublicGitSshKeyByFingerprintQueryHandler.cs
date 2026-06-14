@@ -1,52 +1,49 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using MapsterMapper;
+using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Entities;
-using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Features.PublicGitSshKey.QueryHandlers;
 
-public class GetUserIdBySshKeyFingerprintQueryHandler
-    : IQueryHandler<GetUserIdBySshKeyFingerprintQuery, UserId>
+public class GetPublicGitSshKeyByFingerprintQueryHandler
+    : IQueryHandler<GetPublicGitSshKeyByFingerprintQuery, PublicGitSshKeyDto>
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly IMapper _mapper;
 
-    public GetUserIdBySshKeyFingerprintQueryHandler(
-        IDbContextFactory<OpenGitBaseDbContext> contextFactory
+    public GetPublicGitSshKeyByFingerprintQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IMapper mapper
     )
     {
         _contextFactory = contextFactory;
+        _mapper = mapper;
     }
 
-    public async Task<Option<UserId>> RunQueryAsync(
-        GetUserIdBySshKeyFingerprintQuery query,
+    public async Task<Option<PublicGitSshKeyDto>> RunQueryAsync(
+        GetPublicGitSshKeyByFingerprintQuery query,
         CancellationToken cancellationToken
     )
     {
-        if (string.IsNullOrWhiteSpace(query.Fingerprint))
-        {
-            return Option<UserId>.None;
-        }
-
         var lookupCandidates = SshKeyFingerprintNormalizer.GetLookupCandidates(query.Fingerprint);
         if (lookupCandidates.Count == 0)
         {
-            return Option<UserId>.None;
+            return Option<PublicGitSshKeyDto>.None;
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var ownerUserId = await context
+        var entity = await context
             .Set<PublicGitSshKeyEntity>()
             .AsNoTracking()
             .Where(key => lookupCandidates.Contains(key.Fingerprint))
-            .Select(key => key.OwnerUserId)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ownerUserId == Guid.Empty
-            ? Option<UserId>.None
-            : Option.From(UserId.From(ownerUserId));
+        return entity == null
+            ? Option<PublicGitSshKeyDto>.None
+            : Option.From(_mapper.Map<PublicGitSshKeyDto>(entity));
     }
 }

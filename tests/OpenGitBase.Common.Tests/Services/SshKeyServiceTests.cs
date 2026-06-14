@@ -44,6 +44,7 @@ public class SshKeyServiceTests
         const string key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7";
         var fingerprint = _service.ValidateAndGetFingerprint(key);
         Assert.False(string.IsNullOrWhiteSpace(fingerprint));
+        Assert.StartsWith(SshKeyFingerprintNormalizer.Sha256Prefix, fingerprint);
     }
 
     [Fact]
@@ -53,5 +54,6 @@ public class SshKeyServiceTests
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBsqn0bnF2207g75WsuF6spyWRQ0sN4T10bzcgk43r4=";
         var fingerprint = _service.ValidateAndGetFingerprint(key);
         Assert.False(string.IsNullOrWhiteSpace(fingerprint));
+        Assert.StartsWith(SshKeyFingerprintNormalizer.Sha256Prefix, fingerprint);
     }
 }

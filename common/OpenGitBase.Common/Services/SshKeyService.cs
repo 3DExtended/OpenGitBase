@@ -35,9 +35,9 @@ public class SshKeyService : ISshKeyService
             // Compute the fingerprint (using SHA256 hash of the key bytes)
             using var sha256 = System.Security.Cryptography.SHA256.Create();
             var hashBytes = sha256.ComputeHash(keyBytes);
-            var fingerprint = Convert.ToBase64String(hashBytes);
-
-            return fingerprint;
+            return SshKeyFingerprintNormalizer.ToOpenSshSha256(
+                Convert.ToBase64String(hashBytes)
+            );
         }
         catch
         {

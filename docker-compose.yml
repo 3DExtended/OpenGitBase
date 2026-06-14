@@ -1,21 +1,86 @@
 ﻿services:
-  storage-layer:
-    container_name: opengitbase_storage_layer
+
+  storage-1:
+    container_name: opengitbase_storage_1
     restart: unless-stopped
     build:
-      context: ./applications/repo-storage-layer
+      context: ./applications/repo-storage-layer   # Deine EXISTIERende Storage
       dockerfile: Dockerfile
     ports:
-      - "2222:22"
+      - "2225:22"                    # SSH auf 2225
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/22'"]
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 5s
     volumes:
-      - opengitbase_storage_ssh:/home/git/.ssh
-      - opengitbase_storage_repos:/srv/git
+      - opengitbase_storage1_ssh:/home/git/.ssh      # SSH Keys
+      - opengitbase_storage1_repos:/srv/git          # Git Repos!
+
+
+  storage-2:
+    container_name: opengitbase_storage_2
+    restart: unless-stopped
+    build:
+      context: ./applications/repo-storage-layer   # Deine EXISTIERende Storage
+      dockerfile: Dockerfile
+    ports:
+      - "2226:22"                    # SSH auf 2226
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - opengitbase_storage2_ssh:/home/git/.ssh      # SSH Keys
+      - opengitbase_storage2_repos:/srv/git          # Git Repos!
+
+
+  dispatcher-1:
+    container_name: opengitbase_dispatcher_1
+    restart: unless-stopped
+    build:
+      context: ./applications/OpenGitBase.Dispatcher    # Build vom dispatcher-Pfad
+      dockerfile: Dockerfile
+    depends_on:
+      api:
+        condition: service_started          # Dispatcher startet nach API
+    ports:
+      - "2223:22"                           # SSH auf Port 2223 (nicht 2222!)
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    environment:
+      DISPATCHER_API_URL: "http://api:8080"
+      Dispatcher__ApiUrl: "http://api:8080" # API URL (innerhalb Docker)
+      Dispatcher__DispatcherId: "dispatcher-1"
+
+  dispatcher-2:
+    container_name: opengitbase_dispatcher_2
+    restart: unless-stopped
+    build:
+      context: ./applications/OpenGitBase.Dispatcher    # Build vom dispatcher-Pfad
+      dockerfile: Dockerfile
+    depends_on:
+      api:
+        condition: service_started          # Dispatcher startet nach API
+    ports:
+      - "2224:22"                           # SSH auf Port 2224 (nicht 2223!)
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    environment:
+      DISPATCHER_API_URL: "http://api:8080"
+      Dispatcher__ApiUrl: "http://api:8080" # API URL (innerhalb Docker)
+      Dispatcher__DispatcherId: "dispatcher-2"
 
   postgres:
     image: postgres:16
@@ -53,5 +118,8 @@
 
 volumes:
   opengitbase_pgdata:
-  opengitbase_storage_ssh:
-  opengitbase_storage_repos:
+  opengitbase_storage1_ssh:
+  opengitbase_storage1_repos:
+  opengitbase_storage2_ssh:
+  opengitbase_storage2_repos:
+  
