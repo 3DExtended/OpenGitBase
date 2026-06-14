@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using OpenGitBase.Api.Controllers;
@@ -367,7 +368,11 @@ public class RepositoryAccessChecksControllerTests
         queryProcessor ??= Substitute.For<IQueryProcessor>();
         sshKeyService ??= CreateSshKeyService();
 
-        return new RepositoryAccessChecksController(queryProcessor, sshKeyService)
+        return new RepositoryAccessChecksController(
+            queryProcessor,
+            sshKeyService,
+            NullLogger<RepositoryAccessChecksController>.Instance
+        )
         {
             ControllerContext = new ControllerContext(),
         };

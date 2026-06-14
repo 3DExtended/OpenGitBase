@@ -13,10 +13,15 @@ namespace OpenGitBase.Api.Controllers;
 public sealed class SshAuthenticationController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
+    private readonly ILogger<SshAuthenticationController> _logger;
 
-    public SshAuthenticationController(IQueryProcessor queryProcessor)
+    public SshAuthenticationController(
+        IQueryProcessor queryProcessor,
+        ILogger<SshAuthenticationController> logger
+    )
     {
         _queryProcessor = queryProcessor;
+        _logger = logger;
     }
 
     [HttpGet("by-fingerprint")]
@@ -29,6 +34,10 @@ public sealed class SshAuthenticationController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(fingerprint))
         {
+            _logger.LogWarning(
+                "SSH authentication denied: fingerprint query parameter is missing. StatusCode={StatusCode}",
+                StatusCodes.Status404NotFound
+            );
             return NotFound();
         }
 
@@ -39,6 +48,11 @@ public sealed class SshAuthenticationController : ControllerBase
 
         if (result.IsNone)
         {
+            _logger.LogWarning(
+                "SSH authentication denied: fingerprint {FingerprintPrefix} is not registered. StatusCode={StatusCode}",
+                DescribeFingerprint(fingerprint),
+                StatusCodes.Status404NotFound
+            );
             return NotFound();
         }
 
@@ -52,6 +66,14 @@ public sealed class SshAuthenticationController : ControllerBase
                 )
             );
 
+        _logger.LogInformation(
+            "SSH authentication succeeded: fingerprint={FingerprintPrefix}, keyName={KeyName}, ownerUserId={OwnerUserId}. StatusCode={StatusCode}",
+            DescribeFingerprint(normalizedFingerprint),
+            key.Name,
+            key.OwnerUserId?.Value,
+            StatusCodes.Status200OK
+        );
+
         return Ok(
             new SshAuthenticationResponse
             {
@@ -64,4 +86,7 @@ public sealed class SshAuthenticationController : ControllerBase
             }
         );
     }
+
+    private static string DescribeFingerprint(string fingerprint) =>
+        fingerprint.Length <= 20 ? fingerprint : $"{fingerprint[..20]}...";
 }

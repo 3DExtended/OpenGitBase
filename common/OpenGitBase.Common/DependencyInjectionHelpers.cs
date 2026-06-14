@@ -82,18 +82,7 @@ public static class DependencyInjectionHelpers
             if (!env.IsProduction())
             {
                 options.EnableDetailedErrors();
-                options.EnableSensitiveDataLogging();
             }
-
-            options.LogTo(
-                Console.WriteLine,
-                new[]
-                {
-                    Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandExecuted,
-                    Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandError,
-                },
-                LogLevel.Information
-            );
         });
     }
 

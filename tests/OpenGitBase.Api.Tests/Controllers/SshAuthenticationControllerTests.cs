@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
@@ -85,6 +86,9 @@ public class SshAuthenticationControllerTests
     )
     {
         queryProcessor ??= Substitute.For<IQueryProcessor>();
-        return new SshAuthenticationController(queryProcessor);
+        return new SshAuthenticationController(
+            queryProcessor,
+            NullLogger<SshAuthenticationController>.Instance
+        );
     }
 }

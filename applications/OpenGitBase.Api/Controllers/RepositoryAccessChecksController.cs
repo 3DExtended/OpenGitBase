@@ -18,14 +18,17 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly ISshKeyService _sshKeyService;
+    private readonly ILogger<RepositoryAccessChecksController> _logger;
 
     public RepositoryAccessChecksController(
         IQueryProcessor queryProcessor,
-        ISshKeyService sshKeyService
+        ISshKeyService sshKeyService,
+        ILogger<RepositoryAccessChecksController> logger
     )
     {
         _queryProcessor = queryProcessor;
         _sshKeyService = sshKeyService;
+        _logger = logger;
     }
 
     [HttpPost]
@@ -53,7 +56,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (!ModelState.IsValid)
         {
-            return ValidationProblem(ModelState);
+            return LogValidationFailureAndReturn(request);
         }
 
         var pathParts = request.RepositoryPath.Split('/', StringSplitOptions.None);
@@ -85,7 +88,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (!ModelState.IsValid)
         {
-            return ValidationProblem(ModelState);
+            return LogValidationFailureAndReturn(request);
         }
 
         string fingerprint;
@@ -98,7 +101,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(nameof(request.PublicKey), ex.Message);
-            return ValidationProblem(ModelState);
+            return LogValidationFailureAndReturn(request);
         }
 
         var username = pathParts[0];
@@ -110,7 +113,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         );
         if (authenticatingUserId.IsNone)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
@@ -125,7 +129,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         );
         if (ownerUserId.IsNone)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
@@ -145,7 +150,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         );
         if (repository.IsNone)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
@@ -160,7 +166,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (repositoryDto.OwnerUserId == authenticatingUserId.Get())
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = true,
@@ -182,7 +189,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (repositoryMember.IsNone || repositoryMember.Get().Role == RepositoryRole.None)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
@@ -198,7 +206,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (request.Operation == RepositoryOperation.ReadGit)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = true,
@@ -211,18 +220,21 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (request.Operation == RepositoryOperation.WriteGit)
         {
-            return Ok(
+            return OkWithLog(
+                request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = role >= RepositoryRole.Writer,
                     ResolvedUserId = resolvedUserId,
                     RepositoryId = repositoryDto.Id.Value,
                     EffectiveRole = effectiveRole,
+                    Reason = role >= RepositoryRole.Writer ? null : "Insufficient write access.",
                 }
             );
         }
 
-        return Ok(
+        return OkWithLog(
+            request,
             new RepositoryAccessCheckResponse
             {
                 Allowed = false,
@@ -232,5 +244,63 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 Reason = "Unknown operation.",
             }
         );
+    }
+
+    private ActionResult<RepositoryAccessCheckResponse> LogValidationFailureAndReturn(
+        RepositoryAccessCheckRequest request
+    )
+    {
+        var errors = string.Join(
+            "; ",
+            ModelState
+                .Where(entry => entry.Value?.Errors.Count > 0)
+                .SelectMany(entry =>
+                    entry.Value!.Errors.Select(error => $"{entry.Key}: {error.ErrorMessage}")
+                )
+        );
+
+        _logger.LogWarning(
+            "Repository access check rejected: validation failed ({Errors}). Operation={Operation}, RepositoryPath={RepositoryPath}. StatusCode={StatusCode}",
+            errors,
+            request.Operation,
+            request.RepositoryPath,
+            StatusCodes.Status400BadRequest
+        );
+
+        return ValidationProblem(ModelState);
+    }
+
+    private ActionResult<RepositoryAccessCheckResponse> OkWithLog(
+        RepositoryAccessCheckRequest request,
+        RepositoryAccessCheckResponse response
+    )
+    {
+        if (response.Allowed)
+        {
+            _logger.LogInformation(
+                "Repository access allowed: operation={Operation}, path={RepositoryPath}, role={Role}, userId={UserId}, repositoryId={RepositoryId}. StatusCode={StatusCode}",
+                request.Operation,
+                request.RepositoryPath,
+                response.EffectiveRole,
+                response.ResolvedUserId,
+                response.RepositoryId,
+                StatusCodes.Status200OK
+            );
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Repository access denied: reason={Reason}, operation={Operation}, path={RepositoryPath}, userId={UserId}, repositoryId={RepositoryId}, role={Role}. StatusCode={StatusCode}",
+                response.Reason,
+                request.Operation,
+                request.RepositoryPath,
+                response.ResolvedUserId,
+                response.RepositoryId,
+                response.EffectiveRole,
+                StatusCodes.Status200OK
+            );
+        }
+
+        return Ok(response);
     }
 }
