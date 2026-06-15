@@ -1,0 +1,10 @@
+node_modules
+.nuxt
+.output
+dist
+.git
+*.md
+test-results
+playwright-report
+.env
+.env.*

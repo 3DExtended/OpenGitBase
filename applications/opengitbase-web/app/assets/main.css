@@ -1,0 +1,90 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+
+  /* Neutral palette */
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f4f4f5;
+  --color-neutral-200: #e4e4e7;
+  --color-neutral-300: #d4d4d8;
+  --color-neutral-400: #a1a1aa;
+  --color-neutral-500: #71717a;
+  --color-neutral-600: #52525b;
+  --color-neutral-700: #3f3f46;
+  --color-neutral-800: #27272a;
+  --color-neutral-900: #18181b;
+  --color-neutral-950: #09090b;
+
+  /* Brand accent — teal */
+  --color-accent-50: #f0fdfa;
+  --color-accent-100: #ccfbf1;
+  --color-accent-200: #99f6e4;
+  --color-accent-300: #5eead4;
+  --color-accent-400: #2dd4bf;
+  --color-accent-500: #14b8a6;
+  --color-accent-600: #0d9488;
+  --color-accent-700: #0f766e;
+  --color-accent-800: #115e59;
+  --color-accent-900: #134e4a;
+  --color-accent-950: #042f2e;
+}
+
+:root {
+  --ogb-bg: var(--color-neutral-50);
+  --ogb-surface: #ffffff;
+  --ogb-border: var(--color-neutral-200);
+  --ogb-text: var(--color-neutral-900);
+  --ogb-text-muted: var(--color-neutral-500);
+  --ogb-accent: var(--color-accent-600);
+  --ogb-accent-hover: var(--color-accent-700);
+  --ogb-header-height: 3.5rem;
+  --ogb-sidebar-width: 16rem;
+  --ogb-sidebar-collapsed-width: 3.5rem;
+}
+
+.dark {
+  --ogb-bg: var(--color-neutral-950);
+  --ogb-surface: var(--color-neutral-900);
+  --ogb-border: var(--color-neutral-800);
+  --ogb-text: var(--color-neutral-50);
+  --ogb-text-muted: var(--color-neutral-400);
+  --ogb-accent: var(--color-accent-400);
+  --ogb-accent-hover: var(--color-accent-300);
+}
+
+body {
+  background-color: var(--ogb-bg);
+  color: var(--ogb-text);
+  font-family: var(--font-sans);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.ogb-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.ogb-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.ogb-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .ogb-content {
+    padding: 2rem;
+  }
+}

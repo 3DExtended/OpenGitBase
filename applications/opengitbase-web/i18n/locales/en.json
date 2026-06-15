@@ -1,0 +1,233 @@
+{
+  "app": {
+    "name": "OpenGitBase",
+    "tagline": "Self-hosted Git forge"
+  },
+  "nav": {
+    "home": "Home",
+    "explore": "Explore",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "settings": "Settings",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleTheme": "Toggle theme"
+  },
+  "sidebar": {
+    "placeholder": "Navigation",
+    "comingSoon": "Repository and settings navigation will appear here.",
+    "signInPrompt": "Sign in to access your repositories and settings."
+  },
+  "common": {
+    "loading": "Loading…",
+    "save": "Save changes",
+    "cancel": "Cancel"
+  },
+  "home": {
+    "welcome": "Welcome to {instanceName}",
+    "description": "A community-first Git forge for self-hosting and collaboration.",
+    "getStarted": "Get started",
+    "recentPublic": "Recently updated public repositories",
+    "viewAll": "View all",
+    "noPublicRepos": "No public repositories yet."
+  },
+  "footer": {
+    "poweredBy": "Powered by OpenGitBase"
+  },
+  "auth": {
+    "fields": {
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "newPassword": "New password",
+      "resetCode": "Reset code"
+    },
+    "signIn": {
+      "title": "Sign in",
+      "subtitle": "Welcome back. Enter your credentials to continue.",
+      "submit": "Sign in",
+      "invalidCredentials": "Invalid username or password.",
+      "forgotPassword": "Forgot your password?",
+      "noAccount": "Don't have an account?"
+    },
+    "signUp": {
+      "title": "Create account",
+      "subtitle": "Join this instance to host and collaborate on Git repositories.",
+      "submit": "Create account",
+      "hasAccount": "Already have an account?",
+      "errors": {
+        "usernameTaken": "This username is already taken.",
+        "emailTaken": "This email is already registered.",
+        "slug.required": "Username is required.",
+        "slug.length": "Username must be 2–39 characters.",
+        "slug.format": "Username may only contain letters, numbers, and hyphens.",
+        "slug.reserved": "This username is reserved."
+      }
+    },
+    "forgotPassword": {
+      "title": "Forgot password",
+      "subtitle": "Enter your username and email to receive a reset code.",
+      "submit": "Send reset code",
+      "success": "If the account exists, a reset email has been sent.",
+      "error": "Could not send reset email. Check your details and try again.",
+      "backToSignIn": "Back to sign in"
+    },
+    "resetPassword": {
+      "title": "Reset password",
+      "subtitle": "Enter the reset code from your email and choose a new password.",
+      "submit": "Set new password",
+      "success": "Your password has been updated. You can now sign in.",
+      "error": "Could not reset password. The code may be invalid or expired.",
+      "backToSignIn": "Back to sign in"
+    }
+  },
+  "verification": {
+    "pageTitle": "Verify email",
+    "pending": "Verifying your email…",
+    "success": "Your email has been verified.",
+    "failed": "Verification failed. The link may be invalid or expired.",
+    "invalidLink": "This verification link is invalid.",
+    "continue": "Continue",
+    "bannerTitle": "Verify your email",
+    "bannerDescription": "Please verify your email address to create repositories.",
+    "resend": "Resend email",
+    "resent": "Verification email sent.",
+    "debug": {
+      "label": "Debug",
+      "verifyNow": "Verify now",
+      "showCode": "Show code",
+      "settingsDescription": "Development-only shortcuts. Email is not sent when showing a code.",
+      "codeLabel": "Verification code",
+      "copyCode": "Copy",
+      "openVerifyPage": "Open verify page",
+      "expiresAt": "Expires {date}",
+      "codeError": "Could not generate a verification code."
+    }
+  },
+  "settings": {
+    "title": "Account settings",
+    "subtitle": "Manage your profile, security, and SSH keys.",
+    "profile": {
+      "title": "Profile",
+      "emailVerified": "Email status",
+      "verified": "Verified",
+      "unverified": "Unverified"
+    },
+    "changePassword": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "submit": "Update password",
+      "success": "Password updated successfully.",
+      "error": "Could not change password. Check your current password."
+    },
+    "deleteAccount": {
+      "title": "Delete account",
+      "warning": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "button": "Delete account",
+      "confirmTitle": "Confirm account deletion",
+      "confirmDescription": "Enter your password to permanently delete your account.",
+      "confirmButton": "Delete my account",
+      "blockedTitle": "Resolve these before deleting",
+      "error": "Could not delete account."
+    },
+    "sshKeys": {
+      "title": "SSH keys",
+      "subtitle": "Manage SSH public keys used for Git authentication.",
+      "link": "SSH keys",
+      "addTitle": "Add SSH key",
+      "nameLabel": "Key name",
+      "keyLabel": "Public key",
+      "addButton": "Add key",
+      "listTitle": "Your keys",
+      "empty": "No SSH keys yet."
+    }
+  },
+  "dashboard": {
+    "title": "Welcome, {username}",
+    "subtitle": "Your repositories and organizations at a glance.",
+    "repositories": "Repositories",
+    "organizations": "Organizations",
+    "noRepositories": "You haven't created any repositories yet."
+  },
+  "org": {
+    "create": {
+      "title": "New organization",
+      "subtitle": "Create an organization to collaborate with others.",
+      "nameLabel": "Organization name",
+      "nameHint": "This becomes the URL slug (e.g. /acme-corp).",
+      "submit": "Create organization"
+    },
+    "settings": "Organization settings"
+  },
+  "repo": {
+    "notFound": "Repository not found.",
+    "updatedAt": "Updated {date}",
+    "visibility": {
+      "public": "Public",
+      "private": "Private"
+    },
+    "create": {
+      "title": "New repository",
+      "subtitle": "Create a new Git repository.",
+      "nameLabel": "Repository name",
+      "slugLabel": "Slug",
+      "ownerLabel": "Owner",
+      "ownerUser": "Personal",
+      "ownerOrg": "Organization",
+      "orgLabel": "Organization",
+      "orgPlaceholder": "Select organization",
+      "privateLabel": "Private repository",
+      "submit": "Create repository",
+      "emailRequired": "Verify your email before creating repositories."
+    },
+    "overview": {
+      "title": "Repository",
+      "cloneTitle": "Clone with SSH",
+      "sshHint": "Add an SSH key in"
+    },
+    "settings": {
+      "title": "Repository settings",
+      "saved": "Settings saved.",
+      "dangerZone": "Danger zone",
+      "deleteWarning": "Deleting a repository is permanent and cannot be undone.",
+      "deleteButton": "Delete repository",
+      "deleteConfirmTitle": "Delete repository?",
+      "deleteConfirmDescription": "This will permanently delete the repository and all its data."
+    },
+    "members": {
+      "title": "Members",
+      "addTitle": "Add member",
+      "roleLabel": "Role",
+      "addButton": "Add member",
+      "listTitle": "Current members",
+      "empty": "No collaborators yet.",
+      "roles": {
+        "reader": "Reader",
+        "writer": "Writer",
+        "admin": "Admin"
+      }
+    },
+    "storage": {
+      "title": "Storage usage",
+      "unavailable": "Storage usage data is not available.",
+      "warningTitle": "Storage almost full",
+      "warningDescription": "This repository is using over 80% of its quota. Consider cleaning up or self-hosting.",
+      "limitTitle": "Storage limit reached",
+      "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage."
+    }
+  },
+  "profile": {
+    "user": "User",
+    "org": "Organization",
+    "repositories": "Repositories",
+    "noRepositories": "No public repositories.",
+    "notFound": "Profile not found."
+  },
+  "explore": {
+    "title": "Explore",
+    "subtitle": "Discover public repositories on this instance.",
+    "searchPlaceholder": "Search repositories…",
+    "empty": "No repositories match your search."
+  }
+}

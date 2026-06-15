@@ -1,0 +1,21 @@
+# Docker Compose — serves static Nuxt SPA and proxies /api to the .NET API container.
+# uri strip_prefix removes /api before forwarding (API routes live at /signin, /repository, etc.).
+
+:8080 {
+	encode gzip
+
+	route {
+		@api path /api /api/*
+		handle @api {
+			uri strip_prefix /api
+			reverse_proxy api:8080
+			header Cache-Control "no-store"
+		}
+
+		handle {
+			root * /srv
+			try_files {path} /200.html
+			file_server
+		}
+	}
+}
