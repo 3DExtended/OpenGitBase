@@ -45,6 +45,7 @@ public class StorageNodeHeartbeatQueryHandlerTests
                 NodeId = StorageNodeTestData.SampleNodeId,
                 FreeBytesAvailable = 9_000_000,
                 TotalBytesAvailable = 10_000_000,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
             },
             CancellationToken.None
         );

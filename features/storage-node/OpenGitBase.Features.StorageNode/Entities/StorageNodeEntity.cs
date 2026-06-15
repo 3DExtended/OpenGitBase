@@ -27,4 +27,6 @@ public class StorageNodeEntity : IIdentifiableEntity<Guid>
     public bool IsHealthy { get; set; }
 
     public DateTimeOffset RegisteredAt { get; set; }
+
+    public string CertificateThumbprint { get; set; } = string.Empty;
 }

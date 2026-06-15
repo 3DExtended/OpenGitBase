@@ -1,4 +1,4 @@
-﻿﻿using OpenGitBase.Cqrs;
+﻿using OpenGitBase.Cqrs;
 
 namespace OpenGitBase.Features.StorageNode.Contracts;
 
@@ -18,4 +18,6 @@ public sealed class RegisterStorageNodeQuery
     public long TotalBytesAvailable { get; set; }
 
     public string EnrollmentToken { get; set; } = string.Empty;
+
+    public string CertificateThumbprint { get; set; } = string.Empty;
 }

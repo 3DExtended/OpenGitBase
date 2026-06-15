@@ -3,6 +3,7 @@ using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.Security;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.StorageNode.Contracts;
@@ -44,6 +45,14 @@ public sealed class RegisterStorageNodeQueryHandler
             || string.IsNullOrWhiteSpace(query.InternalHost)
             || query.InternalHttpPort <= 0
         )
+        {
+            return Option<RegisterStorageNodeResult>.None;
+        }
+
+        var certificateThumbprint = NodeCertificateThumbprint.Normalize(
+            query.CertificateThumbprint
+        );
+        if (string.IsNullOrWhiteSpace(certificateThumbprint))
         {
             return Option<RegisterStorageNodeResult>.None;
         }
@@ -90,6 +99,7 @@ public sealed class RegisterStorageNodeQueryHandler
                 LastHeartbeatAt = now,
                 IsHealthy = true,
                 RegisteredAt = now,
+                CertificateThumbprint = certificateThumbprint,
             };
             context.Set<StorageNodeEntity>().Add(existing);
         }

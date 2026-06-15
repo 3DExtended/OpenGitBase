@@ -12,6 +12,18 @@ INTERNAL_HTTP_PORT="${STORAGE_INTERNAL_HTTP_PORT:-8081}"
 TOKEN_FILE="${STORAGE_TOKEN_FILE:-/var/lib/opengitbase/api-token}"
 HEARTBEAT_INTERVAL="${STORAGE_HEARTBEAT_INTERVAL:-30}"
 ENROLLMENT_TOKEN="${STORAGE_ENROLLMENT_TOKEN:-}"
+NODE_CERT_FILE="${STORAGE_NODE_CERT_FILE:-/etc/opengitbase/node.crt}"
+
+get_certificate_thumbprint() {
+  if [ ! -f "${NODE_CERT_FILE}" ]; then
+    echo ""
+    return
+  fi
+  openssl x509 -in "${NODE_CERT_FILE}" -noout -fingerprint -sha256 \
+    | cut -d= -f2 \
+    | tr -d ':' \
+    | tr '[:lower:]' '[:upper:]'
+}
 
 get_disk_stats() {
   local mount="/srv/git"
@@ -40,12 +52,19 @@ EOF
 
   local response=""
   local enrollment_header=()
+  local cert_thumbprint
+  cert_thumbprint="$(get_certificate_thumbprint)"
+  if [ -z "${cert_thumbprint}" ]; then
+    echo "storage-agent: node certificate thumbprint unavailable (${NODE_CERT_FILE})" >&2
+    return 1
+  fi
   if [ -n "${ENROLLMENT_TOKEN}" ]; then
     enrollment_header=(-H "X-Storage-Enrollment-Token: ${ENROLLMENT_TOKEN}")
   fi
   for _ in $(seq 1 30); do
     if response=$(curl -fsS -X POST "${API_URL}/api/v1/storage-nodes/register" \
       -H "Content-Type: application/json" \
+      -H "X-Storage-Node-Certificate-Thumbprint: ${cert_thumbprint}" \
       "${enrollment_header[@]}" \
       -d "${payload}" 2>/dev/null); then
       break
@@ -81,6 +100,11 @@ send_heartbeat() {
     return 1
   fi
   token=$(cat "${TOKEN_FILE}")
+  local cert_thumbprint
+  cert_thumbprint="$(get_certificate_thumbprint)"
+  if [ -z "${cert_thumbprint}" ]; then
+    return 1
+  fi
   local free total
   read -r free total < <(get_disk_stats)
   local payload
@@ -95,6 +119,7 @@ EOF
   curl -fsS -X POST "${API_URL}/api/v1/storage-nodes/heartbeat" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${token}" \
+    -H "X-Storage-Node-Certificate-Thumbprint: ${cert_thumbprint}" \
     -d "${payload}" >/dev/null
 }
 

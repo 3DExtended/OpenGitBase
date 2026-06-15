@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.StorageNode.Contracts;
 
@@ -54,6 +55,12 @@ public sealed class StorageNodeRegistryController : ControllerBase
             enrollmentHeader = string.Empty;
         }
 
+        var certificateThumbprint = StorageNodeCertificateHeaderReader.ReadThumbprint(Request);
+        if (string.IsNullOrWhiteSpace(certificateThumbprint))
+        {
+            return BadRequest(new { error = "Storage node certificate thumbprint is required." });
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new RegisterStorageNodeQuery
             {
@@ -64,6 +71,7 @@ public sealed class StorageNodeRegistryController : ControllerBase
                 FreeBytesAvailable = request.FreeBytesAvailable,
                 TotalBytesAvailable = request.TotalBytesAvailable,
                 EnrollmentToken = enrollmentHeader.ToString(),
+                CertificateThumbprint = certificateThumbprint,
             },
             cancellationToken
         );
@@ -97,8 +105,19 @@ public sealed class StorageNodeRegistryController : ControllerBase
             return Unauthorized();
         }
 
+        var certificateThumbprint = StorageNodeCertificateHeaderReader.ReadThumbprint(Request);
+        if (string.IsNullOrWhiteSpace(certificateThumbprint))
+        {
+            return Unauthorized();
+        }
+
         var verified = await _queryProcessor.RunQueryAsync(
-            new VerifyStorageNodeTokenQuery { NodeId = request.NodeId, ApiToken = token },
+            new VerifyStorageNodeTokenQuery
+            {
+                NodeId = request.NodeId,
+                ApiToken = token,
+                CertificateThumbprint = certificateThumbprint,
+            },
             cancellationToken
         );
         if (verified.IsNone)
@@ -112,6 +131,7 @@ public sealed class StorageNodeRegistryController : ControllerBase
                 NodeId = request.NodeId,
                 FreeBytesAvailable = request.FreeBytesAvailable,
                 TotalBytesAvailable = request.TotalBytesAvailable,
+                CertificateThumbprint = certificateThumbprint,
             },
             cancellationToken
         );

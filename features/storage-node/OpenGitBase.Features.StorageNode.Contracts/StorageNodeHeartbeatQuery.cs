@@ -1,4 +1,4 @@
-﻿﻿using OpenGitBase.Cqrs;
+﻿using OpenGitBase.Cqrs;
 
 namespace OpenGitBase.Features.StorageNode.Contracts;
 
@@ -10,4 +10,6 @@ public sealed class StorageNodeHeartbeatQuery
     public long FreeBytesAvailable { get; set; }
 
     public long TotalBytesAvailable { get; set; }
+
+    public string CertificateThumbprint { get; set; } = string.Empty;
 }

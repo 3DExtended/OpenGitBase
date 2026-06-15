@@ -13,6 +13,8 @@ using OpenGitBase.Features.StorageNode;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.StorageNode.QueryHandlers;
 
+using OpenGitBase.Features.StorageNode.Tests.Testing;
+
 namespace OpenGitBase.Features.StorageNode.Tests.QueryHandlers;
 
 public class RegisterStorageNodeQueryHandlerTests
@@ -56,6 +58,7 @@ public class RegisterStorageNodeQueryHandlerTests
                 FreeBytesAvailable = 5_000_000,
                 TotalBytesAvailable = 10_000_000,
                 EnrollmentToken = enrollmentToken,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
             },
             CancellationToken.None
         );
@@ -102,6 +105,7 @@ public class RegisterStorageNodeQueryHandlerTests
                 InternalHost = "storage-1",
                 InternalHttpPort = 8081,
                 EnrollmentToken = enrollmentToken,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
             },
             CancellationToken.None
         );
@@ -111,6 +115,7 @@ public class RegisterStorageNodeQueryHandlerTests
                 NodeId = "storage-1",
                 InternalHost = "storage-1-new",
                 InternalHttpPort = 9090,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
             },
             CancellationToken.None
         );

@@ -9,6 +9,7 @@ public static class StorageNodeTestData
 {
     public const string SampleNodeId = "storage-1";
     public const string UpdatedNodeId = "storage-1-updated";
+    public const string SampleCertificateThumbprint = "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
 
     public static StorageNodeEntity CreateEntity(
         string nodeId = SampleNodeId,
@@ -29,6 +30,7 @@ public static class StorageNodeTestData
             LastHeartbeatAt = lastHeartbeatAt ?? DateTimeOffset.UtcNow,
             IsHealthy = isHealthy,
             RegisteredAt = DateTimeOffset.UtcNow,
+            CertificateThumbprint = SampleCertificateThumbprint,
         };
 
     public static async Task<(StorageNodeId Id, StorageNodeEntity Entity)> SeedAsync(

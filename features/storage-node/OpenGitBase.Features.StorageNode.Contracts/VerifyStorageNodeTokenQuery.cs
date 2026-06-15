@@ -1,4 +1,4 @@
-﻿﻿using OpenGitBase.Cqrs;
+﻿using OpenGitBase.Cqrs;
 
 namespace OpenGitBase.Features.StorageNode.Contracts;
 
@@ -8,4 +8,6 @@ public sealed class VerifyStorageNodeTokenQuery
     public string NodeId { get; set; } = string.Empty;
 
     public string ApiToken { get; set; } = string.Empty;
+
+    public string CertificateThumbprint { get; set; } = string.Empty;
 }

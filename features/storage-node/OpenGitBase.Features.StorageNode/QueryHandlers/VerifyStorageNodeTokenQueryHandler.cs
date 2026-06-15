@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Security;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.StorageNode.Contracts;
@@ -40,6 +41,16 @@ public sealed class VerifyStorageNodeTokenQueryHandler
             .ConfigureAwait(false);
 
         if (node is null)
+        {
+            return Option<StorageNodeId>.None;
+        }
+
+        if (
+            !NodeCertificateThumbprint.Matches(
+                node.CertificateThumbprint,
+                query.CertificateThumbprint
+            )
+        )
         {
             return Option<StorageNodeId>.None;
         }

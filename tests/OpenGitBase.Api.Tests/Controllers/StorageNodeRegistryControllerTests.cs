@@ -30,8 +30,13 @@ public class StorageNodeRegistryControllerTests
 
         var controller = new StorageNodeRegistryController(queryProcessor)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext(),
+            },
         };
+        controller.Request.Headers["X-Storage-Node-Certificate-Thumbprint"] =
+            "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
 
         var result = await controller.Register(
             new RegisterStorageNodeRequest

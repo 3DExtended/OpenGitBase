@@ -1,4 +1,4 @@
-﻿﻿﻿using OpenGitBase.Cqrs.EfCore;
+﻿using OpenGitBase.Cqrs.EfCore;
 
 namespace OpenGitBase.Features.StorageNode.Contracts;
 
@@ -21,4 +21,6 @@ public class StorageNodeDto : ModelBase<StorageNodeId, Guid>
     public bool IsHealthy { get; set; }
 
     public DateTimeOffset RegisteredAt { get; set; }
+
+    public string CertificateThumbprint { get; set; } = string.Empty;
 }

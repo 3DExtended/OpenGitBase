@@ -64,6 +64,7 @@ public class VerifyStorageNodeTokenQueryHandlerTests
             {
                 NodeId = StorageNodeTestData.SampleNodeId,
                 ApiToken = token,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
             },
             CancellationToken.None
         );
