@@ -28,6 +28,7 @@ public class JWTTokenGenerator : IJWTTokenGenerator
             _jwtOptions.Key ?? throw new InvalidOperationException("Jwt:Key is required.")
         );
 
+        var now = _systemClock.UtcNow.UtcDateTime;
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity([
@@ -36,9 +37,8 @@ public class JWTTokenGenerator : IJWTTokenGenerator
                 new Claim(JwtRegisteredClaimNames.Sub, username),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             ]),
-            Expires = _systemClock.UtcNow.UtcDateTime.AddSeconds(
-                _jwtOptions.NumberOfSecondsToExpire
-            ),
+            NotBefore = now,
+            Expires = now.AddSeconds(_jwtOptions.NumberOfSecondsToExpire),
             Issuer = issuer,
             Audience = audience,
             SigningCredentials = new SigningCredentials(
