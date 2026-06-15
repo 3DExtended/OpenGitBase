@@ -5,13 +5,13 @@ FROM debian:stable-slim
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    git openssh-server ca-certificates python3 curl \
+    git openssh-server ca-certificates python3 curl openssl \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN useradd -m -d /home/git -s /usr/bin/git-shell git \
-    && mkdir -p /home/git/.ssh /var/run/sshd /srv/git /home/git/git-shell-commands \
+    && mkdir -p /home/git/.ssh /var/run/sshd /srv/git /home/git/git-shell-commands /etc/opengitbase \
     && chown -R git:git /home/git /srv/git \
     && chmod 700 /home/git/.ssh \
     && chmod 755 /home/git/git-shell-commands \

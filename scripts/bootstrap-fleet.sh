@@ -3,6 +3,14 @@
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8080}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKI_SCRIPT="${SCRIPT_DIR}/../docker/pki/generate-node-pki.sh"
+
+if [ -x "${PKI_SCRIPT}" ]; then
+  echo "==> Generating storage node certificates"
+  "${PKI_SCRIPT}"
+fi
+
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${ADMIN_PASS:-change-me-admin}"
 ENV_FILE="${ENV_FILE:-docker/.env}"

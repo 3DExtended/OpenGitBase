@@ -23,6 +23,8 @@
       STORAGE_ENROLLMENT_TOKEN: "${STORAGE_1_ENROLLMENT_TOKEN}"
     volumes:
       - opengitbase_storage1_repos:/srv/git
+      - ./docker/pki/storage-1.crt:/etc/opengitbase/node.crt:ro
+      - ./docker/pki/storage-1.key:/etc/opengitbase/node.key:ro
 
   storage-2:
     container_name: opengitbase_storage_2
@@ -47,6 +49,8 @@
       STORAGE_ENROLLMENT_TOKEN: "${STORAGE_2_ENROLLMENT_TOKEN}"
     volumes:
       - opengitbase_storage2_repos:/srv/git
+      - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
+      - ./docker/pki/storage-2.key:/etc/opengitbase/node.key:ro
 
   dispatcher-1:
     container_name: opengitbase_dispatcher_1
