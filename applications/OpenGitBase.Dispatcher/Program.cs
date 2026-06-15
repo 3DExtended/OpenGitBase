@@ -11,6 +11,8 @@ var sshKeyFingerprint = arguments.Length > 2 ? arguments[2] : null;
 var sshPublicKey = arguments.Length > 3 ? arguments[3] : null;
 var sshUser = arguments.Length > 4 ? arguments[4] : "git";
 
+Console.WriteLine("dotnetDispatcher: Missing SSH_ORIGINAL_COMMAND");
+
 if (sshOriginalCommand == null)
 {
     Console.Error.WriteLine("Missing SSH_ORIGINAL_COMMAND");
@@ -30,9 +32,7 @@ if (string.IsNullOrWhiteSpace(sshPublicKey))
 }
 
 var parser = new GitCommandParser();
-if (
-    !parser.TryParse(sshOriginalCommand, out var operation, out var repositoryPath)
-)
+if (!parser.TryParse(sshOriginalCommand, out var operation, out var repositoryPath))
 {
     Console.Error.WriteLine($"Unsupported SSH command: {sshOriginalCommand}");
     Environment.Exit(1);
@@ -74,9 +74,7 @@ try
 
     if (!accessCheck.Allowed)
     {
-        Console.Error.WriteLine(
-            accessCheck.Reason ?? "Repository access denied for user."
-        );
+        Console.Error.WriteLine(accessCheck.Reason ?? "Repository access denied for user.");
         Environment.Exit(1);
     }
 

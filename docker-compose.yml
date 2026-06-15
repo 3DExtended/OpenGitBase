@@ -115,6 +115,28 @@
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
+      Debug__Features__EmailVerification: "true"
+
+  web:
+    container_name: opengitbase_web
+    restart: unless-stopped
+    build:
+      context: ./applications/opengitbase-web
+      dockerfile: Dockerfile
+      args:
+        NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
+        NUXT_PUBLIC_API_BASE: /api
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "3000:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   opengitbase_pgdata:
