@@ -5,7 +5,7 @@
 - Project: OpenGitBase
 - Initialized: 2026-06-10
 - Backend: dotnet
-- Frontend: none
+- Frontend: opengitbase-web (Nuxt 4 SPA)
 
 ## Init modules
 

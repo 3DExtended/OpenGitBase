@@ -8,31 +8,82 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
+PATH_PREFIXES = (
+    "Developer/projects/opengitbase/",
+    "/Users/peteresser/Developer/projects/opengitbase/",
+)
+
+ASSEMBLY_PREFIXES = {
+    "OpenGitBase.Cqrs/": "OpenGitBase.Cqrs",
+    "OpenGitBase.Cqrs.EfCore/": "OpenGitBase.Cqrs.EfCore",
+    "OpenGitBase.Common/": "OpenGitBase.Common",
+    "OpenGitBase.Common.SendGrid/": "OpenGitBase.Common.SendGrid",
+    "OpenGitBase.Api/": "OpenGitBase.Api",
+    "OpenGitBase.Features.Organization/": "OpenGitBase.Features.Organization",
+    "OpenGitBase.Features.Organization.Contracts/": "OpenGitBase.Features.Organization.Contracts",
+    "OpenGitBase.Features.PublicGitSshKey/": "OpenGitBase.Features.PublicGitSshKey",
+    "OpenGitBase.Features.PublicGitSshKey.Contracts/": "OpenGitBase.Features.PublicGitSshKey.Contracts",
+    "OpenGitBase.Features.Repository/": "OpenGitBase.Features.Repository",
+    "OpenGitBase.Features.Repository.Contracts/": "OpenGitBase.Features.Repository.Contracts",
+    "OpenGitBase.Features.RepositoryMember/": "OpenGitBase.Features.RepositoryMember",
+    "OpenGitBase.Features.RepositoryMember.Contracts/": "OpenGitBase.Features.RepositoryMember.Contracts",
+    "OpenGitBase.Features.Users/": "OpenGitBase.Features.Users",
+    "OpenGitBase.Features.Users.Contracts/": "OpenGitBase.Features.Users.Contracts",
+}
+
+
+def normalize_filename(filename: str) -> str:
+    normalized = filename.replace("\\", "/")
+    for prefix in PATH_PREFIXES:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :]
+            break
+    return normalized
+
+
+def assembly_name(filename: str) -> str | None:
+    normalized = normalize_filename(filename)
+    if "/Migrations/" in normalized or ".Tests/" in normalized:
+        return None
+
+    for prefix, assembly in ASSEMBLY_PREFIXES.items():
+        if normalized.startswith(("common/", "features/", "applications/")):
+            parts = normalized.split("/")
+            if parts[0] == "common" and len(parts) >= 2:
+                return f"OpenGitBase.{parts[1].removeprefix('OpenGitBase.')}"
+            if parts[0] == "features" and len(parts) >= 3:
+                return f"OpenGitBase.{parts[2].removeprefix('OpenGitBase.')}"
+            if parts[0] == "applications" and len(parts) >= 2:
+                return f"OpenGitBase.{parts[1].removeprefix('OpenGitBase.')}"
+        if normalized.startswith(prefix):
+            return assembly
+
+    return None
+
 
 def main() -> int:
     coverage_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "coverage")
-    lines: dict[tuple[str, str, str], int] = defaultdict(int)
+    line_hits: dict[tuple[str, str], int] = {}
 
     for xml in coverage_dir.rglob("coverage.cobertura.xml"):
         root = ET.parse(xml).getroot()
-        for pkg in root.findall(".//package"):
-            pkg_name = pkg.get("name") or ""
-            if not pkg_name.startswith("OpenGitBase") or pkg_name.endswith(".Tests"):
+        for cls in root.findall(".//classes/class"):
+            filename = cls.get("filename") or ""
+            assembly = assembly_name(filename)
+            if assembly is None:
                 continue
-            for cls in pkg.findall("classes/class"):
-                fn = (cls.get("filename") or "").replace("\\", "/")
-                if "/Migrations/" in fn:
-                    continue
-                for line in cls.findall("lines/line"):
-                    key = (pkg_name, fn, line.get("number") or "")
-                    hits = int(line.get("hits", "0"))
-                    lines[key] = max(lines[key], hits)
+
+            for line in cls.findall("lines/line"):
+                line_number = line.get("number") or ""
+                key = (assembly, line_number)
+                hits = int(line.get("hits", "0"))
+                line_hits[key] = max(line_hits.get(key, 0), hits)
 
     pkg_stats: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    for (pkg_name, _, _), hits in lines.items():
-        pkg_stats[pkg_name][1] += 1
+    for (assembly, _), hits in line_hits.items():
+        pkg_stats[assembly][1] += 1
         if hits > 0:
-            pkg_stats[pkg_name][0] += 1
+            pkg_stats[assembly][0] += 1
 
     total_c = total_v = 0
     print("Production assembly line coverage (merged, excl. migrations):")
