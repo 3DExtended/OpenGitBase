@@ -79,6 +79,23 @@ public class GetPublicGitSshKeyByFingerprintQueryHandlerTests
         Assert.Equal(PublicSshKey, result.Get().PublicSSHKey);
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenLegacyPaddedFingerprintStored_MatchesOpenSshLookup()
+    {
+        const string paddedStored = "SHA256:gLmfXwUJ5fQIiHymKjrCfvoVYALr91myqq7XduS52f4=";
+        const string openSshLookup = "SHA256:gLmfXwUJ5fQIiHymKjrCfvoVYALr91myqq7XduS52f4";
+
+        await using var fixture = await CreateFixtureAsync(paddedStored);
+
+        var result = await fixture.Handler.RunQueryAsync(
+            new GetPublicGitSshKeyByFingerprintQuery { Fingerprint = openSshLookup },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsSome);
+        Assert.Equal(PublicSshKey, result.Get().PublicSSHKey);
+    }
+
     private static async Task<TestFixture> CreateFixtureAsync(string? storedFingerprint = null)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
