@@ -97,4 +97,103 @@ public class SystemHealthCheckQueryHandlerTests
         Assert.True(result.IsSome);
         Assert.Equal(HealthStatus.Healthy, result.Get().Status);
     }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenDatabaseFactoryThrows_ReturnsUnhealthyDatabaseResult()
+    {
+        var contextFactory = Substitute.For<IDbContextFactory<OpenGitBaseDbContext>>();
+        contextFactory
+            .CreateDbContextAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<OpenGitBaseDbContext>>(_ => throw new InvalidOperationException("db down"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(contextFactory);
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        var handler = new SystemHealthCheckQueryHandler(
+            serviceProvider,
+            Substitute.For<ILogger<SystemHealthCheckQueryHandler>>()
+        );
+        var result = await handler.RunQueryAsync(
+            new SystemHealthCheckQuery { RunInParallel = false, TimeoutMs = 1000 },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsSome);
+        var databaseResult = result.Get().Results.Single(r => r.Name == "DatabaseConnectivity");
+        Assert.Equal(HealthStatus.Unhealthy, databaseResult.Status);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenCancelledDuringDatabaseCheck_ReturnsUnhealthyDatabaseResult()
+    {
+        var databaseName = Guid.NewGuid().ToString("N");
+        var services = new ServiceCollection();
+        services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider([]));
+        services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
+            options
+                .UseSqlite($"Data Source={databaseName};Mode=Memory;Cache=Shared")
+                .EnableServiceProviderCaching(false)
+        );
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var contextFactory = serviceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        var handler = new SystemHealthCheckQueryHandler(
+            serviceProvider,
+            Substitute.For<ILogger<SystemHealthCheckQueryHandler>>()
+        );
+        var result = await handler.RunQueryAsync(
+            new SystemHealthCheckQuery { RunInParallel = false, TimeoutMs = 5000 },
+            cancellationTokenSource.Token
+        );
+
+        Assert.True(result.IsSome);
+        var databaseResult = result.Get().Results.Single(r => r.Name == "DatabaseConnectivity");
+        Assert.Equal(HealthStatus.Unhealthy, databaseResult.Status);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenRunSequentially_ReturnsHealthyReport()
+    {
+        var databaseName = Guid.NewGuid().ToString("N");
+        var services = new ServiceCollection();
+        services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider([]));
+        services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
+            options
+                .UseSqlite($"Data Source={databaseName};Mode=Memory;Cache=Shared")
+                .EnableServiceProviderCaching(false)
+        );
+        services.AddLogging();
+        services.AddCqrs(options =>
+            options.WithQueryHandlersFrom(typeof(SystemHealthCheckQueryHandler).Assembly)
+        );
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var contextFactory = serviceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
+
+        var handler = serviceProvider.GetRequiredService<SystemHealthCheckQueryHandler>();
+        var result = await handler.RunQueryAsync(
+            new SystemHealthCheckQuery { RunInParallel = false, TimeoutMs = 5000 },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsSome);
+        Assert.Equal(HealthStatus.Healthy, result.Get().Status);
+    }
 }

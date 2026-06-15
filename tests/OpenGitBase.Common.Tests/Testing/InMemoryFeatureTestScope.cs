@@ -32,7 +32,7 @@ public sealed class InMemoryFeatureTestScope<TDbContext, TMapsterConfig> : IAsyn
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider(assemblies.Distinct().ToArray())
         );
-        services.AddDbContextFactory<TDbContext>(options => options.UseSqlite(_connection));
+        services.AddTestDbContextFactory<TDbContext>(_connection);
         services.AddLogging();
 
         var mapsterConfig = new TypeAdapterConfig();
@@ -60,6 +60,9 @@ public sealed class InMemoryFeatureTestScope<TDbContext, TMapsterConfig> : IAsyn
 
     public THandler GetHandler<THandler>()
         where THandler : notnull => _serviceProvider.GetRequiredService<THandler>();
+
+    public TService GetService<TService>()
+        where TService : notnull => _serviceProvider.GetRequiredService<TService>();
 
     public async ValueTask DisposeAsync()
     {
