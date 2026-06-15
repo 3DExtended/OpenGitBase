@@ -99,6 +99,18 @@ public abstract class ControllerTestBase
         return token;
     }
 
+    protected async Task MarkEmailVerifiedAsync(string username)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        var credentials = await context
+            .Set<OpenGitBase.Features.Users.Entities.UserCredentialsEntity>()
+            .SingleAsync(x => x.Username == username);
+        credentials.EmailVerified = true;
+        credentials.EmailVerificationTokenHash = null;
+        credentials.EmailVerificationTokenExpireDate = null;
+        await context.SaveChangesAsync();
+    }
+
     protected async Task VerifyJwtAsync(string jwt)
     {
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
@@ -155,6 +167,19 @@ public abstract class ControllerTestBase
         context.Database.EnsureCreated();
 
         return (customFactory.CreateClient(), serviceProvider.GetRequiredService<IMemoryCache>());
+    }
+
+    protected HttpClient CreateClientWithDebugEmailVerification(bool enabled)
+    {
+        return Factory
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureServices(services =>
+                {
+                    AuthTestServerConfiguration.ConfigureDebugFeatures(services, enabled);
+                });
+            })
+            .CreateClient();
     }
 
     protected virtual void Dispose(bool disposing)

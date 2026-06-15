@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using NSubstitute;
+using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Tests.Base;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
@@ -25,7 +26,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var response = await Client.PostAsJsonAsync(
             "/public-git-ssh-key",
-            CreateKeyQuery("Laptop")
+            CreateKeyRequest("Laptop")
         );
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -60,7 +61,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var createResponse = await Client.PostAsJsonAsync(
             "/public-git-ssh-key",
-            CreateKeyQuery("Owner key")
+            CreateKeyRequest("Owner key")
         );
         createResponse.EnsureSuccessStatusCode();
         var createdId = await createResponse.Content.ReadFromJsonAsync<PublicGitSshKeyId>();
@@ -93,7 +94,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var createResponse = await Client.PostAsJsonAsync(
             "/public-git-ssh-key",
-            CreateKeyQuery("Visible key")
+            CreateKeyRequest("Visible key")
         );
         createResponse.EnsureSuccessStatusCode();
 
@@ -124,7 +125,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var createResponse = await Client.PostAsJsonAsync(
             "/public-git-ssh-key",
-            CreateKeyQuery("Delete me")
+            CreateKeyRequest("Delete me")
         );
         createResponse.EnsureSuccessStatusCode();
         var createdId = await createResponse.Content.ReadFromJsonAsync<PublicGitSshKeyId>();
@@ -154,7 +155,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var createResponse = await Client.PostAsJsonAsync(
             "/public-git-ssh-key",
-            CreateKeyQuery("Protected key")
+            CreateKeyRequest("Protected key")
         );
         createResponse.EnsureSuccessStatusCode();
         var createdId = await createResponse.Content.ReadFromJsonAsync<PublicGitSshKeyId>();
@@ -179,7 +180,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
 
         var client = CreateAuthenticatedClient(queryProcessor, userId, "mock-create-user");
 
-        var response = await client.PostAsJsonAsync("/public-git-ssh-key", CreateKeyQuery("Fails"));
+        var response = await client.PostAsJsonAsync("/public-git-ssh-key", CreateKeyRequest("Fails"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -246,13 +247,11 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private static CreatePublicGitSshKeyQuery CreateKeyQuery(string name) =>
+    private static CreatePublicGitSshKeyRequest CreateKeyRequest(string name) =>
         new()
         {
-            ModelToCreate = new PublicGitSshKeyDto
+            ModelToCreate = new CreatePublicGitSshKeyModelRequest
             {
-                // Satisfies request validation; the controller overwrites this from the JWT.
-                OwnerUserId = UserId.From(Guid.NewGuid()),
                 Name = name,
                 PublicSSHKey = SamplePublicKey,
             },

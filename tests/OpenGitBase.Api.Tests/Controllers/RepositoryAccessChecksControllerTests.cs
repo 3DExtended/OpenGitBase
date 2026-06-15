@@ -4,6 +4,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
@@ -144,7 +145,7 @@ public class RepositoryAccessChecksControllerTests
         var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
         Assert.False(response.Allowed);
         Assert.Equal(authenticatingUserId.Value, response.ResolvedUserId);
-        Assert.Equal("User not found.", response.Reason);
+        Assert.Equal("User of repo path not found.", response.Reason);
     }
 
     [Fact]
@@ -158,7 +159,7 @@ public class RepositoryAccessChecksControllerTests
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(ownerUserId));
         queryProcessor
-            .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<RepositoryDto>.None);
 
         var controller = CreateController(queryProcessor: queryProcessor);
@@ -168,7 +169,7 @@ public class RepositoryAccessChecksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
         Assert.False(response.Allowed);
-        Assert.Equal("Repository not found.", response.Reason);
+        Assert.Equal("Repository of repo path not found.", response.Reason);
     }
 
     [Theory]
@@ -184,7 +185,7 @@ public class RepositoryAccessChecksControllerTests
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(ownerUserId));
         queryProcessor
-            .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
             .Returns(
                 Option.From(
                     new RepositoryDto
@@ -371,7 +372,8 @@ public class RepositoryAccessChecksControllerTests
         return new RepositoryAccessChecksController(
             queryProcessor,
             sshKeyService,
-            NullLogger<RepositoryAccessChecksController>.Instance
+            NullLogger<RepositoryAccessChecksController>.Instance,
+            new RepositoryStorageQuotaOptions()
         )
         {
             ControllerContext = new ControllerContext(),
@@ -410,7 +412,7 @@ public class RepositoryAccessChecksControllerTests
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(ownerUserId));
         queryProcessor
-            .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
             .Returns(
                 Option.From(
                     new RepositoryDto

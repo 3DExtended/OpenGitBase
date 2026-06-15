@@ -79,6 +79,7 @@ public class SshAuthenticationControllerTests
             SshAuthorizedKeysLineBuilder.Build(SampleFingerprint, SamplePublicKey),
             response.AuthorizedKeysLine
         );
+        Assert.DoesNotContain("environment=\"SSH_PUBLIC_KEY=", response.AuthorizedKeysLine);
     }
 
     private static SshAuthenticationController CreateController(

@@ -51,6 +51,24 @@ internal static class AuthTestServerConfiguration
             JwtBearerDefaults.AuthenticationScheme,
             options =>
             {
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        if (
+                            string.IsNullOrEmpty(context.Token)
+                            && context.Request.Cookies.TryGetValue(
+                                AuthCookieOptions.CookieName,
+                                out var cookieToken
+                            )
+                        )
+                        {
+                            context.Token = cookieToken;
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                };
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = jwtOptions.Issuer,
@@ -93,6 +111,25 @@ internal static class AuthTestServerConfiguration
 
         services.RemoveAll<ISendGridEmailSender>();
         services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+
+        ConfigureDebugFeatures(services, emailVerificationEnabled: false);
+    }
+
+    public static void ConfigureDebugFeatures(
+        IServiceCollection services,
+        bool emailVerificationEnabled
+    )
+    {
+        services.RemoveAll<DebugFeaturesOptions>();
+        services.AddSingleton(
+            new DebugFeaturesOptions
+            {
+                Features = new DebugFeatureFlags
+                {
+                    EmailVerification = emailVerificationEnabled,
+                },
+            }
+        );
     }
 
     private sealed class PermissiveGoogleIdentityTokenValidator : IGoogleIdentityTokenValidator

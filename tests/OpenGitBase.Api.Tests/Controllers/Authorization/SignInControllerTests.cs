@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Tests.Base;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -31,6 +32,47 @@ public class SignInControllerTests : ControllerTestBase
         response.EnsureSuccessStatusCode();
         var token = await response.Content.ReadAsStringAsync();
         await VerifyJwtAsync(token);
+        Assert.Contains(
+            AuthCookieOptions.CookieName,
+            response.Headers.GetValues("Set-Cookie").First()
+        );
+    }
+
+    [Fact]
+    public async Task Login_SetsCookieThatAuthenticatesProtectedEndpoint()
+    {
+        await RegisterUserAsync("cookieuser", "cookie@example.com", "Password123!");
+        Client.DefaultRequestHeaders.Authorization = null;
+
+        var response = await Client.PostAsJsonAsync(
+            "/signin/login",
+            new LoginDto { Username = "cookieuser", Password = "Password123!" }
+        );
+
+        response.EnsureSuccessStatusCode();
+
+        var testLoginResponse = await Client.GetAsync("/signin/testlogin");
+        testLoginResponse.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await testLoginResponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task SignOut_ClearsCookie()
+    {
+        await RegisterUserAsync("signoutuser", "signout@example.com", "Password123!");
+        var loginResponse = await Client.PostAsJsonAsync(
+            "/signin/login",
+            new LoginDto { Username = "signoutuser", Password = "Password123!" }
+        );
+        loginResponse.EnsureSuccessStatusCode();
+
+        var signOutResponse = await Client.PostAsync("/signin/signout", null);
+        signOutResponse.EnsureSuccessStatusCode();
+        Assert.Equal("Signed out", await signOutResponse.Content.ReadAsStringAsync());
+
+        Client.DefaultRequestHeaders.Authorization = null;
+        var testLoginResponse = await Client.GetAsync("/signin/testlogin");
+        Assert.Equal(HttpStatusCode.Unauthorized, testLoginResponse.StatusCode);
     }
 
     [Fact]
@@ -415,6 +457,41 @@ public class SignInControllerTests : ControllerTestBase
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("Could not set new password!", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_Success_SetsAuthCookie()
+    {
+        await RegisterUserAsync("cookie-login", "cookie-login@example.com", "Password123!");
+
+        var response = await Client.PostAsJsonAsync(
+            "/signin/login",
+            new LoginDto { Username = "cookie-login", Password = "Password123!" }
+        );
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains(
+            AuthCookieOptions.CookieName,
+            response.Headers.GetValues("Set-Cookie").First()
+        );
+    }
+
+    [Fact]
+    public async Task SignOut_ClearsAuthCookie()
+    {
+        await RegisterUserAsync("signout-user", "signout@example.com", "Password123!");
+        var loginResponse = await Client.PostAsJsonAsync(
+            "/signin/login",
+            new LoginDto { Username = "signout-user", Password = "Password123!" }
+        );
+        loginResponse.EnsureSuccessStatusCode();
+
+        var response = await Client.PostAsync("/signin/signout", null);
+        response.EnsureSuccessStatusCode();
+        Assert.Contains(
+            AuthCookieOptions.CookieName,
+            response.Headers.GetValues("Set-Cookie").First()
+        );
     }
 
     [Fact]

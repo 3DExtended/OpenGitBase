@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Tests.Base;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -15,6 +16,26 @@ public class RegisterControllerTests : ControllerTestBase
 {
     public RegisterControllerTests(WebApplicationFactory<ApiEntryPoint> factory)
         : base(factory) { }
+
+    [Fact]
+    public async Task Register_Success_SetsAuthCookie()
+    {
+        var response = await Client.PostAsJsonAsync(
+            "/register/register",
+            new RegisterDto
+            {
+                Username = "cookie-register",
+                Email = "cookie-register@example.com",
+                Password = "Password123!",
+            }
+        );
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains(
+            AuthCookieOptions.CookieName,
+            response.Headers.GetValues("Set-Cookie").First()
+        );
+    }
 
     [Fact]
     public async Task Register_Success_ReturnsJwt()
@@ -88,6 +109,23 @@ public class RegisterControllerTests : ControllerTestBase
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("Email taken", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Register_WithReservedUsername_ReturnsConflict()
+    {
+        var response = await Client.PostAsJsonAsync(
+            "/register/register",
+            new RegisterDto
+            {
+                Username = "settings",
+                Email = "settings@example.com",
+                Password = "Password123!",
+            }
+        );
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("Reserved username", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

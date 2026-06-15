@@ -1,12 +1,14 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Tests.Base;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -86,6 +88,29 @@ public class RepositoryControllerTests
         );
 
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Create_WhenEmailNotVerified_ReturnsForbidden()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureUserLookup(queryProcessor, userId);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserGetEmailVerifiedQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(false));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.Create(
+            "my-repo",
+            CreateRequest(false),
+            CancellationToken.None
+        );
+
+        Assert.IsType<ObjectResult>(result);
+        var objectResult = (ObjectResult)result;
+        Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
     }
 
     [Fact]
@@ -198,6 +223,95 @@ public class RepositoryControllerTests
     }
 
     [Fact]
+    public async Task GetByOwnerSlug_WhenFound_ReturnsOk()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "hello-world",
+                        Name = DefaultRepositoryName,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.GetByOwnerSlug("demo-user", "hello-world", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsType<RepositoryDto>(ok.Value);
+        Assert.Equal(repositoryId, returned.Id);
+    }
+
+    [Fact]
+    public async Task GetByOwnerSlug_WhenMissing_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryDto>.None);
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.GetByOwnerSlug("demo-user", "missing", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task GetUsage_WhenFound_ReturnsOk()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = Guid.NewGuid();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryUsageDto
+                    {
+                        BytesUsed = 2048,
+                        BytesLimit = 1_000_000,
+                        FileSizeLimit = 100_000,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.GetUsage(repositoryId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsType<RepositoryUsageDto>(ok.Value);
+        Assert.Equal(2048, returned.BytesUsed);
+    }
+
+    [Fact]
+    public async Task GetUsage_WhenMissing_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryUsageDto>.None);
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.GetUsage(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
     public async Task List_WhenFound_ReturnsOkWithRepositories()
     {
         var userId = UserId.From(Guid.NewGuid());
@@ -214,7 +328,7 @@ public class RepositoryControllerTests
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(
-                Arg.Is<ListRepositoryQuery>(query => query.OwnerUserId == userId),
+                Arg.Is<ListRepositoriesForUserQuery>(query => query.UserId == userId),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Option.From((IReadOnlyList<RepositoryDto>)repositories));
@@ -236,7 +350,7 @@ public class RepositoryControllerTests
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(
-                Arg.Is<ListRepositoryQuery>(query => query.OwnerUserId == userId),
+                Arg.Is<ListRepositoriesForUserQuery>(query => query.UserId == userId),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Option<IReadOnlyList<RepositoryDto>>.None);
@@ -255,7 +369,7 @@ public class RepositoryControllerTests
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(
-                Arg.Is<ListRepositoryQuery>(query => query.OwnerUserId == userId),
+                Arg.Is<ListRepositoriesForUserQuery>(query => query.UserId == userId),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Option.From((IReadOnlyList<RepositoryDto>)Array.Empty<RepositoryDto>()));
@@ -518,7 +632,11 @@ public class RepositoryControllerTests
             new UserIdentity { IdentityProviderId = userId.Value.ToString(), Username = username }
         );
 
-        return new RepositoryController(queryProcessor, userContext);
+        return new RepositoryController(
+            queryProcessor,
+            userContext,
+            new RepositoryStorageQuotaOptions()
+        );
     }
 
     private static void ConfigureUserLookup(IQueryProcessor queryProcessor, UserId userId)
@@ -526,6 +644,9 @@ public class RepositoryControllerTests
         queryProcessor
             .RunQueryAsync(Arg.Any<UserGetByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(new User { Id = userId, Username = "testuser" }));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserGetEmailVerifiedQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(true));
     }
 
     private static UpdateRepositoryRequest CreateUpdateRequest(
@@ -804,7 +925,7 @@ public class RepositoryControllerTests
             ConfigureE2EUserLookup(queryProcessor, userId);
             queryProcessor
                 .RunQueryAsync(
-                    Arg.Is<ListRepositoryQuery>(query => query.OwnerUserId == userId),
+                    Arg.Is<ListRepositoriesForUserQuery>(query => query.UserId == userId),
                     Arg.Any<CancellationToken>()
                 )
                 .Returns(Option<IReadOnlyList<RepositoryDto>>.None);
@@ -850,6 +971,9 @@ public class RepositoryControllerTests
             queryProcessor
                 .RunQueryAsync(Arg.Any<UserGetByIdQuery>(), Arg.Any<CancellationToken>())
                 .Returns(Option.From(new User { Id = userId, Username = "mockuser" }));
+            queryProcessor
+                .RunQueryAsync(Arg.Any<UserGetEmailVerifiedQuery>(), Arg.Any<CancellationToken>())
+                .Returns(Option.From(true));
         }
 
         private Task<HttpResponseMessage> CreateRepositoryAsync(
@@ -865,6 +989,7 @@ public class RepositoryControllerTests
         private async Task AuthenticateAsync(string username, string email)
         {
             var token = await RegisterUserAsync(username, email, "Password123!");
+            await MarkEmailVerifiedAsync(username);
             Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                 "Bearer",
                 token
