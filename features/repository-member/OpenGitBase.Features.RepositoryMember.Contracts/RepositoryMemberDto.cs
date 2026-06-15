@@ -10,5 +10,7 @@ public class RepositoryMemberDto : ModelBase<RepositoryMemberId, Guid>
 
     public UserId UserId { get; set; } = default!;
 
+    public string? Username { get; set; }
+
     public RepositoryRole Role { get; set; } = RepositoryRole.None;
 }

@@ -51,6 +51,7 @@ public class ListRepositoryMemberQueryHandlerTests
             {
                 var owner = Assert.Single(list);
                 Assert.Equal(ownerUserId, owner.UserId);
+                Assert.Equal("owner", owner.Username);
                 Assert.Equal(RepositoryRole.Owner, owner.Role);
                 Assert.Equal(Guid.Empty, owner.Id.Value);
             }
@@ -80,11 +81,13 @@ public class ListRepositoryMemberQueryHandlerTests
 
                 var member = Assert.Single(list, item => item.Id == seed.MemberId);
                 Assert.Equal(seed.MemberUserId, member.UserId);
+                Assert.Equal("member", member.Username);
                 Assert.Equal(RepositoryRole.Writer, member.Role);
                 Assert.Equal(seed.RepositoryId, member.RepositoryId);
 
                 var owner = Assert.Single(list, item => item.Role == RepositoryRole.Owner);
                 Assert.Equal(seed.OwnerUserId, owner.UserId);
+                Assert.Equal("owner", owner.Username);
             }
         );
     }

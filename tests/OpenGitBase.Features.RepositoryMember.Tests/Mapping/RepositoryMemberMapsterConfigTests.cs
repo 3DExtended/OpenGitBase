@@ -15,6 +15,7 @@ public class RepositoryMemberMapsterConfigTests
     [
         (typeof(RepositoryMemberEntity), nameof(RepositoryMemberEntity.Repository)),
         (typeof(RepositoryMemberEntity), nameof(RepositoryMemberEntity.User)),
+        (typeof(RepositoryMemberDto), nameof(RepositoryMemberDto.Username)),
     ];
 
     [Fact]
