@@ -17,6 +17,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         StorageNodeDto node,
         string apiToken,
         string physicalPath,
+        long receiveMaxBytes,
         CancellationToken cancellationToken
     ) =>
         SendAsync(
@@ -24,6 +25,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             node,
             apiToken,
             physicalPath,
+            receiveMaxBytes,
             successStatusCodes: [201],
             cancellationToken
         );
@@ -39,6 +41,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             node,
             apiToken,
             physicalPath,
+            receiveMaxBytes: null,
             successStatusCodes: [200],
             cancellationToken
         );
@@ -48,6 +51,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         StorageNodeDto node,
         string apiToken,
         string physicalPath,
+        long? receiveMaxBytes,
         int[] successStatusCodes,
         CancellationToken cancellationToken
     )
@@ -61,7 +65,9 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos";
         using var request = new HttpRequestMessage(method, requestUri)
         {
-            Content = JsonContent.Create(new { physicalPath }),
+            Content = JsonContent.Create(
+                new { physicalPath, receiveMaxBytes }
+            ),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
 

@@ -8,6 +8,7 @@ public interface IStorageProvisionerClient
         StorageNodeDto node,
         string apiToken,
         string physicalPath,
+        long receiveMaxBytes,
         CancellationToken cancellationToken
     );
 

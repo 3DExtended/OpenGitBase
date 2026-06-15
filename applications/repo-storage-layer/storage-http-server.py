@@ -83,6 +83,21 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        receive_max_bytes = int(data.get("receiveMaxBytes") or 0)
+        if receive_max_bytes > 0:
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    physical_path,
+                    "config",
+                    "receive.maxSize",
+                    str(receive_max_bytes),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         self._send_json(201, {"physicalPath": physical_path})
 
     def do_DELETE(self) -> None:

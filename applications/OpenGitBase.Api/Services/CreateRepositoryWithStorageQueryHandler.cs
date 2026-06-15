@@ -1,6 +1,7 @@
 ﻿using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
@@ -15,18 +16,21 @@ public sealed class CreateRepositoryWithStorageQueryHandler
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IMapper _mapper;
+    private readonly RepositoryStorageQuotaOptions _quotaOptions;
 
     public CreateRepositoryWithStorageQueryHandler(
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        IMapper mapper
+        IMapper mapper,
+        RepositoryStorageQuotaOptions quotaOptions
     )
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
         _contextFactory = contextFactory;
         _mapper = mapper;
+        _quotaOptions = quotaOptions;
     }
 
     public async Task<Option<CreateRepositoryWithStorageResult>> RunQueryAsync(
@@ -63,11 +67,13 @@ public sealed class CreateRepositoryWithStorageQueryHandler
 
         var repositoryId = Guid.NewGuid();
         var physicalPath = $"/srv/git/{repositoryId}.git";
+        var receiveMaxBytes = _quotaOptions.Enabled ? _quotaOptions.MaxFileBytes : 0L;
         var provisionResult = await _storageProvisionerClient
             .ProvisionRepositoryAsync(
                 selectedNode,
                 apiToken.Get(),
                 physicalPath,
+                receiveMaxBytes,
                 cancellationToken
             )
             .ConfigureAwait(false);

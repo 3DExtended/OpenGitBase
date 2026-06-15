@@ -9,6 +9,7 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
         StorageNodeDto node,
         string apiToken,
         string physicalPath,
+        long receiveMaxBytes,
         CancellationToken cancellationToken
     ) => Task.FromResult(StorageProvisionerResult.Ok(201));
 

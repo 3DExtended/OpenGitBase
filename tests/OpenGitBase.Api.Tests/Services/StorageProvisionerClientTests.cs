@@ -30,6 +30,7 @@ public class StorageProvisionerClientTests
             node,
             "secret-token",
             "/srv/git/repo.git",
+            52_428_800,
             CancellationToken.None
         );
 
@@ -50,6 +51,7 @@ public class StorageProvisionerClientTests
             CreateNode(),
             "wrong-token",
             "/srv/git/repo.git",
+            52_428_800,
             CancellationToken.None
         );
 
@@ -90,6 +92,7 @@ public class StorageProvisionerClientTests
             CreateNode(),
             string.Empty,
             "/srv/git/repo.git",
+            52_428_800,
             CancellationToken.None
         );
 
