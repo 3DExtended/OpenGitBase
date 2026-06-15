@@ -105,6 +105,16 @@ public sealed class RegisterStorageNodeQueryHandler
         }
         else
         {
+            if (
+                !NodeCertificateThumbprint.Matches(
+                    existing.CertificateThumbprint,
+                    certificateThumbprint
+                )
+            )
+            {
+                return Option<RegisterStorageNodeResult>.None;
+            }
+
             existing.InternalHost = query.InternalHost.Trim();
             existing.InternalSshPort = query.InternalSshPort;
             existing.InternalHttpPort = query.InternalHttpPort;

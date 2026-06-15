@@ -133,6 +133,62 @@ public class RegisterStorageNodeQueryHandlerTests
         Assert.Equal(9090, entity.InternalHttpPort);
     }
 
+    [Fact]
+    public async Task RunQueryAsync_ReRegistrationWithWrongCertificate_Fails()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var services = CreateServices(connection);
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
+
+        var enrollmentHandler = scope.ServiceProvider.GetRequiredService<CreateStorageNodeEnrollmentQueryHandler>();
+        var enrollment = await enrollmentHandler.RunQueryAsync(
+            new CreateStorageNodeEnrollmentQuery
+            {
+                NodeId = "storage-1",
+                CreatedByUserId = Guid.NewGuid(),
+            },
+            CancellationToken.None
+        );
+        var enrollmentToken = enrollment.Get().EnrollmentToken;
+
+        var handler = scope.ServiceProvider.GetRequiredService<RegisterStorageNodeQueryHandler>();
+        await handler.RunQueryAsync(
+            new RegisterStorageNodeQuery
+            {
+                NodeId = "storage-1",
+                InternalHost = "storage-1",
+                InternalHttpPort = 8081,
+                EnrollmentToken = enrollmentToken,
+                CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
+            },
+            CancellationToken.None
+        );
+
+        var impersonationAttempt = await handler.RunQueryAsync(
+            new RegisterStorageNodeQuery
+            {
+                NodeId = "storage-1",
+                InternalHost = "evil-host",
+                InternalHttpPort = 9090,
+                CertificateThumbprint = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            },
+            CancellationToken.None
+        );
+
+        Assert.True(impersonationAttempt.IsNone);
+    }
+
     private static ServiceCollection CreateServices(SqliteConnection connection)
     {
         var services = new ServiceCollection();
