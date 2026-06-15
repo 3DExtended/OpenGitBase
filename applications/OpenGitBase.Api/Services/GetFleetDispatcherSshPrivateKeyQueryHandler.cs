@@ -38,7 +38,6 @@ public sealed class GetFleetDispatcherSshPrivateKeyQueryHandler
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var secrets = await context
             .Set<FleetSecretsEntity>()
-            .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -55,8 +54,12 @@ public sealed class GetFleetDispatcherSshPrivateKeyQueryHandler
             return Option<string>.None;
         }
 
-        return Option.From(
-            _emailProtectionService.DecryptEmail(secrets.DispatcherSshPrivateKeyProtected)
+        var privateKey = _emailProtectionService.DecryptEmail(
+            secrets.DispatcherSshPrivateKeyProtected
         );
+        secrets.FleetBootstrapTokenHash = string.Empty;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Option.From(privateKey);
     }
 }
