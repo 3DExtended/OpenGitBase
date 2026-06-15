@@ -59,6 +59,22 @@ public sealed class RegisterStorageNodeQueryHandler
 
         if (existing is null)
         {
+            if (string.IsNullOrWhiteSpace(query.EnrollmentToken))
+            {
+                return Option<RegisterStorageNodeResult>.None;
+            }
+
+            var enrollmentValid = await VerifyEnrollmentAsync(
+                query.NodeId,
+                query.EnrollmentToken,
+                context,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (!enrollmentValid)
+            {
+                return Option<RegisterStorageNodeResult>.None;
+            }
+
             apiToken = GenerateApiToken();
             existing = new StorageNodeEntity
             {
@@ -102,4 +118,42 @@ public sealed class RegisterStorageNodeQueryHandler
 
     private static string GenerateApiToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+    private async Task<bool> VerifyEnrollmentAsync(
+        string nodeId,
+        string enrollmentToken,
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var enrollments = await context
+            .Set<StorageNodeEnrollmentEntity>()
+            .Where(entity => entity.NodeId == nodeId && entity.ConsumedAt == null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var enrollment in enrollments)
+        {
+            if (enrollment.ExpiresAt < now)
+            {
+                continue;
+            }
+
+            if (
+                !_passwordHasherService.VerifyPassword(
+                    enrollment.EnrollmentTokenHash,
+                    enrollmentToken
+                )
+            )
+            {
+                continue;
+            }
+
+            enrollment.ConsumedAt = now;
+            return true;
+        }
+
+        return false;
+    }
 }

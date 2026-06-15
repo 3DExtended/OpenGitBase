@@ -12,6 +12,7 @@ using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
 namespace OpenGitBase.Api;
@@ -129,6 +130,20 @@ public class Startup
             Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
                 ?? new StorageNodeOptions()
         );
+        services.Configure<AdminSeedOptions>(Configuration.GetSection("AdminSeed"));
+        services.AddHostedService<AdminUserSeedService>();
+        services.AddTransient<
+            IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
+            GenerateFleetDispatcherSshKeysQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<GetFleetDispatcherSshPublicKeyQuery, string>,
+            GetFleetDispatcherSshPublicKeyQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<GetFleetDispatcherSshPrivateKeyQuery, string>,
+            GetFleetDispatcherSshPrivateKeyQueryHandler
+        >();
         services.AddSingleton<IJWTTokenGenerator, JWTTokenGenerator>();
         services.AddSingleton<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();

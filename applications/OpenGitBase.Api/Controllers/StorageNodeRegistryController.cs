@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Cqrs;
@@ -49,6 +49,11 @@ public sealed class StorageNodeRegistryController : ControllerBase
             return ValidationProblem(ModelState);
         }
 
+        if (!Request.Headers.TryGetValue("X-Storage-Enrollment-Token", out var enrollmentHeader))
+        {
+            enrollmentHeader = string.Empty;
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new RegisterStorageNodeQuery
             {
@@ -58,13 +63,14 @@ public sealed class StorageNodeRegistryController : ControllerBase
                 InternalHttpPort = request.InternalHttpPort,
                 FreeBytesAvailable = request.FreeBytesAvailable,
                 TotalBytesAvailable = request.TotalBytesAvailable,
+                EnrollmentToken = enrollmentHeader.ToString(),
             },
             cancellationToken
         );
 
         if (result.IsNone)
         {
-            return BadRequest(new { error = "Storage node registration failed." });
+            return BadRequest(new { error = "Storage node registration failed. Check enrollment token and node id." });
         }
 
         var payload = result.Get();

@@ -20,9 +20,7 @@
       STORAGE_NODE_ID: "storage-1"
       STORAGE_INTERNAL_HOST: "storage-1"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
-      DISPATCHER_SSH_PUBLIC_KEY_FILE: "/run/secrets/dispatcher_storage_ssh_pub"
-    secrets:
-      - dispatcher_storage_ssh_pub
+      STORAGE_ENROLLMENT_TOKEN: "${STORAGE_1_ENROLLMENT_TOKEN}"
     volumes:
       - opengitbase_storage1_repos:/srv/git
 
@@ -46,9 +44,7 @@
       STORAGE_NODE_ID: "storage-2"
       STORAGE_INTERNAL_HOST: "storage-2"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
-      DISPATCHER_SSH_PUBLIC_KEY_FILE: "/run/secrets/dispatcher_storage_ssh_pub"
-    secrets:
-      - dispatcher_storage_ssh_pub
+      STORAGE_ENROLLMENT_TOKEN: "${STORAGE_2_ENROLLMENT_TOKEN}"
     volumes:
       - opengitbase_storage2_repos:/srv/git
 
@@ -79,8 +75,7 @@
       Dispatcher__DispatcherId: "dispatcher-1"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
-    secrets:
-      - dispatcher_storage_ssh
+      FLEET_BOOTSTRAP_TOKEN: "${FLEET_BOOTSTRAP_TOKEN}"
 
   dispatcher-2:
     container_name: opengitbase_dispatcher_2
@@ -109,8 +104,7 @@
       Dispatcher__DispatcherId: "dispatcher-2"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
-    secrets:
-      - dispatcher_storage_ssh
+      FLEET_BOOTSTRAP_TOKEN: "${FLEET_BOOTSTRAP_TOKEN}"
 
   postgres:
     image: postgres:16
@@ -167,12 +161,6 @@
       timeout: 5s
       retries: 5
       start_period: 10s
-
-secrets:
-  dispatcher_storage_ssh:
-    file: ./docker/secrets/dispatcher_storage_ssh
-  dispatcher_storage_ssh_pub:
-    file: ./docker/secrets/dispatcher_storage_ssh.pub
 
 volumes:
   opengitbase_pgdata:

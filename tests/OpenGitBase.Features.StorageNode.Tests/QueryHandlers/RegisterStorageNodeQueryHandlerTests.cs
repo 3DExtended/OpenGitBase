@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
-using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -36,6 +35,17 @@ public class RegisterStorageNodeQueryHandlerTests
             await context.Database.EnsureCreatedAsync();
         }
 
+        var enrollmentHandler = scope.ServiceProvider.GetRequiredService<CreateStorageNodeEnrollmentQueryHandler>();
+        var enrollment = await enrollmentHandler.RunQueryAsync(
+            new CreateStorageNodeEnrollmentQuery
+            {
+                NodeId = "storage-1",
+                CreatedByUserId = Guid.NewGuid(),
+            },
+            CancellationToken.None
+        );
+        var enrollmentToken = enrollment.Get().EnrollmentToken;
+
         var handler = scope.ServiceProvider.GetRequiredService<RegisterStorageNodeQueryHandler>();
         var result = await handler.RunQueryAsync(
             new RegisterStorageNodeQuery
@@ -45,6 +55,7 @@ public class RegisterStorageNodeQueryHandlerTests
                 InternalHttpPort = 8081,
                 FreeBytesAvailable = 5_000_000,
                 TotalBytesAvailable = 10_000_000,
+                EnrollmentToken = enrollmentToken,
             },
             CancellationToken.None
         );
@@ -72,6 +83,17 @@ public class RegisterStorageNodeQueryHandlerTests
             await context.Database.EnsureCreatedAsync();
         }
 
+        var enrollmentHandler = scope.ServiceProvider.GetRequiredService<CreateStorageNodeEnrollmentQueryHandler>();
+        var enrollment = await enrollmentHandler.RunQueryAsync(
+            new CreateStorageNodeEnrollmentQuery
+            {
+                NodeId = "storage-1",
+                CreatedByUserId = Guid.NewGuid(),
+            },
+            CancellationToken.None
+        );
+        var enrollmentToken = enrollment.Get().EnrollmentToken;
+
         var handler = scope.ServiceProvider.GetRequiredService<RegisterStorageNodeQueryHandler>();
         var first = await handler.RunQueryAsync(
             new RegisterStorageNodeQuery
@@ -79,6 +101,7 @@ public class RegisterStorageNodeQueryHandlerTests
                 NodeId = "storage-1",
                 InternalHost = "storage-1",
                 InternalHttpPort = 8081,
+                EnrollmentToken = enrollmentToken,
             },
             CancellationToken.None
         );
@@ -115,6 +138,15 @@ public class RegisterStorageNodeQueryHandlerTests
         services.AddLogging();
         services.AddSingleton(new StorageNodeOptions());
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
+        services.AddSingleton<IEmailProtectionService>(
+            new EmailProtectionService(
+                new EncryptionOptions
+                {
+                    DataKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                    Pepper = "test-pepper",
+                }
+            )
+        );
         services.AddSingleton<IEmailProtectionService>(
             new EmailProtectionService(
                 new EncryptionOptions

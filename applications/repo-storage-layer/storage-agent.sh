@@ -11,6 +11,7 @@ INTERNAL_SSH_PORT="${STORAGE_INTERNAL_SSH_PORT:-22}"
 INTERNAL_HTTP_PORT="${STORAGE_INTERNAL_HTTP_PORT:-8081}"
 TOKEN_FILE="${STORAGE_TOKEN_FILE:-/var/lib/opengitbase/api-token}"
 HEARTBEAT_INTERVAL="${STORAGE_HEARTBEAT_INTERVAL:-30}"
+ENROLLMENT_TOKEN="${STORAGE_ENROLLMENT_TOKEN:-}"
 
 get_disk_stats() {
   local mount="/srv/git"
@@ -38,9 +39,14 @@ EOF
 )
 
   local response=""
+  local enrollment_header=()
+  if [ -n "${ENROLLMENT_TOKEN}" ]; then
+    enrollment_header=(-H "X-Storage-Enrollment-Token: ${ENROLLMENT_TOKEN}")
+  fi
   for _ in $(seq 1 30); do
     if response=$(curl -fsS -X POST "${API_URL}/api/v1/storage-nodes/register" \
       -H "Content-Type: application/json" \
+      "${enrollment_header[@]}" \
       -d "${payload}" 2>/dev/null); then
       break
     fi
@@ -104,8 +110,14 @@ configure_dispatcher_authorized_keys() {
   if [ -z "${pubkey}" ] && [ -n "${DISPATCHER_SSH_PUBLIC_KEY_FILE:-}" ] && [ -f "${DISPATCHER_SSH_PUBLIC_KEY_FILE}" ]; then
     pubkey="$(cat "${DISPATCHER_SSH_PUBLIC_KEY_FILE}")"
   fi
+  if [ -z "${pubkey}" ] && [ -n "${ENROLLMENT_TOKEN}" ]; then
+    pubkey=$(curl -fsS "${API_URL}/api/v1/storage-nodes/bootstrap/dispatcher-ssh-public-key" \
+      -H "X-Storage-Enrollment-Token: ${ENROLLMENT_TOKEN}" \
+      -H "X-Storage-Node-Id: ${NODE_ID}" \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("publicKey",""))')
+  fi
   if [ -z "${pubkey}" ]; then
-    echo "entrypoint: DISPATCHER_SSH_PUBLIC_KEY or DISPATCHER_SSH_PUBLIC_KEY_FILE is required" >&2
+    echo "entrypoint: dispatcher SSH public key is not configured" >&2
     exit 1
   fi
   printf '%s\n' "${pubkey}" > /home/git/.ssh/authorized_keys
@@ -113,8 +125,8 @@ configure_dispatcher_authorized_keys() {
   chown git:git /home/git/.ssh/authorized_keys
 }
 
-register_node
 configure_dispatcher_authorized_keys
+register_node
 
 export STORAGE_API_TOKEN
 if [ -z "${STORAGE_API_TOKEN:-}" ] && [ -f "${TOKEN_FILE}" ]; then

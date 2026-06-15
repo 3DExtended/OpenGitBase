@@ -20,7 +20,7 @@ public class JWTTokenGenerator : IJWTTokenGenerator
         _jwtOptions = jwtOptions;
     }
 
-    public string GetJWTToken(string username, string userIdentityProviderId)
+    public string GetJWTToken(string username, string userIdentityProviderId, bool isAdmin = false)
     {
         var issuer = _jwtOptions.Issuer ?? "api";
         var audience = _jwtOptions.Audience ?? "api";
@@ -28,15 +28,22 @@ public class JWTTokenGenerator : IJWTTokenGenerator
             _jwtOptions.Key ?? throw new InvalidOperationException("Jwt:Key is required.")
         );
 
+        var claims = new List<Claim>
+        {
+            new("identityproviderid", userIdentityProviderId),
+            new(JwtRegisteredClaimNames.Name, username),
+            new(JwtRegisteredClaimNames.Sub, username),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        };
+        if (isAdmin)
+        {
+            claims.Add(new Claim("role", "admin"));
+        }
+
         var now = _systemClock.UtcNow.UtcDateTime;
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity([
-                new Claim("identityproviderid", userIdentityProviderId),
-                new Claim(JwtRegisteredClaimNames.Name, username),
-                new Claim(JwtRegisteredClaimNames.Sub, username),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            ]),
+            Subject = new ClaimsIdentity(claims),
             NotBefore = now,
             Expires = now.AddSeconds(_jwtOptions.NumberOfSecondsToExpire),
             Issuer = issuer,

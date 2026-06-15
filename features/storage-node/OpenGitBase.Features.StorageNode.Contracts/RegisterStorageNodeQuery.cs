@@ -16,4 +16,6 @@ public sealed class RegisterStorageNodeQuery
     public long FreeBytesAvailable { get; set; }
 
     public long TotalBytesAvailable { get; set; }
+
+    public string EnrollmentToken { get; set; } = string.Empty;
 }

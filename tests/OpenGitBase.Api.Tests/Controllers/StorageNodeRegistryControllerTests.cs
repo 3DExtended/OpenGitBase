@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
@@ -27,7 +28,10 @@ public class StorageNodeRegistryControllerTests
                 )
             );
 
-        var controller = new StorageNodeRegistryController(queryProcessor);
+        var controller = new StorageNodeRegistryController(queryProcessor)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
 
         var result = await controller.Register(
             new RegisterStorageNodeRequest

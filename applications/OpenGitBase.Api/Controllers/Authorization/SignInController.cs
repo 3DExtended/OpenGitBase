@@ -67,9 +67,18 @@ public class SignInController : ControllerBase
             return Unauthorized();
         }
 
+        var user = await _queryProcessor
+            .RunQueryAsync(
+                new UserGetByIdQuery { ModelId = result.Get() },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var isAdmin = user.IsSome && user.Get().IsAdmin;
         var token = _jwtTokenGenerator.GetJWTToken(
             loginDto.Username,
-            result.Get().Value.ToString()
+            result.Get().Value.ToString(),
+            isAdmin
         );
         _authCookieService.SetAuthCookie(Response, token);
         return Ok(token);

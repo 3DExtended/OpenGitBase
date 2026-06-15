@@ -14,5 +14,7 @@ public class UserEntity : IIdentifiableEntity<Guid>
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    public bool IsAdmin { get; set; }
+
     public UserCredentialsEntity? UserCredentials { get; set; }
 }
