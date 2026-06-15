@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OpenGitBase.Api.Middleware;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Api.Swagger;
 using OpenGitBase.Common;
@@ -41,6 +42,12 @@ public class Startup
         }
 
         app.UseRouting();
+
+        if (!env.IsEnvironment("E2ETest"))
+        {
+            app.UseMiddleware<InternalNetworkMiddleware>();
+        }
+
         app.UseAuthentication();
         app.UseAuthorization();
 
@@ -130,6 +137,12 @@ public class Startup
             Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
                 ?? new StorageNodeOptions()
         );
+        services.Configure<InternalNetworkOptions>(Configuration.GetSection("InternalNetwork"));
+        if (Environment.IsEnvironment("E2ETest"))
+        {
+            services.PostConfigure<InternalNetworkOptions>(options => options.Enabled = false);
+        }
+
         services.Configure<AdminSeedOptions>(Configuration.GetSection("AdminSeed"));
         services.AddHostedService<AdminUserSeedService>();
         services.AddTransient<
