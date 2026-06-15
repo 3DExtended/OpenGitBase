@@ -16,7 +16,8 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.Name, src => src.Name)
             .Map(dest => dest.Slug, src => src.Slug)
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
-            .Map(dest => dest.IsPrivate, src => src.IsPrivate);
+            .Map(dest => dest.IsPrivate, src => src.IsPrivate)
+            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed);
 
         config
             .NewConfig<RepositoryDto, Entities.RepositoryEntity>()
@@ -25,6 +26,7 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.Name, src => src.Name)
             .Map(dest => dest.Slug, src => src.Slug)
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
-            .Map(dest => dest.IsPrivate, src => src.IsPrivate);
+            .Map(dest => dest.IsPrivate, src => src.IsPrivate)
+            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed);
     }
 }

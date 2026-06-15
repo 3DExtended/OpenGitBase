@@ -20,4 +20,6 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
     public string PhysicalPath { get; set; } = string.Empty;
 
     public bool IsPrivate { get; set; } = false;
+
+    public long StorageBytesUsed { get; set; }
 }

@@ -1,8 +1,8 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using OpenGitBase.Common;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.QueryHandlers;
@@ -21,9 +21,7 @@ public class DeleteRepositoryQueryHandlerTests
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([typeof(DeleteRepositoryQueryHandler).Assembly])
         );
-        services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
-            options.UseSqlite(connection)
-        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddLogging();
         services.AddCqrs(options =>
             options.WithQueryHandlersFrom(typeof(DeleteRepositoryQueryHandler).Assembly)

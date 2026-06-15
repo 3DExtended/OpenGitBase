@@ -3,8 +3,8 @@ using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using OpenGitBase.Common;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.Repository;
@@ -25,9 +25,7 @@ public class UpdateRepositoryQueryHandlerTests
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([typeof(RepositoryMapsterConfig).Assembly])
         );
-        services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
-            options.UseSqlite(connection)
-        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddLogging();
         var mapsterConfig = new TypeAdapterConfig();
         new RepositoryMapsterConfig().Register(mapsterConfig);
