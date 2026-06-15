@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
@@ -19,16 +20,19 @@ public sealed class RepositoryAccessChecksController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly ISshKeyService _sshKeyService;
     private readonly ILogger<RepositoryAccessChecksController> _logger;
+    private readonly RepositoryStorageQuotaOptions _quotaOptions;
 
     public RepositoryAccessChecksController(
         IQueryProcessor queryProcessor,
         ISshKeyService sshKeyService,
-        ILogger<RepositoryAccessChecksController> logger
+        ILogger<RepositoryAccessChecksController> logger,
+        RepositoryStorageQuotaOptions quotaOptions
     )
     {
         _queryProcessor = queryProcessor;
         _sshKeyService = sshKeyService;
         _logger = logger;
+        _quotaOptions = quotaOptions;
     }
 
     [HttpPost]
@@ -123,46 +127,67 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             );
         }
 
-        var ownerUserId = await _queryProcessor.RunQueryAsync(
-            new UserExistsByUsernameQuery { Username = username },
-            cancellationToken
-        );
-        if (ownerUserId.IsNone)
-        {
-            return OkWithLog(
-                request,
-                new RepositoryAccessCheckResponse
-                {
-                    Allowed = false,
-                    ResolvedUserId = authenticatingUserId.Get().Value,
-                    Reason = "User not found.",
-                }
-            );
-        }
-
         var repository = await _queryProcessor.RunQueryAsync(
-            new GetRepositoryBySlugForUserQuery
-            {
-                OwnerUserId = ownerUserId.Get(),
-                Slug = repositorySlug,
-            },
+            new GetRepositoryByOwnerSlugQuery { OwnerSlug = username, Slug = repositorySlug },
             cancellationToken
         );
         if (repository.IsNone)
         {
+            var ownerUserId = await _queryProcessor.RunQueryAsync(
+                new UserExistsByUsernameQuery { Username = username },
+                cancellationToken
+            );
             return OkWithLog(
                 request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
-                    ResolvedUserId = authenticatingUserId.Get().Value,
-                    Reason = "Repository not found.",
+                    ResolvedUserId = authenticatingUserId.IsSome
+                        ? authenticatingUserId.Get().Value
+                        : null,
+                    Reason = ownerUserId.IsNone
+                        ? "User of repo path not found."
+                        : "Repository of repo path not found.",
                 }
             );
         }
 
         var resolvedUserId = authenticatingUserId.Get().Value;
         var repositoryDto = repository.Get();
+
+        if (request.Operation == RepositoryOperation.WriteGit && _quotaOptions.Enabled)
+        {
+            if (request.MaxFileBytes > 0 && request.MaxFileBytes > _quotaOptions.MaxFileBytes)
+            {
+                return OkWithLog(
+                    request,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = false,
+                        ResolvedUserId = resolvedUserId,
+                        RepositoryId = repositoryDto.Id.Value,
+                        Reason = "File exceeds maximum allowed size.",
+                    }
+                );
+            }
+
+            if (
+                request.PackSizeBytes > 0
+                && repositoryDto.StorageBytesUsed + request.PackSizeBytes > _quotaOptions.MaxBytes
+            )
+            {
+                return OkWithLog(
+                    request,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = false,
+                        ResolvedUserId = resolvedUserId,
+                        RepositoryId = repositoryDto.Id.Value,
+                        Reason = "Repository storage quota exceeded.",
+                    }
+                );
+            }
+        }
 
         if (repositoryDto.OwnerUserId == authenticatingUserId.Get())
         {

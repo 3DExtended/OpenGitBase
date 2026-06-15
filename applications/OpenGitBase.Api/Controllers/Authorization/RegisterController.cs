@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -19,18 +20,21 @@ public class RegisterController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly IJWTTokenGenerator _jwtTokenGenerator;
     private readonly IEmailProtectionService _emailProtectionService;
+    private readonly IAuthCookieService _authCookieService;
 
     public RegisterController(
         IMemoryCache cache,
         IQueryProcessor queryProcessor,
         IJWTTokenGenerator jwtTokenGenerator,
-        IEmailProtectionService emailProtectionService
+        IEmailProtectionService emailProtectionService,
+        IAuthCookieService authCookieService
     )
     {
         _cache = cache;
         _queryProcessor = queryProcessor;
         _jwtTokenGenerator = jwtTokenGenerator;
         _emailProtectionService = emailProtectionService;
+        _authCookieService = authCookieService;
     }
 
     [HttpPost("register")]
@@ -59,6 +63,11 @@ public class RegisterController : ControllerBase
         if (usernameExists.IsSome)
         {
             return Conflict("Username taken");
+        }
+
+        if (ReservedSlugValidator.IsReserved(registerDto.Username))
+        {
+            return Conflict("Reserved username");
         }
 
         var emailExists = await _queryProcessor
@@ -94,6 +103,7 @@ public class RegisterController : ControllerBase
             registerDto.Username,
             result.Get().Value.ToString()
         );
+        _authCookieService.SetAuthCookie(Response, token);
         return Ok(token);
     }
 
@@ -160,6 +170,7 @@ public class RegisterController : ControllerBase
                         InternalId = internalId,
                         EmailCiphertext = _emailProtectionService.EncryptEmail(email),
                         EmailLookupHash = _emailProtectionService.ComputeLookupHash(email),
+                        EmailVerified = true,
                     },
                 },
                 cancellationToken
@@ -177,6 +188,8 @@ public class RegisterController : ControllerBase
             registerDto.Username,
             result.Get().Value.ToString()
         );
+        _authCookieService.SetAuthCookie(Response, token);
+
         return Ok(token);
     }
 }

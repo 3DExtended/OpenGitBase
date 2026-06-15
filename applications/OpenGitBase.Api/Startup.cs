@@ -10,6 +10,8 @@ using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
 namespace OpenGitBase.Api;
 
@@ -114,11 +116,29 @@ public class Startup
         services.AddSingleton(
             Configuration.GetSection("Apple").Get<AppleAuthOptions>() ?? new AppleAuthOptions()
         );
+        services.AddSingleton(
+            Configuration.GetSection("RepositoryStorageQuota").Get<RepositoryStorageQuotaOptions>()
+                ?? new RepositoryStorageQuotaOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
+                ?? new DebugFeaturesOptions()
+        );
         services.AddSingleton<IJWTTokenGenerator, JWTTokenGenerator>();
         services.AddSingleton<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
+        services.AddScoped<IAuthCookieService, AuthCookieService>();
+        services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
+        services.AddTransient<
+            IQueryHandler<UserDeleteAccountQuery, UserDeleteAccountResult>,
+            UserDeleteAccountQueryHandler
+        >();
+        services.AddSingleton(
+            Configuration.GetSection("RepositoryStorageQuota").Get<RepositoryStorageQuotaOptions>()
+                ?? new RepositoryStorageQuotaOptions()
+        );
         services
             .AddAuthentication(options =>
             {
@@ -126,6 +146,24 @@ public class Startup
             })
             .AddJwtBearer(options =>
             {
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        if (
+                            string.IsNullOrEmpty(context.Token)
+                            && context.Request.Cookies.TryGetValue(
+                                AuthCookieOptions.CookieName,
+                                out var cookieToken
+                            )
+                        )
+                        {
+                            context.Token = cookieToken;
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                };
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = jwtOptions.Issuer ?? "api",

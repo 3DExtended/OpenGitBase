@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\features\repository\OpenGitBase.Features.Repository.Contracts\OpenGitBase.Features.Repository.Contracts.csproj" />
     <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember\OpenGitBase.Features.RepositoryMember.csproj" />
     <ProjectReference Include="..\..\features\repository-member\OpenGitBase.Features.RepositoryMember.Contracts\OpenGitBase.Features.RepositoryMember.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\organization\OpenGitBase.Features.Organization\OpenGitBase.Features.Organization.csproj" />
+    <ProjectReference Include="..\..\features\organization\OpenGitBase.Features.Organization.Contracts\OpenGitBase.Features.Organization.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.Options;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -15,11 +17,17 @@ public class RepositoryController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
+    private readonly RepositoryStorageQuotaOptions _quotaOptions;
 
-    public RepositoryController(IQueryProcessor queryProcessor, IUserContext userContext)
+    public RepositoryController(
+        IQueryProcessor queryProcessor,
+        IUserContext userContext,
+        RepositoryStorageQuotaOptions quotaOptions
+    )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
+        _quotaOptions = quotaOptions;
     }
 
     [HttpPost("{slug}")]
@@ -41,7 +49,21 @@ public class RepositoryController : ControllerBase
             return Unauthorized(new { error = "User not found." });
         }
 
-        // verify slug is not empty and does not contain invalid characters
+        var emailVerified = await _queryProcessor
+            .RunQueryAsync(
+                new UserGetEmailVerifiedQuery { UserId = UserId.From(_userContext.User.UserId) },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (emailVerified.IsNone || !emailVerified.Get())
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new { error = "Email must be verified before creating repositories." }
+            );
+        }
+
         if (string.IsNullOrWhiteSpace(slug) || slug.Any(c => !char.IsLetterOrDigit(c) && c != '-'))
         {
             return BadRequest(
@@ -52,7 +74,11 @@ public class RepositoryController : ControllerBase
             );
         }
 
-        // verify slug is not already taken for this user
+        if (ReservedSlugValidator.IsReserved(slug))
+        {
+            return Conflict(new { error = "Reserved repository slug." });
+        }
+
         var repository = await _queryProcessor
             .RunQueryAsync(
                 new GetRepositoryBySlugForUserQuery { Slug = slug, OwnerUserId = user.Get().Id },
@@ -73,7 +99,7 @@ public class RepositoryController : ControllerBase
                 OwnerUserId = UserId.From(_userContext.User.UserId),
                 Name = request.RepositoryName,
                 IsPrivate = request.IsPrivate,
-                PhysicalPath = "./repositories/" + user.Get().Id.Value + "/" + slug, // use user ID and slug to create a unique physical path for the repository
+                PhysicalPath = "./repositories/" + user.Get().Id.Value + "/" + slug,
             },
         };
 
@@ -87,10 +113,33 @@ public class RepositoryController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = id.Value }, id);
     }
 
+    [HttpGet("by-slug/{owner}/{slug}")]
+    public async Task<IActionResult> GetByOwnerSlug(
+        string owner,
+        string slug,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryByOwnerSlugQuery { OwnerSlug = owner, Slug = slug },
+            cancellationToken
+        );
+        return ToActionResult(result);
+    }
+
+    [HttpGet("{id:guid}/usage")]
+    public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryUsageQuery { RepositoryId = RepositoryId.From(id) },
+            cancellationToken
+        );
+        return ToActionResult(result);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        // TODO this should probably also return/check the contents of the repository or there must be a separate endpoint for that, otherwise the repository is not really usable
         var result = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
             cancellationToken
@@ -102,7 +151,7 @@ public class RepositoryController : ControllerBase
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         var result = await _queryProcessor.RunQueryAsync(
-            new ListRepositoryQuery { OwnerUserId = UserId.From(_userContext.User.UserId) },
+            new ListRepositoriesForUserQuery { UserId = UserId.From(_userContext.User.UserId) },
             cancellationToken
         );
         return ToActionResult(result);
@@ -115,7 +164,6 @@ public class RepositoryController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // ensure the repository exists and belongs to the user
         var getResult = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
             cancellationToken
@@ -126,7 +174,6 @@ public class RepositoryController : ControllerBase
             return NotFound();
         }
 
-        // only the owner of the repository can update it, so check if the user ID of the repository matches the user ID from the context
         if (getResult.Get().OwnerUserId != UserId.From(_userContext.User.UserId))
         {
             return Forbid();
@@ -143,6 +190,7 @@ public class RepositoryController : ControllerBase
                 Slug = existing.Slug,
                 OwnerUserId = existing.OwnerUserId,
                 PhysicalPath = existing.PhysicalPath,
+                StorageBytesUsed = existing.StorageBytesUsed,
             },
         };
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);
@@ -157,7 +205,6 @@ public class RepositoryController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        // ensure the repository exists and belongs to the user
         var getResult = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
             cancellationToken
@@ -168,7 +215,6 @@ public class RepositoryController : ControllerBase
             return NotFound();
         }
 
-        // only the owner of the repository can delete it, so check if the user ID of the repository matches the user ID from the context
         if (getResult.Get().OwnerUserId != UserId.From(_userContext.User.UserId))
         {
             return Forbid();

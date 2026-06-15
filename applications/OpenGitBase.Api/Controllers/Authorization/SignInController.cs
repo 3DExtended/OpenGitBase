@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
@@ -23,13 +24,15 @@ public class SignInController : ControllerBase
     private readonly IGoogleIdentityTokenValidator _googleTokenValidator;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IJWTTokenGenerator _jwtTokenGenerator;
+    private readonly IAuthCookieService _authCookieService;
 
     public SignInController(
         IQueryProcessor queryProcessor,
         AppleAuthOptions appleAuthOptions,
         IMemoryCache cache,
         IGoogleIdentityTokenValidator googleTokenValidator,
-        IJWTTokenGenerator jwtTokenGenerator
+        IJWTTokenGenerator jwtTokenGenerator,
+        IAuthCookieService authCookieService
     )
     {
         _queryProcessor = queryProcessor;
@@ -37,6 +40,7 @@ public class SignInController : ControllerBase
         _cache = cache;
         _googleTokenValidator = googleTokenValidator;
         _jwtTokenGenerator = jwtTokenGenerator;
+        _authCookieService = authCookieService;
     }
 
     [HttpPost("login")]
@@ -67,7 +71,16 @@ public class SignInController : ControllerBase
             loginDto.Username,
             result.Get().Value.ToString()
         );
+        _authCookieService.SetAuthCookie(Response, token);
         return Ok(token);
+    }
+
+    [HttpPost("signout")]
+    [AllowAnonymous]
+    public ActionResult SignOutAsync()
+    {
+        _authCookieService.ClearAuthCookie(Response);
+        return Ok("Signed out");
     }
 
     [HttpPost("google")]
@@ -280,6 +293,7 @@ public class SignInController : ControllerBase
                 user.Get().Username,
                 possiblyExistingUserId.Get().Value.ToString()
             );
+            _authCookieService.SetAuthCookie(Response, token);
             return Ok(token);
         }
 

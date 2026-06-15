@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -31,11 +32,28 @@ public class PublicGitSshKeyController : ControllerBase
 
     [HttpPost]
     public async Task<IActionResult> Create(
-        [FromBody] CreatePublicGitSshKeyQuery query,
+        [FromBody] CreatePublicGitSshKeyRequest request,
         CancellationToken cancellationToken
     )
     {
-        query.ModelToCreate.OwnerUserId = UserId.From(_userContext.User.UserId);
+        if (
+            request?.ModelToCreate == null
+            || string.IsNullOrWhiteSpace(request.ModelToCreate.Name)
+            || string.IsNullOrWhiteSpace(request.ModelToCreate.PublicSSHKey)
+        )
+        {
+            return BadRequest();
+        }
+
+        var modelToCreate = new PublicGitSshKeyDto
+        {
+            OwnerUserId = UserId.From(_userContext.User.UserId),
+            Name = request.ModelToCreate.Name,
+            PublicSSHKey = request.ModelToCreate.PublicSSHKey,
+            Fingerprint = request.ModelToCreate.Fingerprint,
+        };
+
+        var query = new CreatePublicGitSshKeyQuery { ModelToCreate = modelToCreate };
 
         // ensure that fingerprint is correctly calculated based on the provided public SSH key
         try
