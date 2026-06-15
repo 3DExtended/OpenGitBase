@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Common;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.SendGrid;
+using OpenGitBase.Common.SendGrid.QueryHandlers;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Cqrs.DependencyInjection;
@@ -43,13 +45,27 @@ public class UserRegisterQueryHandlerTests
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddSingleton<ISystemClock, SystemClock>();
+        services.AddSingleton(
+            new SendGridOptions
+            {
+                ApiKey = "test-key",
+                FromEmailAddress = "test@example.com",
+                FromSenderName = "Test",
+                IsDisabled = true,
+            }
+        );
+        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
         services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
             options.UseSqlite(connection)
         );
         services.AddLogging();
         services.AddCqrs(options =>
-            options.WithQueryHandlersFrom(typeof(UserRegisterQueryHandler).Assembly)
-        );
+        {
+            options.WithQueryHandlersFrom(
+                typeof(UserRegisterQueryHandler).Assembly,
+                typeof(EmailSendQueryHandler).Assembly
+            );
+        });
 
         await using var serviceProvider = services.BuildServiceProvider();
         await using var scope = serviceProvider.CreateAsyncScope();
@@ -132,6 +148,28 @@ public class UserRegisterQueryHandlerTests
                 {
                     Username = "newusername",
                     Email = "exists@example.com",
+                    Password = "Password123!",
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.IsNone);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenUsernameIsReserved_ReturnsNone()
+    {
+        var (provider, connection) = await UsersTestFixture.CreateAsync();
+        await using (provider)
+        await using (connection)
+        {
+            var handler = provider.GetRequiredService<UserRegisterQueryHandler>();
+            var result = await handler.RunQueryAsync(
+                new UserRegisterQuery
+                {
+                    Username = "settings",
+                    Email = "settings@example.com",
                     Password = "Password123!",
                 },
                 CancellationToken.None

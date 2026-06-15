@@ -24,5 +24,7 @@ public class UserCredentialsEntityConfiguration : IEntityTypeConfiguration<UserC
         builder.Property(entity => entity.EmailLookupHash).HasMaxLength(128);
         builder.HasIndex(entity => entity.EmailLookupHash).IsUnique();
         builder.Property(entity => entity.PasswordResetTokenHash).HasMaxLength(512);
+        builder.Property(entity => entity.EmailVerificationTokenHash).HasMaxLength(512);
+        builder.Property(entity => entity.EmailVerified).HasDefaultValue(false);
     }
 }

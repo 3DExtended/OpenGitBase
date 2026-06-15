@@ -102,6 +102,9 @@ internal static class UsersTestFixture
         string? emailLookupHash = null,
         string? passwordResetTokenHash = null,
         DateTimeOffset? passwordResetTokenExpireDate = null,
+        bool emailVerified = false,
+        string? emailVerificationTokenHash = null,
+        DateTimeOffset? emailVerificationTokenExpireDate = null,
         bool deleted = false
     )
     {
@@ -120,6 +123,9 @@ internal static class UsersTestFixture
                     EmailLookupHash = emailLookupHash,
                     PasswordResetTokenHash = passwordResetTokenHash,
                     PasswordResetTokenExpireDate = passwordResetTokenExpireDate,
+                    EmailVerified = emailVerified,
+                    EmailVerificationTokenHash = emailVerificationTokenHash,
+                    EmailVerificationTokenExpireDate = emailVerificationTokenExpireDate,
                     Deleted = deleted,
                 }
             );

@@ -30,5 +30,11 @@ public class UserCredentialsEntity : IIdentifiableEntity<Guid>
 
     public DateTimeOffset? PasswordResetTokenExpireDate { get; set; }
 
+    public bool EmailVerified { get; set; }
+
+    public string? EmailVerificationTokenHash { get; set; }
+
+    public DateTimeOffset? EmailVerificationTokenExpireDate { get; set; }
+
     public bool Deleted { get; set; }
 }
