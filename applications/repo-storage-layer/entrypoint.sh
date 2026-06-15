@@ -13,13 +13,25 @@ if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
 fi
 
 # git user setup
-mkdir -p /home/git/.ssh /srv/git
+mkdir -p /home/git/.ssh /srv/git /var/lib/opengitbase
 chown -R git:git /home/git /srv/git
 chmod 700 /home/git/.ssh
 if [ -f /home/git/.ssh/authorized_keys ]; then
   chmod 600 /home/git/.ssh/authorized_keys
   chown git:git /home/git/.ssh/authorized_keys
 fi
+
+source /usr/local/bin/storage-agent.sh
+
+python3 /usr/local/bin/storage-http-server.py &
+STORAGE_HTTP_PID=$!
+
+cleanup() {
+  if kill -0 "$STORAGE_HTTP_PID" 2>/dev/null; then
+    kill "$STORAGE_HTTP_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 
 # SSH Daemon im Vordergrund starten
 exec /usr/sbin/sshd -D -e

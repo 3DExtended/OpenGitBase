@@ -10,6 +10,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
@@ -179,6 +180,7 @@ public class RepositoryAccessChecksControllerTests
     {
         var ownerUserId = UserId.From(Guid.NewGuid());
         var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
         var queryProcessor = Substitute.For<IQueryProcessor>();
         ConfigureFingerprintLookup(queryProcessor, ownerUserId);
         queryProcessor
@@ -194,6 +196,22 @@ public class RepositoryAccessChecksControllerTests
                         OwnerUserId = ownerUserId,
                         Slug = "repo",
                         Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new StorageNodeDto
+                    {
+                        Id = storageNodeId,
+                        NodeId = "storage-1",
+                        InternalHost = "storage-1",
+                        InternalSshPort = 22,
+                        IsHealthy = true,
                     }
                 )
             );
@@ -208,13 +226,64 @@ public class RepositoryAccessChecksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
         Assert.True(response.Allowed);
-        Assert.Equal(ownerUserId.Value, response.ResolvedUserId);
-        Assert.Equal(repositoryId.Value, response.RepositoryId);
-        Assert.Equal("Owner", response.EffectiveRole);
+        Assert.Equal($"/srv/git/{repositoryId.Value}.git", response.PhysicalPath);
+        Assert.Equal("storage-1", response.StorageNodeInternalHost);
+        Assert.Equal(22, response.StorageNodeInternalSshPort);
 
         await queryProcessor
             .DidNotReceive()
             .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenStorageNodeUnhealthy_ReturnsDenied()
+    {
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureFingerprintLookup(queryProcessor, ownerUserId);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(ownerUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = ownerUserId,
+                        Slug = "repo",
+                        Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new StorageNodeDto
+                    {
+                        Id = storageNodeId,
+                        NodeId = "storage-1",
+                        InternalHost = "storage-1",
+                        InternalSshPort = 22,
+                        IsHealthy = false,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(ValidRequest(), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("Assigned storage node is unavailable.", response.Reason);
     }
 
     [Fact]
@@ -407,6 +476,7 @@ public class RepositoryAccessChecksControllerTests
         RepositoryId repositoryId
     )
     {
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
         ConfigureFingerprintLookup(queryProcessor, authenticatingUserId);
         queryProcessor
             .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
@@ -421,6 +491,22 @@ public class RepositoryAccessChecksControllerTests
                         OwnerUserId = ownerUserId,
                         Slug = "repo",
                         Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new StorageNodeDto
+                    {
+                        Id = storageNodeId,
+                        NodeId = "storage-1",
+                        InternalHost = "storage-1",
+                        InternalSshPort = 22,
+                        IsHealthy = true,
                     }
                 )
             );

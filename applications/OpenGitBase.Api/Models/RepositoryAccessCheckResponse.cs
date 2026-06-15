@@ -7,4 +7,10 @@ public sealed class RepositoryAccessCheckResponse
     public Guid? RepositoryId { get; init; }
     public string? EffectiveRole { get; init; }
     public string? Reason { get; init; }
+
+    public string? PhysicalPath { get; init; }
+
+    public string? StorageNodeInternalHost { get; init; }
+
+    public int? StorageNodeInternalSshPort { get; init; }
 }

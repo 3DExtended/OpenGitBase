@@ -6,11 +6,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
+using OpenGitBase.Api.Services;
+using OpenGitBase.Api.Tests.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Features.StorageNode.Entities;
 
 namespace OpenGitBase.Api.Tests.Base;
 
@@ -112,7 +115,45 @@ internal static class AuthTestServerConfiguration
         services.RemoveAll<ISendGridEmailSender>();
         services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
 
+        services.RemoveAll<IStorageProvisionerClient>();
+        services.AddSingleton<IStorageProvisionerClient, FakeStorageProvisionerClient>();
+
         ConfigureDebugFeatures(services, emailVerificationEnabled: false);
+    }
+
+    public static void SeedDefaultStorageNode(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IPasswordHasherService passwordHasher,
+        IEmailProtectionService emailProtection
+    )
+    {
+        using var context = contextFactory.CreateDbContext();
+        if (context.Set<StorageNodeEntity>().Any())
+        {
+            return;
+        }
+
+        const string apiToken = "test-storage-token";
+        context
+            .Set<StorageNodeEntity>()
+            .Add(
+                new StorageNodeEntity
+                {
+                    Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    NodeId = "test-storage",
+                    InternalHost = "storage-1",
+                    InternalSshPort = 22,
+                    InternalHttpPort = 8081,
+                    ApiTokenHash = passwordHasher.HashPassword(apiToken),
+                    ApiTokenProtected = emailProtection.EncryptEmail(apiToken),
+                    FreeBytesAvailable = 1_000_000_000,
+                    TotalBytesAvailable = 2_000_000_000,
+                    IsHealthy = true,
+                    LastHeartbeatAt = DateTimeOffset.UtcNow,
+                    RegisteredAt = DateTimeOffset.UtcNow,
+                }
+            );
+        context.SaveChanges();
     }
 
     public static void ConfigureDebugFeatures(

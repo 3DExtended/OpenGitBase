@@ -1,6 +1,7 @@
 ﻿using Mapster;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Features.Repository;
@@ -17,7 +18,14 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.Slug, src => src.Slug)
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
-            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed);
+            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(
+                dest => dest.StorageNodeId,
+                src =>
+                    src.StorageNodeId.HasValue
+                        ? StorageNodeId.From(src.StorageNodeId.Value)
+                        : null
+            );
 
         config
             .NewConfig<RepositoryDto, Entities.RepositoryEntity>()
@@ -27,6 +35,10 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.Slug, src => src.Slug)
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
-            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed);
+            .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(
+                dest => dest.StorageNodeId,
+                src => src.StorageNodeId != null ? src.StorageNodeId.Value : (Guid?)null
+            );
     }
 }

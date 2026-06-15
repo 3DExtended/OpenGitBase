@@ -11,6 +11,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
 namespace OpenGitBase.Api;
@@ -124,6 +125,10 @@ public class Startup
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()
         );
+        services.AddSingleton(
+            Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
+                ?? new StorageNodeOptions()
+        );
         services.AddSingleton<IJWTTokenGenerator, JWTTokenGenerator>();
         services.AddSingleton<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
@@ -131,6 +136,21 @@ public class Startup
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
+        services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>();
+        services.AddTransient<
+            IQueryHandler<
+                CreateRepositoryWithStorageQuery,
+                CreateRepositoryWithStorageResult
+            >,
+            CreateRepositoryWithStorageQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<
+                DeleteRepositoryWithStorageQuery,
+                DeleteRepositoryWithStorageResult
+            >,
+            DeleteRepositoryWithStorageQueryHandler
+        >();
         services.AddTransient<
             IQueryHandler<UserDeleteAccountQuery, UserDeleteAccountResult>,
             UserDeleteAccountQueryHandler

@@ -7,6 +7,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
@@ -193,13 +194,17 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         {
             return OkWithLog(
                 request,
-                new RepositoryAccessCheckResponse
-                {
-                    Allowed = true,
-                    ResolvedUserId = resolvedUserId,
-                    RepositoryId = repositoryDto.Id.Value,
-                    EffectiveRole = "Owner",
-                }
+                await ApplyStorageRoutingAsync(
+                    repositoryDto,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = true,
+                        ResolvedUserId = resolvedUserId,
+                        RepositoryId = repositoryDto.Id.Value,
+                        EffectiveRole = "Owner",
+                    },
+                    cancellationToken
+                )
             );
         }
 
@@ -233,28 +238,39 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         {
             return OkWithLog(
                 request,
-                new RepositoryAccessCheckResponse
-                {
-                    Allowed = true,
-                    ResolvedUserId = resolvedUserId,
-                    RepositoryId = repositoryDto.Id.Value,
-                    EffectiveRole = effectiveRole,
-                }
+                await ApplyStorageRoutingAsync(
+                    repositoryDto,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = true,
+                        ResolvedUserId = resolvedUserId,
+                        RepositoryId = repositoryDto.Id.Value,
+                        EffectiveRole = effectiveRole,
+                    },
+                    cancellationToken
+                )
             );
         }
 
         if (request.Operation == RepositoryOperation.WriteGit)
         {
+            var writeResponse = new RepositoryAccessCheckResponse
+            {
+                Allowed = role >= RepositoryRole.Writer,
+                ResolvedUserId = resolvedUserId,
+                RepositoryId = repositoryDto.Id.Value,
+                EffectiveRole = effectiveRole,
+                Reason = role >= RepositoryRole.Writer ? null : "Insufficient write access.",
+            };
+
+            if (!writeResponse.Allowed)
+            {
+                return OkWithLog(request, writeResponse);
+            }
+
             return OkWithLog(
                 request,
-                new RepositoryAccessCheckResponse
-                {
-                    Allowed = role >= RepositoryRole.Writer,
-                    ResolvedUserId = resolvedUserId,
-                    RepositoryId = repositoryDto.Id.Value,
-                    EffectiveRole = effectiveRole,
-                    Reason = role >= RepositoryRole.Writer ? null : "Insufficient write access.",
-                }
+                await ApplyStorageRoutingAsync(repositoryDto, writeResponse, cancellationToken)
             );
         }
 
@@ -269,6 +285,61 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 Reason = "Unknown operation.",
             }
         );
+    }
+
+    private async Task<RepositoryAccessCheckResponse> ApplyStorageRoutingAsync(
+        RepositoryDto repositoryDto,
+        RepositoryAccessCheckResponse response,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!response.Allowed)
+        {
+            return response;
+        }
+
+        if (repositoryDto.StorageNodeId is null)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = false,
+                ResolvedUserId = response.ResolvedUserId,
+                RepositoryId = response.RepositoryId,
+                EffectiveRole = response.EffectiveRole,
+                Reason = "Repository is not assigned to storage.",
+            };
+        }
+
+        var storageNode = await _queryProcessor
+            .RunQueryAsync(
+                new GetStorageNodeQuery { ModelId = repositoryDto.StorageNodeId },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (storageNode.IsNone || !storageNode.Get().IsHealthy)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = false,
+                ResolvedUserId = response.ResolvedUserId,
+                RepositoryId = response.RepositoryId,
+                EffectiveRole = response.EffectiveRole,
+                Reason = "Assigned storage node is unavailable.",
+            };
+        }
+
+        var node = storageNode.Get();
+        return new RepositoryAccessCheckResponse
+        {
+            Allowed = true,
+            ResolvedUserId = response.ResolvedUserId,
+            RepositoryId = response.RepositoryId,
+            EffectiveRole = response.EffectiveRole,
+            PhysicalPath = repositoryDto.PhysicalPath,
+            StorageNodeInternalHost = node.InternalHost,
+            StorageNodeInternalSshPort = node.InternalSshPort,
+        };
     }
 
     private ActionResult<RepositoryAccessCheckResponse> LogValidationFailureAndReturn(

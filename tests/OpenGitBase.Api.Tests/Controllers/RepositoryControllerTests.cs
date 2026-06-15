@@ -124,8 +124,12 @@ public class RepositoryControllerTests
             .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<RepositoryDto>.None);
         queryProcessor
-            .RunQueryAsync(Arg.Any<CreateRepositoryQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option.From(repositoryId));
+            .RunQueryAsync(Arg.Any<CreateRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    CreateRepositoryWithStorageResult.Created(repositoryId)
+                )
+            );
 
         var controller = CreateController(queryProcessor, userId);
 
@@ -143,12 +147,11 @@ public class RepositoryControllerTests
         await queryProcessor
             .Received(1)
             .RunQueryAsync(
-                Arg.Is<CreateRepositoryQuery>(query =>
+                Arg.Is<CreateRepositoryWithStorageQuery>(query =>
                     query.ModelToCreate.Slug == "my-repo"
                     && query.ModelToCreate.Name == DefaultRepositoryName
                     && query.ModelToCreate.IsPrivate
                     && query.ModelToCreate.OwnerUserId == userId
-                    && query.ModelToCreate.PhysicalPath == $"./repositories/{userId.Value}/my-repo"
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -164,8 +167,8 @@ public class RepositoryControllerTests
             .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<RepositoryDto>.None);
         queryProcessor
-            .RunQueryAsync(Arg.Any<CreateRepositoryQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option<RepositoryId>.None);
+            .RunQueryAsync(Arg.Any<CreateRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<CreateRepositoryWithStorageResult>.None);
 
         var controller = CreateController(queryProcessor, userId);
 
@@ -578,8 +581,8 @@ public class RepositoryControllerTests
                 )
             );
         queryProcessor
-            .RunQueryAsync(Arg.Any<DeleteRepositoryQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option.From(Unit.Value));
+            .RunQueryAsync(Arg.Any<DeleteRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(DeleteRepositoryWithStorageResult.Deleted()));
 
         var controller = CreateController(queryProcessor, userId);
 
@@ -608,8 +611,8 @@ public class RepositoryControllerTests
                 )
             );
         queryProcessor
-            .RunQueryAsync(Arg.Any<DeleteRepositoryQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option<Unit>.None);
+            .RunQueryAsync(Arg.Any<DeleteRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<DeleteRepositoryWithStorageResult>.None);
 
         var controller = CreateController(queryProcessor, userId);
 
@@ -888,8 +891,8 @@ public class RepositoryControllerTests
                 )
                 .Returns(Option<RepositoryDto>.None);
             queryProcessor
-                .RunQueryAsync(Arg.Any<CreateRepositoryQuery>(), Arg.Any<CancellationToken>())
-                .Returns(Option<RepositoryId>.None);
+                .RunQueryAsync(Arg.Any<CreateRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+                .Returns(Option<CreateRepositoryWithStorageResult>.None);
 
             var client = CreateAuthenticatedClient(queryProcessor, userId, "mock-create-user");
 

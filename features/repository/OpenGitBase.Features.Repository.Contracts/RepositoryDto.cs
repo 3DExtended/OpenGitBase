@@ -1,4 +1,5 @@
 ﻿using OpenGitBase.Cqrs.EfCore;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Features.Repository.Contracts;
@@ -12,6 +13,8 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
     public string Slug { get; set; } = string.Empty;
 
     public string PhysicalPath { get; set; } = string.Empty;
+
+    public StorageNodeId? StorageNodeId { get; set; }
 
     public bool IsPrivate { get; set; } = false;
 

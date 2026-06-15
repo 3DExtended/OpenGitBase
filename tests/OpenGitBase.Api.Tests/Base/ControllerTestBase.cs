@@ -51,11 +51,17 @@ public abstract class ControllerTestBase
         Cache = serviceProvider.GetRequiredService<IMemoryCache>();
 
         using var initScope = Factory.Services.CreateScope();
-        var contextFactory = initScope.ServiceProvider.GetRequiredService<
+        var initProvider = initScope.ServiceProvider;
+        var contextFactory = initProvider.GetRequiredService<
             IDbContextFactory<OpenGitBaseDbContext>
         >();
         using var context = contextFactory.CreateDbContext();
         context.Database.EnsureCreated();
+        AuthTestServerConfiguration.SeedDefaultStorageNode(
+            contextFactory,
+            initProvider.GetRequiredService<IPasswordHasherService>(),
+            initProvider.GetRequiredService<IEmailProtectionService>()
+        );
     }
 
     protected HttpClient Client { get; }

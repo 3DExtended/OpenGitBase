@@ -91,7 +91,7 @@ public class RepositoryController : ControllerBase
             return BadRequest(new { error = "Repository with this slug already exists." });
         }
 
-        var query = new CreateRepositoryQuery
+        var query = new CreateRepositoryWithStorageQuery
         {
             ModelToCreate = new RepositoryDto
             {
@@ -99,7 +99,6 @@ public class RepositoryController : ControllerBase
                 OwnerUserId = UserId.From(_userContext.User.UserId),
                 Name = request.RepositoryName,
                 IsPrivate = request.IsPrivate,
-                PhysicalPath = "./repositories/" + user.Get().Id.Value + "/" + slug,
             },
         };
 
@@ -109,7 +108,16 @@ public class RepositoryController : ControllerBase
             return NotFound();
         }
 
-        var id = result.Get();
+        var payload = result.Get();
+        if (payload.RepositoryId is null)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { error = payload.Error ?? "Repository creation failed." }
+            );
+        }
+
+        var id = payload.RepositoryId;
         return CreatedAtAction(nameof(Get), new { id = id.Value }, id);
     }
 
@@ -221,13 +229,22 @@ public class RepositoryController : ControllerBase
         }
 
         var result = await _queryProcessor.RunQueryAsync(
-            new DeleteRepositoryQuery { Id = RepositoryId.From(id) },
+            new DeleteRepositoryWithStorageQuery { Id = RepositoryId.From(id) },
             cancellationToken
         );
 
         if (result.IsNone)
         {
             return NotFound();
+        }
+
+        var payload = result.Get();
+        if (!payload.Success)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { error = payload.Error ?? "Repository deletion failed." }
+            );
         }
 
         return NoContent();

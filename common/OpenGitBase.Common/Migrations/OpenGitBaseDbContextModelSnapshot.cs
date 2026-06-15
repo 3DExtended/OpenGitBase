@@ -43,6 +43,8 @@ namespace OpenGitBase.Common.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OwnerUserId");
+
                     b.HasIndex("Slug")
                         .IsUnique();
 
@@ -65,6 +67,8 @@ namespace OpenGitBase.Common.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("OrganizationId", "UserId")
                         .IsUnique();
@@ -140,6 +144,9 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<long>("StorageBytesUsed")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("StorageNodeId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OwnerUserId");
@@ -173,6 +180,61 @@ namespace OpenGitBase.Common.Migrations
                         .IsUnique();
 
                     b.ToTable("RepositoryMember", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.StorageNode.Entities.StorageNodeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ApiTokenProtected")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<long>("FreeBytesAvailable")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("InternalHost")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("InternalHttpPort")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InternalSshPort")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsHealthy")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("TotalBytesAvailable")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NodeId")
+                        .IsUnique();
+
+                    b.ToTable("StorageNode", (string)null);
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Users.Entities.UserCredentialsEntity", b =>
@@ -261,6 +323,17 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OwnerUser");
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationMemberEntity", b =>
                 {
                     b.HasOne("OpenGitBase.Features.Organization.Entities.OrganizationEntity", "Organization")
@@ -269,7 +342,15 @@ namespace OpenGitBase.Common.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Organization");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.PublicGitSshKey.Entities.PublicGitSshKeyEntity", b =>

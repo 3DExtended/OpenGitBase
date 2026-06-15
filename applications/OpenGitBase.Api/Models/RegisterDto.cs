@@ -1,4 +1,4 @@
-﻿namespace OpenGitBase.Api.Models;
+﻿﻿namespace OpenGitBase.Api.Models;
 
 public class RegisterDto
 {

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenGitBase.Dispatcher.Options;
 using OpenGitBase.Dispatcher.Services;
 
@@ -50,12 +51,28 @@ builder.Services.Configure<DispatcherOptions>(options =>
 {
     options.ApiUrl = builder.Configuration["Dispatcher:ApiUrl"] ?? "http://api:8080";
     options.DispatcherId = builder.Configuration["Dispatcher:DispatcherId"] ?? "dispatcher-1";
+    options.StorageSshPrivateKeyPath =
+        builder.Configuration["Dispatcher:StorageSshPrivateKeyPath"]
+        ?? "/run/secrets/storage_ssh_key";
+    options.StorageSshUser = builder.Configuration["Dispatcher:StorageSshUser"] ?? "git";
+    options.StorageSshConnectTimeoutSeconds = int.TryParse(
+        builder.Configuration["Dispatcher:StorageSshConnectTimeoutSeconds"],
+        out var timeoutSeconds
+    )
+        ? timeoutSeconds
+        : 30;
 });
 
 builder.Services.AddHttpClient<RepositoryAccessCheckClient>();
+builder.Services.AddSingleton<GitSessionProxyService>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<DispatcherOptions>>().Value;
+    return new GitSessionProxyService(options);
+});
 
 using var host = builder.Build();
 var accessCheckClient = host.Services.GetRequiredService<RepositoryAccessCheckClient>();
+var gitSessionProxyService = host.Services.GetRequiredService<GitSessionProxyService>();
 
 Console.Error.WriteLine($"User: {sshUser}");
 Console.Error.WriteLine($"Key Fingerprint: {sshKeyFingerprint}");
@@ -78,11 +95,14 @@ try
         Environment.Exit(1);
     }
 
-    Console.Error.WriteLine("Repository access allowed.");
-    Environment.Exit(0);
+    Console.Error.WriteLine("Repository access allowed. Proxying git session to storage.");
+    var exitCode = await gitSessionProxyService
+        .ProxyAsync(accessCheck, operation, CancellationToken.None)
+        .ConfigureAwait(false);
+    Environment.Exit(exitCode);
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Authorization check failed: {ex.Message}");
+    Console.Error.WriteLine($"Authorization or proxy failed: {ex.Message}");
     Environment.Exit(1);
 }
