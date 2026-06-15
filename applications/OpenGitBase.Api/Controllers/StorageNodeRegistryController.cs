@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
@@ -9,6 +10,7 @@ namespace OpenGitBase.Api.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting("sensitive")]
 [Route("api/v1/storage-nodes")]
 public sealed class StorageNodeRegistryController : ControllerBase
 {

@@ -1,6 +1,8 @@
 ﻿using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpenGitBase.Api.Middleware;
@@ -46,6 +48,7 @@ public class Startup
         if (!env.IsEnvironment("E2ETest"))
         {
             app.UseMiddleware<InternalNetworkMiddleware>();
+            app.UseRateLimiter();
         }
 
         app.UseAuthentication();
@@ -141,6 +144,26 @@ public class Startup
         if (Environment.IsEnvironment("E2ETest"))
         {
             services.PostConfigure<InternalNetworkOptions>(options => options.Enabled = false);
+        }
+
+        if (!Environment.IsEnvironment("E2ETest"))
+        {
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy(
+                    "sensitive",
+                    context =>
+                        RateLimitPartition.GetFixedWindowLimiter(
+                            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                            _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = 60,
+                                Window = TimeSpan.FromMinutes(1),
+                            }
+                        )
+                );
+            });
         }
 
         services.Configure<AdminSeedOptions>(Configuration.GetSection("AdminSeed"));

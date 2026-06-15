@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
@@ -45,6 +46,7 @@ public class SignInController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<ActionResult<string>> LoginAsync(
         [FromBody] LoginDto loginDto,
         CancellationToken cancellationToken

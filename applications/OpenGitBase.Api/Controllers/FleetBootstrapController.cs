@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.StorageNode.Contracts;
 
@@ -7,6 +8,7 @@ namespace OpenGitBase.Api.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting("sensitive")]
 [Route("api/v1/fleet/bootstrap")]
 public sealed class FleetBootstrapController : ControllerBase
 {

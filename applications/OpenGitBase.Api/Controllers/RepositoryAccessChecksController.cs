@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
@@ -15,6 +16,7 @@ namespace OpenGitBase.Api.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting("sensitive")]
 [Route("api/v1/access-checks/repositories")]
 public sealed class RepositoryAccessChecksController : ControllerBase
 {
