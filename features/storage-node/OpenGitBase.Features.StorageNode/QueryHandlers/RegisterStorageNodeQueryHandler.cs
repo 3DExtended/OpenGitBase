@@ -122,6 +122,10 @@ public sealed class RegisterStorageNodeQueryHandler
             existing.TotalBytesAvailable = query.TotalBytesAvailable;
             existing.LastHeartbeatAt = now;
             existing.IsHealthy = true;
+
+            apiToken = GenerateApiToken();
+            existing.ApiTokenHash = _passwordHasherService.HashPassword(apiToken);
+            existing.ApiTokenProtected = _emailProtectionService.EncryptEmail(apiToken);
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

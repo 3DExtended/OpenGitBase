@@ -123,7 +123,7 @@ public class RegisterStorageNodeQueryHandlerTests
         Assert.True(first.IsSome);
         Assert.True(second.IsSome);
         Assert.Equal(first.Get().StorageNodeId, second.Get().StorageNodeId);
-        Assert.Empty(second.Get().ApiToken);
+        Assert.NotEmpty(second.Get().ApiToken);
 
         await using var verifyContext = await contextFactory.CreateDbContextAsync();
         var entity = await verifyContext

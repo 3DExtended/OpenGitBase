@@ -21,6 +21,7 @@ const navItems = computed(() => {
     { label: t('org.create.title'), to: '/orgs/new', icon: 'i-lucide-building-2' },
     { label: t('settings.title'), to: '/settings', icon: 'i-lucide-settings' },
     { label: t('settings.sshKeys.title'), to: '/settings/ssh-keys', icon: 'i-lucide-key' },
+    ...(auth.isAdmin ? [{ label: t('admin.nav'), to: '/admin', icon: 'i-lucide-shield' }] : []),
   ]
 })
 

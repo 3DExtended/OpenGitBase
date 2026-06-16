@@ -21,10 +21,17 @@ function toggleTheme() {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
 
-const userMenuItems = computed(() => [
-  [{ label: t('settings.title'), to: '/settings', icon: 'i-lucide-settings' }],
-  [{ label: t('nav.signOut'), to: '/sign-out', icon: 'i-lucide-log-out' }],
-])
+const userMenuItems = computed(() => {
+  const items: Array<Array<{ label: string, to: string, icon: string }>> = []
+  if (auth.isAdmin) {
+    items.push([{ label: t('admin.nav'), to: '/admin', icon: 'i-lucide-shield' }])
+  }
+  items.push(
+    [{ label: t('settings.title'), to: '/settings', icon: 'i-lucide-settings' }],
+    [{ label: t('nav.signOut'), to: '/sign-out', icon: 'i-lucide-log-out' }],
+  )
+  return items
+})
 </script>
 
 <template>

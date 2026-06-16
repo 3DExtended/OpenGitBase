@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => user.value !== null)
   const isEmailVerified = computed(() => user.value?.emailVerified ?? false)
+  const isAdmin = computed(() => user.value?.isAdmin ?? false)
 
   async function fetchMe() {
     loading.value = true
@@ -69,6 +70,7 @@ export const useAuthStore = defineStore('auth', () => {
     initialized,
     isAuthenticated,
     isEmailVerified,
+    isAdmin,
     fetchMe,
     login,
     register,

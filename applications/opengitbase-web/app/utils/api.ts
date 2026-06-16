@@ -4,6 +4,35 @@ export interface ApiResult<T> {
   status: number
 }
 
+export interface StorageNodeDto {
+  id: string
+  nodeId: string
+  internalHost: string
+  internalSshPort: number
+  internalHttpPort: number
+  freeBytesAvailable: number
+  totalBytesAvailable: number
+  lastHeartbeatAt?: string | null
+  isHealthy: boolean
+  registeredAt: string
+  certificateThumbprint?: string
+}
+
+export interface StorageNodeEnrollmentDto {
+  id: string
+  nodeId: string
+  createdAt: string
+  expiresAt: string
+  consumedAt?: string | null
+}
+
+export interface CreateStorageNodeEnrollmentResult {
+  enrollmentId: string
+  nodeId: string
+  enrollmentToken: string
+  expiresAt: string
+}
+
 export interface AccountDebugFeatures {
   emailVerification: boolean
 }
@@ -11,6 +40,7 @@ export interface AccountDebugFeatures {
 export interface AccountMe {
   username: string
   emailVerified: boolean
+  isAdmin: boolean
   debug?: AccountDebugFeatures
 }
 
@@ -238,6 +268,7 @@ export function createApi(baseUrl: string) {
         const result = await request<{
           username: string
           emailVerified: boolean
+          isAdmin: boolean
           debug?: { emailVerification: boolean }
         }>('/account/me')
         if (!result.data) {
@@ -248,6 +279,7 @@ export function createApi(baseUrl: string) {
           data: {
             username: result.data.username,
             emailVerified: result.data.emailVerified,
+            isAdmin: result.data.isAdmin,
             debug: result.data.debug?.emailVerification
               ? { emailVerification: true }
               : undefined,
@@ -425,6 +457,27 @@ export function createApi(baseUrl: string) {
             repositories: repos,
           },
         }
+      },
+    },
+
+    admin: {
+      storageNodes: {
+        list: () => request<StorageNodeDto[]>('/admin/storage-nodes'),
+      },
+      storageEnrollments: {
+        list: () => request<StorageNodeEnrollmentDto[]>('/admin/storage-enrollments'),
+        create: (body: { nodeId: string, expiresInHours?: number }) =>
+          request<CreateStorageNodeEnrollmentResult>('/admin/storage-enrollments', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+      },
+      fleet: {
+        getDispatcherSshPublicKey: () => request<{ publicKey: string }>('/admin/fleet/dispatcher-ssh-public-key'),
+        generateDispatcherSshKeys: () =>
+          request<{ dispatcherSshPublicKey: string, fleetBootstrapToken: string }>('/admin/fleet/dispatcher-ssh-keys/generate', {
+            method: 'POST',
+          }),
       },
     },
   }

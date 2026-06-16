@@ -229,5 +229,15 @@
     "subtitle": "Discover public repositories on this instance.",
     "searchPlaceholder": "Search repositories…",
     "empty": "No repositories match your search."
+  },
+  "admin": {
+    "title": "Administration",
+    "subtitle": "Instance configuration and fleet management.",
+    "open": "Open",
+    "nav": "Admin",
+    "storage": {
+      "title": "Storage fleet",
+      "description": "View storage nodes, create enrollments, and manage dispatcher SSH keys."
+    }
   }
 }

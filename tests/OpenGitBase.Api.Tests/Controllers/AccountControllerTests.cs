@@ -29,6 +29,7 @@ public class AccountControllerTests : ControllerTestBase
         Assert.NotNull(body);
         Assert.Equal("account-me-user", body.Username);
         Assert.False(body.EmailVerified);
+        Assert.False(body.IsAdmin);
     }
 
     [Fact]

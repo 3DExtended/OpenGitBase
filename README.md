@@ -42,6 +42,71 @@ is no copyleft requirement for qualifying free-tier users.
 
 Compliance is self-reported (honor system) in v1 — no license keys in the software.
 
+## Local development (Docker)
+
+The default stack runs the API, web UI, Postgres, two storage nodes, and two
+git dispatchers. Storage nodes are enrolled by an admin user and identified by
+machine certificates — fleet SSH keys are not checked into the repo.
+
+### Prerequisites
+
+- Docker and Docker Compose
+- `curl`, `openssl`, and Python 3 (for `scripts/bootstrap-fleet.sh`)
+
+### First-time startup
+
+```bash
+# 1. Start database and API
+docker compose up -d --build postgres api
+
+# Wait until the API is healthy
+curl -fsS http://localhost:8080/health
+
+# 2. Generate PKI, admin enrollments, and fleet SSH keys
+./scripts/bootstrap-fleet.sh
+# writes docker/.env (tokens + dispatcher public key — do not commit)
+
+# 3. Start the full stack
+docker compose --env-file docker/.env up -d --build
+```
+
+### After bootstrap
+
+| Service | URL |
+|---------|-----|
+| Web UI | http://localhost:3000 |
+| API | http://localhost:8080 |
+| Git (SSH entrypoint) | `ssh://git@localhost/owner/repo` |
+
+Default admin user (change in `applications/OpenGitBase.Api/appsettings.json`):
+
+- Username: `admin`
+- Password: `change-me-admin`
+
+Verify storage nodes registered (must run from inside the Docker network — the
+host gets 403 by design):
+
+```bash
+docker exec opengitbase_storage_1 \
+  curl -fsS http://api:8080/api/v1/storage-nodes/healthy
+```
+
+### Re-bootstrap
+
+Re-run `./scripts/bootstrap-fleet.sh` when you need new enrollment tokens or a
+new fleet bootstrap token (for example after wiping the database). Then recreate
+storage and dispatcher containers:
+
+```bash
+docker compose --env-file docker/.env up -d --force-recreate storage-1 storage-2 dispatcher-1 dispatcher-2
+```
+
+### Tests
+
+```bash
+dotnet test OpenGitBase.sln
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). All commits in PRs must include DCO

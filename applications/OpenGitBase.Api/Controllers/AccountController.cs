@@ -33,19 +33,24 @@ public class AccountController : ControllerBase
     public async Task<ActionResult<AccountMeResponse>> MeAsync(CancellationToken cancellationToken)
     {
         var userId = UserId.From(_userContext.User.UserId);
+        var user = await _queryProcessor
+            .RunQueryAsync(new UserGetByIdQuery { ModelId = userId }, cancellationToken)
+            .ConfigureAwait(false);
         var emailVerified = await _queryProcessor
             .RunQueryAsync(new UserGetEmailVerifiedQuery { UserId = userId }, cancellationToken)
             .ConfigureAwait(false);
 
-        if (emailVerified.IsNone)
+        if (user.IsNone || emailVerified.IsNone)
         {
             return NotFound();
         }
 
+        var userModel = user.Get();
         var response = new AccountMeResponse
         {
-            Username = _userContext.User.Username ?? string.Empty,
+            Username = userModel.Username,
             EmailVerified = emailVerified.Get(),
+            IsAdmin = userModel.IsAdmin,
         };
 
         if (_debugFeatures.Features.EmailVerification)
