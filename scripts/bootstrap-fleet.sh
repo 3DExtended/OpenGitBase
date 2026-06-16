@@ -22,12 +22,13 @@ login() {
 }
 
 echo "==> Signing in as admin"
-TOKEN=$(login | python3 -c 'import json,sys; print(json.load(sys.stdin))')
+TOKEN=$(login | tr -d '\n\r')
 
 echo "==> Generating dispatcher SSH keys"
 FLEET_JSON=$(curl -fsS -X POST "${API_URL}/admin/fleet/dispatcher-ssh-keys/generate" \
   -H "Authorization: Bearer ${TOKEN}")
 FLEET_BOOTSTRAP_TOKEN=$(echo "${FLEET_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["fleetBootstrapToken"])')
+DISPATCHER_SSH_PUBLIC_KEY=$(echo "${FLEET_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["dispatcherSshPublicKey"])')
 
 create_enrollment() {
   local node_id="$1"
@@ -47,6 +48,7 @@ cat > "${ENV_FILE}" <<EOF
 STORAGE_1_ENROLLMENT_TOKEN=${STORAGE_1_TOKEN}
 STORAGE_2_ENROLLMENT_TOKEN=${STORAGE_2_TOKEN}
 FLEET_BOOTSTRAP_TOKEN=${FLEET_BOOTSTRAP_TOKEN}
+DISPATCHER_SSH_PUBLIC_KEY="${DISPATCHER_SSH_PUBLIC_KEY}"
 EOF
 
 echo "Wrote ${ENV_FILE}"

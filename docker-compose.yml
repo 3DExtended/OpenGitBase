@@ -21,6 +21,7 @@
       STORAGE_INTERNAL_HOST: "storage-1"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
       STORAGE_ENROLLMENT_TOKEN: "${STORAGE_1_ENROLLMENT_TOKEN}"
+      DISPATCHER_SSH_PUBLIC_KEY: "${DISPATCHER_SSH_PUBLIC_KEY:-}"
     volumes:
       - opengitbase_storage1_repos:/srv/git
       - ./docker/pki/storage-1.crt:/etc/opengitbase/node.crt:ro
@@ -47,6 +48,7 @@
       STORAGE_INTERNAL_HOST: "storage-2"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
       STORAGE_ENROLLMENT_TOKEN: "${STORAGE_2_ENROLLMENT_TOKEN}"
+      DISPATCHER_SSH_PUBLIC_KEY: "${DISPATCHER_SSH_PUBLIC_KEY:-}"
     volumes:
       - opengitbase_storage2_repos:/srv/git
       - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
