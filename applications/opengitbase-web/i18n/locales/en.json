@@ -18,6 +18,13 @@
     "comingSoon": "Repository and settings navigation will appear here.",
     "signInPrompt": "Sign in to access your repositories and settings."
   },
+  "siteGate": {
+    "title": "Coming soon",
+    "subtitle": "This site is not public yet. Enter the access password to continue.",
+    "passwordLabel": "Access password",
+    "submit": "Continue",
+    "invalidPassword": "Incorrect password."
+  },
   "common": {
     "loading": "Loading…",
     "save": "Save changes",

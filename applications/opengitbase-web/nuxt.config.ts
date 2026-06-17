@@ -19,6 +19,7 @@ export default defineNuxtConfig({
       instanceLogoUrl: process.env.NUXT_PUBLIC_INSTANCE_LOGO_URL ?? '',
       apiBase: process.env.NUXT_PUBLIC_API_BASE ?? '/api',
       msw: process.env.NUXT_PUBLIC_MSW ?? 'false',
+      siteGateEnabled: process.env.NUXT_PUBLIC_SITE_GATE_ENABLED !== 'false',
     },
   },
 
