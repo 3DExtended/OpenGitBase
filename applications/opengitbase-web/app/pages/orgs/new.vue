@@ -29,7 +29,7 @@ async function onSubmit() {
   error.value = null
   try {
     const result = await api.organizations.create({
-      modelToCreate: { name: name.value },
+      modelToCreate: { name: name.value, slug: name.value },
     })
     if (result.error) {
       error.value = result.error
