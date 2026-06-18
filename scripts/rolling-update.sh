@@ -32,6 +32,8 @@ Options:
 
 Environment:
   WAIT_TIMEOUT          Seconds to wait per service health (default: 180)
+  API_URL               Host URL for API LB check when ssh-lb is not running (default: http://localhost:8089)
+  WEB_URL               Host URL for web LB check when ssh-lb is not running (default: http://localhost:3000)
 EOF
 }
 
@@ -184,6 +186,36 @@ roll_service() {
   wait_for_healthy "${service}"
 }
 
+lb_http_check() {
+  local url="$1"
+  local host_fallback_url="$2"
+  local attempt
+
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if container_running opengitbase_ssh_lb; then
+      local network
+      network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' opengitbase_ssh_lb)"
+      if docker run --rm --network "${network}" curlimages/curl:8.5.0 -fsS "${url}" >/dev/null; then
+        return 0
+      fi
+    elif curl -fsS "${host_fallback_url}" >/dev/null; then
+      return 0
+    fi
+
+    sleep 3
+  done
+
+  return 1
+}
+
+verify_lb_api_health() {
+  lb_http_check "http://api-lb:8080/health" "${API_URL}/health"
+}
+
+verify_lb_web() {
+  lb_http_check "http://api-lb:8081/" "${WEB_URL}/"
+}
+
 echo "==> Zero-downtime rolling Docker Compose update"
 echo "    Repo: ${REPO_ROOT}"
 if [ "${ROLL_FLEET}" = true ]; then
@@ -221,15 +253,18 @@ for service in "${ROLL_SERVICES[@]}"; do
   run_step "Roll ${service}" roll_service "${service}"
 done
 
-run_step "Verify API health via load balancer (${API_URL}/health)" \
-  curl -fsS "${API_URL}/health" >/dev/null
+run_step "Ensure load balancer (ssh-lb) is up" \
+  compose up -d ssh-lb
 
-run_step "Verify web UI via load balancer (${WEB_URL}/)" \
-  curl -fsS "${WEB_URL}/" >/dev/null
+run_step "Verify API health via load balancer" \
+  verify_lb_api_health
+
+run_step "Verify web UI via load balancer" \
+  verify_lb_web
 
 if [ "${SKIP_TUNNEL_CHECK}" = false ] && container_running opengitbase_cloudflare_tunnel; then
-  run_step "Verify API via HAProxy internal path (tunnel stack)" \
-    docker exec opengitbase_ssh_lb wget -qO- http://127.0.0.1:8080/health >/dev/null
+  run_step "Verify API via Cloudflare tunnel target (api-lb:8080)" \
+    lb_http_check "http://api-lb:8080/health" "${API_URL}/health"
 elif [ "${SKIP_TUNNEL_CHECK}" = true ]; then
   echo "==> Skipping Cloudflare tunnel API check (--skip-tunnel-check)"
 else
