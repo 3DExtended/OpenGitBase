@@ -93,7 +93,7 @@ public sealed class RegisterStorageNodeQueryHandler
                 InternalSshPort = query.InternalSshPort,
                 InternalHttpPort = query.InternalHttpPort,
                 ApiTokenHash = _passwordHasherService.HashPassword(apiToken),
-                ApiTokenProtected = _emailProtectionService.EncryptEmail(apiToken),
+                ApiTokenProtected = _emailProtectionService.EncryptSecret(apiToken),
                 FreeBytesAvailable = query.FreeBytesAvailable,
                 TotalBytesAvailable = query.TotalBytesAvailable,
                 LastHeartbeatAt = now,
@@ -125,7 +125,7 @@ public sealed class RegisterStorageNodeQueryHandler
 
             apiToken = GenerateApiToken();
             existing.ApiTokenHash = _passwordHasherService.HashPassword(apiToken);
-            existing.ApiTokenProtected = _emailProtectionService.EncryptEmail(apiToken);
+            existing.ApiTokenProtected = _emailProtectionService.EncryptSecret(apiToken);
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

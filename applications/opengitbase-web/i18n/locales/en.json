@@ -175,7 +175,8 @@
       "roles": {
         "member": "Member",
         "owner": "Owner"
-      }
+      },
+      "leave": "Leave organization"
     }
   },
   "repo": {

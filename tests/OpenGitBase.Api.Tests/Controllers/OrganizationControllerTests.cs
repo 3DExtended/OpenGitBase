@@ -284,6 +284,151 @@ public class OrganizationControllerTests
     }
 
     [Fact]
+    public async Task RemoveMember_WhenSelf_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationMemberAccessCheck(
+                    true,
+                    true,
+                    false,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+        organizationAccess
+            .WouldRemoveLastOwnerAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RemoveOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Unit.Value);
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.RemoveMember(
+            organizationId.Value,
+            userId.Value,
+            CancellationToken.None
+        );
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateMember_WhenOwner_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var memberUserId = UserId.From(Guid.NewGuid());
+        var memberId = OrganizationMemberId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+        organizationAccess
+            .WouldDemoteLastOwnerAsync(
+                organizationId,
+                memberUserId,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(false);
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationMemberDto
+                    {
+                        Id = memberId,
+                        OrganizationId = organizationId,
+                        UserId = memberUserId,
+                        Role = OrganizationMemberRole.Member,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UpdateOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Unit.Value);
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.UpdateMember(
+            organizationId.Value,
+            memberUserId.Value,
+            new OpenGitBase.Api.Models.UpdateOrganizationMemberRequest
+            {
+                Role = OrganizationMemberRole.Owner,
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateMember_WhenLastOwnerDemoted_ReturnsConflict()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var memberUserId = UserId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+        organizationAccess
+            .WouldDemoteLastOwnerAsync(
+                organizationId,
+                memberUserId,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(true);
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationMemberDto
+                    {
+                        Id = OrganizationMemberId.From(Guid.NewGuid()),
+                        OrganizationId = organizationId,
+                        UserId = memberUserId,
+                        Role = OrganizationMemberRole.Owner,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.UpdateMember(
+            organizationId.Value,
+            memberUserId.Value,
+            new OpenGitBase.Api.Models.UpdateOrganizationMemberRequest
+            {
+                Role = OrganizationMemberRole.Member,
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
     public async Task Create_WhenEmailNotVerified_ReturnsForbidden()
     {
         var userId = UserId.From(Guid.NewGuid());

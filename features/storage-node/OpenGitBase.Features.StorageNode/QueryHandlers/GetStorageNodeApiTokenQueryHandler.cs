@@ -41,7 +41,7 @@ public sealed class GetStorageNodeApiTokenQueryHandler
 
         try
         {
-            return Option.From(_emailProtectionService.DecryptEmail(node.ApiTokenProtected));
+            return Option.From(_emailProtectionService.DecryptSecret(node.ApiTokenProtected));
         }
         catch (FormatException)
         {

@@ -145,7 +145,7 @@ internal static class AuthTestServerConfiguration
                     InternalSshPort = 22,
                     InternalHttpPort = 8081,
                     ApiTokenHash = passwordHasher.HashPassword(apiToken),
-                    ApiTokenProtected = emailProtection.EncryptEmail(apiToken),
+                    ApiTokenProtected = emailProtection.EncryptSecret(apiToken),
                     FreeBytesAvailable = 1_000_000_000,
                     TotalBytesAvailable = 2_000_000_000,
                     IsHealthy = true,

@@ -31,7 +31,7 @@ public class GetStorageNodeApiTokenQueryHandlerTests
                 Pepper = "test-pepper",
             }
         );
-        var plainToken = "secret-token";
+        var plainToken = "AbC+/SecretToken==";
         var storageNodeId = Guid.NewGuid();
 
         var services = new ServiceCollection();
@@ -63,7 +63,7 @@ public class GetStorageNodeApiTokenQueryHandlerTests
                         InternalHost = "storage-1",
                         InternalHttpPort = 8081,
                         ApiTokenHash = "hash",
-                        ApiTokenProtected = emailProtection.EncryptEmail(plainToken),
+                        ApiTokenProtected = emailProtection.EncryptSecret(plainToken),
                         IsHealthy = true,
                         RegisteredAt = DateTimeOffset.UtcNow,
                     }

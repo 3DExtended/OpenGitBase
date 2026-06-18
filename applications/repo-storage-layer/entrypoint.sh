@@ -25,6 +25,11 @@ source /usr/local/bin/storage-agent.sh
 
 configure_dispatcher_authorized_keys
 
+register_node
+if [ -f "${TOKEN_FILE}" ]; then
+  export STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"
+fi
+
 python3 /usr/local/bin/storage-http-server.py &
 STORAGE_HTTP_PID=$!
 

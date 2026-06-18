@@ -431,6 +431,15 @@ export function createApi(baseUrl: string) {
             data: result.data?.map(normalizeOrganizationMember) ?? null,
           }
         },
+
+        updateRole: (organizationId: string, userId: string, body: { role: number }) =>
+          request<null>(`/organization/${organizationId}/members/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+          }),
+
+        remove: (organizationId: string, userId: string) =>
+          request<null>(`/organization/${organizationId}/members/${userId}`, { method: 'DELETE' }),
       },
 
       create: (body: { modelToCreate: { name: string, slug: string } }) =>

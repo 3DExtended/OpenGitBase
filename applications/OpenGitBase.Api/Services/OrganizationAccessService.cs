@@ -133,6 +133,37 @@ public class OrganizationAccessService : IOrganizationAccessService
             == 1;
     }
 
+    public async Task<bool> WouldDemoteLastOwnerAsync(
+        OrganizationId organizationId,
+        UserId userIdToDemote,
+        CancellationToken cancellationToken
+    )
+    {
+        var membersResult = await _queryProcessor
+            .RunQueryAsync(
+                new ListOrganizationMembersQuery { OrganizationId = organizationId },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (membersResult.IsNone)
+        {
+            return false;
+        }
+
+        var memberToDemote = membersResult
+            .Get()
+            .FirstOrDefault(member => member.UserId == userIdToDemote);
+
+        if (memberToDemote == null || memberToDemote.Role != OrganizationMemberRole.Owner)
+        {
+            return false;
+        }
+
+        return membersResult.Get().Count(member => member.Role == OrganizationMemberRole.Owner)
+            == 1;
+    }
+
     private async Task<bool> IsOwnerAsync(
         OrganizationDto organization,
         UserId userId,

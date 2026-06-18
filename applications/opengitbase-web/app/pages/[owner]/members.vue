@@ -6,6 +6,7 @@ definePageMeta({ middleware: 'auth' })
 const route = useRoute()
 const { t } = useI18n()
 const api = useApi()
+const auth = useAuth()
 
 const orgSlug = computed(() => String(route.params.owner))
 
@@ -22,8 +23,28 @@ const roleOptions = [
 
 useHead({ title: t('org.members.title') })
 
+const currentMember = computed(() =>
+  members.value.find(m => m.username?.toLowerCase() === auth.user?.username.toLowerCase()),
+)
+
+const isOwner = computed(() => currentMember.value?.role === 1)
+
+const ownerCount = computed(() => members.value.filter(m => m.role === 1).length)
+
+const isLastOwner = computed(() =>
+  isOwner.value && ownerCount.value === 1,
+)
+
 function roleLabel(value: number) {
   return roleOptions.find(r => r.value === value)?.label ?? String(value)
+}
+
+async function loadMembers() {
+  if (!organization.value) {
+    return
+  }
+  const membersResult = await api.organizations.members.list(organization.value.id)
+  members.value = membersResult.data ?? []
 }
 
 onMounted(async () => {
@@ -56,6 +77,30 @@ onMounted(async () => {
   members.value = membersResult.data ?? []
   loading.value = false
 })
+
+async function updateRole(member: OrganizationMember, role: number) {
+  if (!organization.value || member.role === role) {
+    return
+  }
+  await api.organizations.members.updateRole(organization.value.id, member.userId, { role })
+  await loadMembers()
+}
+
+async function removeMember(member: OrganizationMember) {
+  if (!organization.value) {
+    return
+  }
+  await api.organizations.members.remove(organization.value.id, member.userId)
+  await loadMembers()
+}
+
+async function leaveOrganization() {
+  if (!organization.value || !currentMember.value) {
+    return
+  }
+  await api.organizations.members.remove(organization.value.id, currentMember.value.userId)
+  await navigateTo(`/${orgSlug.value}`)
+}
 </script>
 
 <template>
@@ -69,9 +114,20 @@ onMounted(async () => {
       {{ orgSlug }}
     </UButton>
 
-    <h1 class="text-2xl font-semibold">
-      {{ t('org.members.title') }}
-    </h1>
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <h1 class="text-2xl font-semibold">
+        {{ t('org.members.title') }}
+      </h1>
+      <UButton
+        v-if="currentMember && !isLastOwner"
+        color="error"
+        variant="soft"
+        size="sm"
+        @click="leaveOrganization"
+      >
+        {{ t('org.members.leave') }}
+      </UButton>
+    </div>
 
     <div
       v-if="loading"
@@ -116,14 +172,33 @@ onMounted(async () => {
           :key="member.id"
           class="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
         >
-          <div>
+          <div class="min-w-0 flex-1">
             <p class="font-medium">
               {{ member.username ?? member.userId }}
             </p>
-            <p class="text-xs text-[var(--ogb-text-muted)]">
+            <USelect
+              v-if="isOwner"
+              :model-value="member.role"
+              :items="roleOptions"
+              size="sm"
+              class="mt-1 max-w-xs"
+              @update:model-value="updateRole(member, $event as number)"
+            />
+            <p
+              v-else
+              class="text-xs text-[var(--ogb-text-muted)]"
+            >
               {{ roleLabel(member.role) }}
             </p>
           </div>
+          <UButton
+            v-if="isOwner && member.userId !== currentMember?.userId"
+            color="error"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-user-minus"
+            @click="removeMember(member)"
+          />
         </li>
       </ul>
     </UCard>

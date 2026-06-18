@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
+STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
 STORAGE_HTTP_PORT = int(os.environ.get("STORAGE_HTTP_PORT", "8081"))
 REPOS_ROOT = Path("/srv/git")
 
@@ -45,12 +46,21 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _get_api_token(self) -> str:
+        if STORAGE_API_TOKEN:
+            return STORAGE_API_TOKEN
+        try:
+            return Path(STORAGE_TOKEN_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
     def _check_auth(self) -> bool:
         auth = self.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return False
         token = auth[7:].strip()
-        return bool(STORAGE_API_TOKEN) and token == STORAGE_API_TOKEN
+        expected = self._get_api_token()
+        return bool(expected) and token == expected
 
     def _read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
@@ -124,7 +134,7 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    if not STORAGE_API_TOKEN:
+    if not STORAGE_API_TOKEN and not Path(STORAGE_TOKEN_FILE).is_file():
         raise SystemExit("STORAGE_API_TOKEN is required")
 
     server = ThreadingHTTPServer(("0.0.0.0", STORAGE_HTTP_PORT), StorageHttpHandler)

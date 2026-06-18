@@ -6,5 +6,9 @@ public interface IEmailProtectionService
 
     string DecryptEmail(string ciphertext);
 
+    string EncryptSecret(string value);
+
+    string DecryptSecret(string ciphertext);
+
     string ComputeLookupHash(string email);
 }

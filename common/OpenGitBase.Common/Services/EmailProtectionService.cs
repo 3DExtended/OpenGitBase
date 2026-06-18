@@ -22,9 +22,26 @@ public class EmailProtectionService : IEmailProtectionService
         }
     }
 
-    public string EncryptEmail(string email)
+    public string EncryptSecret(string value) => EncryptUtf8(value.Trim());
+
+    public string DecryptSecret(string ciphertext) => DecryptUtf8(ciphertext);
+
+    public string EncryptEmail(string email) => EncryptUtf8(NormalizeEmail(email));
+
+    public string DecryptEmail(string ciphertext) => DecryptUtf8(ciphertext);
+
+    public string ComputeLookupHash(string email)
     {
-        var plaintext = Encoding.UTF8.GetBytes(NormalizeEmail(email));
+        var normalized = NormalizeEmail(email);
+        var hash = HMACSHA256.HashData(_pepper, Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hash);
+    }
+
+    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
+
+    private string EncryptUtf8(string value)
+    {
+        var plaintext = Encoding.UTF8.GetBytes(value);
         var nonce = RandomNumberGenerator.GetBytes(12);
         var ciphertext = new byte[plaintext.Length];
         var tag = new byte[16];
@@ -40,7 +57,7 @@ public class EmailProtectionService : IEmailProtectionService
         return Convert.ToBase64String(payload);
     }
 
-    public string DecryptEmail(string ciphertext)
+    private string DecryptUtf8(string ciphertext)
     {
         var payload = Convert.FromBase64String(ciphertext);
         var nonce = payload[..12];
@@ -53,13 +70,4 @@ public class EmailProtectionService : IEmailProtectionService
 
         return Encoding.UTF8.GetString(plaintext);
     }
-
-    public string ComputeLookupHash(string email)
-    {
-        var normalized = NormalizeEmail(email);
-        var hash = HMACSHA256.HashData(_pepper, Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(hash);
-    }
-
-    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }

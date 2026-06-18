@@ -27,4 +27,10 @@ public interface IOrganizationAccessService
         UserId userIdToRemove,
         CancellationToken cancellationToken
     );
+
+    Task<bool> WouldDemoteLastOwnerAsync(
+        OrganizationId organizationId,
+        UserId userIdToDemote,
+        CancellationToken cancellationToken
+    );
 }

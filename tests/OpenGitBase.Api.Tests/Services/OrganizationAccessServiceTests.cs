@@ -258,4 +258,33 @@ public class OrganizationAccessServiceTests
 
         Assert.False(result);
     }
+
+    [Fact]
+    public async Task WouldDemoteLastOwnerAsync_WhenSingleOwner_ReturnsTrue()
+    {
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var members = (IReadOnlyList<OrganizationMemberDto>)new List<OrganizationMemberDto>
+        {
+            new()
+            {
+                OrganizationId = organizationId,
+                UserId = ownerUserId,
+                Role = OrganizationMemberRole.Owner,
+            },
+        };
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListOrganizationMembersQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(members));
+
+        var service = new OrganizationAccessService(queryProcessor);
+        var result = await service.WouldDemoteLastOwnerAsync(
+            organizationId,
+            ownerUserId,
+            CancellationToken.None
+        );
+
+        Assert.True(result);
+    }
 }

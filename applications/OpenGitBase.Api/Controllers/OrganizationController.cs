@@ -284,14 +284,21 @@ public class OrganizationController : ControllerBase
         return result.IsSome ? NoContent() : NotFound();
     }
 
-    [HttpDelete("{id:guid}/members/{userId:guid}")]
-    public async Task<IActionResult> RemoveMember(
+    [HttpPut("{id:guid}/members/{userId:guid}")]
+    public async Task<IActionResult> UpdateMember(
         Guid id,
         Guid userId,
+        [FromBody] UpdateOrganizationMemberRequest request,
         CancellationToken cancellationToken
     )
     {
+        if (request == null)
+        {
+            return BadRequest();
+        }
+
         var organizationId = OrganizationId.From(id);
+        var memberUserId = UserId.From(userId);
         var access = await _organizationAccess
             .CheckOwnerAccessAsync(organizationId, _userContext.GetUserId(), cancellationToken)
             .ConfigureAwait(false);
@@ -306,9 +313,101 @@ public class OrganizationController : ControllerBase
             return Forbid();
         }
 
+        var existingMember = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationMemberQuery
+                {
+                    OrganizationId = organizationId,
+                    UserId = memberUserId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (existingMember.IsNone)
+        {
+            return NotFound();
+        }
+
+        if (
+            request.Role == OrganizationMemberRole.Member
+            && existingMember.Get().Role == OrganizationMemberRole.Owner
+            && await _organizationAccess
+                .WouldDemoteLastOwnerAsync(organizationId, memberUserId, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            return Conflict(new { error = "Cannot demote the last organization owner." });
+        }
+
+        var member = existingMember.Get();
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new UpdateOrganizationMemberQuery
+                {
+                    UpdatedModel = new OrganizationMemberDto
+                    {
+                        Id = member.Id,
+                        OrganizationId = organizationId,
+                        UserId = memberUserId,
+                        Role = request.Role,
+                    },
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return result.IsSome ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("{id:guid}/members/{userId:guid}")]
+    public async Task<IActionResult> RemoveMember(
+        Guid id,
+        Guid userId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationId = OrganizationId.From(id);
+        var memberUserId = UserId.From(userId);
+        var currentUserId = _userContext.GetUserId();
+        var isSelf = currentUserId == memberUserId;
+
+        if (isSelf)
+        {
+            var memberAccess = await _organizationAccess
+                .CheckMemberAccessAsync(organizationId, currentUserId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!memberAccess.OrganizationExists)
+            {
+                return NotFound();
+            }
+
+            if (!memberAccess.IsMember)
+            {
+                return Forbid();
+            }
+        }
+        else
+        {
+            var ownerAccess = await _organizationAccess
+                .CheckOwnerAccessAsync(organizationId, currentUserId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!ownerAccess.OrganizationExists)
+            {
+                return NotFound();
+            }
+
+            if (!ownerAccess.IsOwner)
+            {
+                return Forbid();
+            }
+        }
+
         if (
             await _organizationAccess
-                .WouldRemoveLastOwnerAsync(organizationId, UserId.From(userId), cancellationToken)
+                .WouldRemoveLastOwnerAsync(organizationId, memberUserId, cancellationToken)
                 .ConfigureAwait(false)
         )
         {
@@ -320,7 +419,7 @@ public class OrganizationController : ControllerBase
                 new RemoveOrganizationMemberQuery
                 {
                     OrganizationId = organizationId,
-                    UserId = UserId.From(userId),
+                    UserId = memberUserId,
                 },
                 cancellationToken
             )

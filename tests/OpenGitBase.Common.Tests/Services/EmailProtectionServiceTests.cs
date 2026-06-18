@@ -39,6 +39,16 @@ public class EmailProtectionServiceTests
         Assert.False(string.IsNullOrWhiteSpace(first));
     }
 
+    [Fact]
+    public void EncryptDecryptSecret_PreservesCaseSensitiveValue()
+    {
+        var service = CreateService();
+        var value = "AbC+/MixedCaseToken==";
+        var ciphertext = service.EncryptSecret(value);
+        var decrypted = service.DecryptSecret(ciphertext);
+        Assert.Equal(value, decrypted);
+    }
+
     private static EmailProtectionService CreateService() =>
         new(
             new EncryptionOptions
