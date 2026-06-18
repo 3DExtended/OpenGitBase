@@ -31,7 +31,6 @@ public class ListRecentPublicRepositoriesQueryHandler
         var entities = await context
             .Set<RepositoryEntity>()
             .AsNoTracking()
-            .Include(x => x.OwnerUser)
             .Where(x => !x.IsPrivate)
             .OrderByDescending(x => x.Id)
             .Take(query.Limit)

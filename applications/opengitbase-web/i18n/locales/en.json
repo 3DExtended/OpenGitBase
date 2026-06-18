@@ -222,6 +222,7 @@
       "ownerOrg": "Organization",
       "orgLabel": "Organization",
       "orgPlaceholder": "Select organization",
+      "orgRequired": "Select an organization to create a repository under.",
       "privateLabel": "Private repository",
       "submit": "Create repository",
       "emailRequired": "Verify your email before creating repositories."

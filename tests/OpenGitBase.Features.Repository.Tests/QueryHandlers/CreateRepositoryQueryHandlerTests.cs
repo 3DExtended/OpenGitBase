@@ -11,7 +11,6 @@ using OpenGitBase.Features.Repository;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.QueryHandlers;
 using OpenGitBase.Features.Users.Contracts.Models;
-using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.Repository.Tests.QueryHandlers;
 
@@ -49,18 +48,6 @@ public class CreateRepositoryQueryHandlerTests
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
             await context.Database.EnsureCreatedAsync();
-            context
-                .Set<UserEntity>()
-                .Add(
-                    new UserEntity
-                    {
-                        Id = ownerUserId,
-                        Username = "testuser",
-                        NormalizedUsername = "TESTUSER",
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    }
-                );
-            await context.SaveChangesAsync();
         }
 
         var handler = scope.ServiceProvider.GetRequiredService<CreateRepositoryQueryHandler>();

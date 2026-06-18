@@ -49,12 +49,18 @@ async function onSubmit() {
     return
   }
 
+  if (ownerType.value === 'organization' && !ownerOrg.value) {
+    error.value = t('repo.create.orgRequired')
+    return
+  }
+
   loading.value = true
   error.value = null
   try {
     const result = await api.repositories.create(slug.value, {
       repositoryName: name.value,
       isPrivate: isPrivate.value,
+      organizationSlug: ownerType.value === 'organization' ? ownerOrg.value : undefined,
     })
     if (result.error) {
       error.value = result.error
@@ -123,7 +129,7 @@ async function onSubmit() {
         >
           <USelect
             v-model="ownerOrg"
-            :items="organizations.map(o => ({ label: o.name, value: o.name }))"
+            :items="organizations.map(o => ({ label: o.name, value: o.slug ?? o.name }))"
             :placeholder="t('repo.create.orgPlaceholder')"
           />
         </UFormField>

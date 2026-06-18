@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -17,16 +19,19 @@ public class RepositoryController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
+    private readonly IOrganizationAccessService _organizationAccess;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
 
     public RepositoryController(
         IQueryProcessor queryProcessor,
         IUserContext userContext,
+        IOrganizationAccessService organizationAccess,
         RepositoryStorageQuotaOptions quotaOptions
     )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
+        _organizationAccess = organizationAccess;
         _quotaOptions = quotaOptions;
     }
 
@@ -79,9 +84,43 @@ public class RepositoryController : ControllerBase
             return Conflict(new { error = "Reserved repository slug." });
         }
 
+        var currentUserId = UserId.From(_userContext.User.UserId);
+        var ownerUserId = currentUserId;
+
+        if (!string.IsNullOrWhiteSpace(request.OrganizationSlug))
+        {
+            var organization = await _queryProcessor
+                .RunQueryAsync(
+                    new GetOrganizationBySlugQuery { Slug = request.OrganizationSlug.Trim() },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+            if (organization.IsNone)
+            {
+                return NotFound(new { error = "Organization not found." });
+            }
+
+            var access = await _organizationAccess
+                .CheckMemberAccessAsync(organization.Get().Id, currentUserId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!access.OrganizationExists)
+            {
+                return NotFound(new { error = "Organization not found." });
+            }
+
+            if (!access.IsMember)
+            {
+                return Forbid();
+            }
+
+            ownerUserId = UserId.From(organization.Get().Id.Value);
+        }
+
         var repository = await _queryProcessor
             .RunQueryAsync(
-                new GetRepositoryBySlugForUserQuery { Slug = slug, OwnerUserId = user.Get().Id },
+                new GetRepositoryBySlugForUserQuery { Slug = slug, OwnerUserId = ownerUserId },
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -96,7 +135,7 @@ public class RepositoryController : ControllerBase
             ModelToCreate = new RepositoryDto
             {
                 Slug = slug,
-                OwnerUserId = UserId.From(_userContext.User.UserId),
+                OwnerUserId = ownerUserId,
                 Name = request.RepositoryName,
                 IsPrivate = request.IsPrivate,
             },

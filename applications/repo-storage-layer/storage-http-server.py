@@ -63,9 +63,20 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         expected = self._get_api_token()
         return bool(expected) and token == expected
 
+    def _read_body(self) -> bytes:
+        content_length = self.headers.get("Content-Length")
+        if content_length is not None:
+            length = int(content_length)
+            if length > 0:
+                return self.rfile.read(length)
+
+        # HttpClient may send chunked bodies without Content-Length.
+        return self.rfile.read()
+
     def _read_json(self) -> dict[str, Any]:
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length) if length > 0 else b"{}"
+        raw = self._read_body()
+        if not raw:
+            return {}
         return json.loads(raw.decode("utf-8"))
 
     def do_POST(self) -> None:

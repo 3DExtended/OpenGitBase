@@ -31,16 +31,13 @@ public class ListPublicRepositoriesQueryHandler
         var databaseQuery = context
             .Set<RepositoryEntity>()
             .AsNoTracking()
-            .Include(x => x.OwnerUser)
             .Where(x => !x.IsPrivate);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var term = query.Search.Trim().ToLowerInvariant();
             databaseQuery = databaseQuery.Where(x =>
-                x.Name.ToLower().Contains(term)
-                || x.Slug.ToLower().Contains(term)
-                || (x.OwnerUser != null && x.OwnerUser.Username.ToLower().Contains(term))
+                x.Name.ToLower().Contains(term) || x.Slug.ToLower().Contains(term)
             );
         }
 

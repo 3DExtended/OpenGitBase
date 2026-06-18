@@ -123,7 +123,7 @@ public class RegisterStorageNodeQueryHandlerTests
         Assert.True(first.IsSome);
         Assert.True(second.IsSome);
         Assert.Equal(first.Get().StorageNodeId, second.Get().StorageNodeId);
-        Assert.NotEmpty(second.Get().ApiToken);
+        Assert.Equal(first.Get().ApiToken, second.Get().ApiToken);
 
         await using var verifyContext = await contextFactory.CreateDbContextAsync();
         var entity = await verifyContext
@@ -131,6 +131,9 @@ public class RegisterStorageNodeQueryHandlerTests
             .SingleAsync(node => node.NodeId == "storage-1");
         Assert.Equal("storage-1-new", entity.InternalHost);
         Assert.Equal(9090, entity.InternalHttpPort);
+
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
+        Assert.True(passwordHasher.VerifyPassword(entity.ApiTokenHash, first.Get().ApiToken));
     }
 
     [Fact]

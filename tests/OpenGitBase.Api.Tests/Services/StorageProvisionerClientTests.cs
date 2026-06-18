@@ -10,8 +10,9 @@ public class StorageProvisionerClientTests
     [Fact]
     public async Task ProvisionRepositoryAsync_WhenSuccessful_ReturnsOk()
     {
+        string? requestBody = null;
         var handler = new StubHttpMessageHandler(
-            (request, _) =>
+            async (request, _) =>
             {
                 Assert.Equal(HttpMethod.Post, request.Method);
                 Assert.Equal(
@@ -19,7 +20,10 @@ public class StorageProvisionerClientTests
                     request.RequestUri?.ToString()
                 );
                 Assert.Equal("Bearer secret-token", request.Headers.Authorization?.ToString());
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+                requestBody = request.Content is null
+                    ? null
+                    : await request.Content.ReadAsStringAsync();
+                return new HttpResponseMessage(HttpStatusCode.Created);
             }
         );
 
@@ -36,6 +40,8 @@ public class StorageProvisionerClientTests
 
         Assert.True(result.Success);
         Assert.Equal(201, result.StatusCode);
+        Assert.Contains("\"physicalPath\":\"/srv/git/repo.git\"", requestBody);
+        Assert.Contains("\"receiveMaxBytes\":52428800", requestBody);
     }
 
     [Fact]

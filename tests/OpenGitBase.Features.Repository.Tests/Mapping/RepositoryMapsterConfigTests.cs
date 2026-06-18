@@ -11,22 +11,11 @@ public class RepositoryMapsterConfigTests
     private static readonly IMapper Mapper =
         MapsterTestMapperFactory.Create<RepositoryMapsterConfig>();
 
-    private static readonly (Type Type, string Name)[] ExcludedProperties =
-    [
-        (typeof(RepositoryEntity), nameof(RepositoryEntity.OwnerUser)),
-    ];
-
     [Fact]
     public void RepositoryEntity_RepositoryDto_RoundTripsAllProperties() =>
-        MapsterMappingAssert.AssertRoundTrip<RepositoryEntity, RepositoryDto>(
-            Mapper,
-            ExcludedProperties
-        );
+        MapsterMappingAssert.AssertRoundTrip<RepositoryEntity, RepositoryDto>(Mapper);
 
     [Fact]
     public void RepositoryDto_RepositoryEntity_RoundTripsAllProperties() =>
-        MapsterMappingAssert.AssertRoundTrip<RepositoryDto, RepositoryEntity>(
-            Mapper,
-            ExcludedProperties
-        );
+        MapsterMappingAssert.AssertRoundTrip<RepositoryDto, RepositoryEntity>(Mapper);
 }

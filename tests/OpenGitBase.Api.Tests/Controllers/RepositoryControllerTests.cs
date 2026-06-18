@@ -6,10 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Api.Tests.Base;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -111,6 +113,104 @@ public class RepositoryControllerTests
         Assert.IsType<ObjectResult>(result);
         var objectResult = (ObjectResult)result;
         Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WhenOrganizationMember_ReturnsCreatedWithOrgOwner()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        ConfigureUserLookup(queryProcessor, userId);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationBySlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationDto
+                    {
+                        Id = organizationId,
+                        Name = "Acme",
+                        Slug = "acme",
+                    }
+                )
+            );
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationMemberAccessCheck(
+                    true,
+                    true,
+                    false,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryBySlugForUserQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryDto>.None);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<CreateRepositoryWithStorageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    CreateRepositoryWithStorageResult.Created(repositoryId)
+                )
+            );
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess: organizationAccess);
+
+        var result = await controller.Create(
+            "team-repo",
+            new CreateRepositoryRequest("Team Repo", false, "acme"),
+            CancellationToken.None
+        );
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var returnedId = Assert.IsType<RepositoryId>(created.Value);
+        Assert.Equal(repositoryId, returnedId);
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<CreateRepositoryWithStorageQuery>(query =>
+                    query.ModelToCreate.OwnerUserId == UserId.From(organizationId.Value)
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task Create_WhenNotOrganizationMember_ReturnsForbid()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        ConfigureUserLookup(queryProcessor, userId);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationBySlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationDto
+                    {
+                        Id = organizationId,
+                        Name = "Acme",
+                        Slug = "acme",
+                    }
+                )
+            );
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationMemberAccessCheck(true, false, false, null));
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess: organizationAccess);
+
+        var result = await controller.Create(
+            "team-repo",
+            new CreateRepositoryRequest("Team Repo", false, "acme"),
+            CancellationToken.None
+        );
+
+        Assert.IsType<ForbidResult>(result);
     }
 
     [Fact]
@@ -627,7 +727,8 @@ public class RepositoryControllerTests
     private static RepositoryController CreateController(
         IQueryProcessor queryProcessor,
         UserId userId,
-        string username = "testuser"
+        string username = "testuser",
+        IOrganizationAccessService? organizationAccess = null
     )
     {
         var userContext = Substitute.For<IUserContext>();
@@ -638,6 +739,7 @@ public class RepositoryControllerTests
         return new RepositoryController(
             queryProcessor,
             userContext,
+            organizationAccess ?? Substitute.For<IOrganizationAccessService>(),
             new RepositoryStorageQuotaOptions()
         );
     }

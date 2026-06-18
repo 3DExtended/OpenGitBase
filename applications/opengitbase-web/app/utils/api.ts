@@ -395,7 +395,7 @@ export function createApi(baseUrl: string) {
         }
       },
 
-      create: (slug: string, body: { repositoryName: string, isPrivate: boolean }) =>
+      create: (slug: string, body: { repositoryName: string, isPrivate: boolean, organizationSlug?: string }) =>
         request<string>(`/repository/${encodeURIComponent(slug)}`, {
           method: 'POST',
           body: JSON.stringify(body),

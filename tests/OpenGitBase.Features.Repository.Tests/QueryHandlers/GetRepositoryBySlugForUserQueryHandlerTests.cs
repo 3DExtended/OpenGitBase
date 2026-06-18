@@ -225,7 +225,6 @@ public class GetRepositoryBySlugForUserQueryHandlerTests
     )
     {
         await using var context = await contextFactory.CreateDbContextAsync();
-        await SeedUserIfMissingAsync(context, ownerUserId.Value);
         context
             .Set<RepositoryEntity>()
             .Add(
@@ -237,27 +236,6 @@ public class GetRepositoryBySlugForUserQueryHandlerTests
                     Name = name,
                     PhysicalPath = $"./repositories/{ownerUserId.Value}/{slug}",
                     IsPrivate = isPrivate,
-                }
-            );
-        await context.SaveChangesAsync();
-    }
-
-    private static async Task SeedUserIfMissingAsync(OpenGitBaseDbContext context, Guid userId)
-    {
-        if (await context.Set<UserEntity>().AnyAsync(entity => entity.Id == userId))
-        {
-            return;
-        }
-
-        context
-            .Set<UserEntity>()
-            .Add(
-                new UserEntity
-                {
-                    Id = userId,
-                    Username = $"user-{userId:N}",
-                    NormalizedUsername = $"USER-{userId:N}".ToUpperInvariant(),
-                    CreatedAt = DateTimeOffset.UtcNow,
                 }
             );
         await context.SaveChangesAsync();

@@ -73,7 +73,6 @@ public class ListRepositoriesForUserQueryHandler
         var entities = await context
             .Set<RepositoryEntity>()
             .AsNoTracking()
-            .Include(x => x.OwnerUser)
             .Where(x => allIds.Contains(x.Id))
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);

@@ -123,9 +123,21 @@ public sealed class RegisterStorageNodeQueryHandler
             existing.LastHeartbeatAt = now;
             existing.IsHealthy = true;
 
-            apiToken = GenerateApiToken();
-            existing.ApiTokenHash = _passwordHasherService.HashPassword(apiToken);
-            existing.ApiTokenProtected = _emailProtectionService.EncryptSecret(apiToken);
+            if (!string.IsNullOrWhiteSpace(existing.ApiTokenProtected))
+            {
+                try
+                {
+                    apiToken = _emailProtectionService.DecryptSecret(existing.ApiTokenProtected);
+                }
+                catch (FormatException)
+                {
+                    apiToken = null;
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    apiToken = null;
+                }
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

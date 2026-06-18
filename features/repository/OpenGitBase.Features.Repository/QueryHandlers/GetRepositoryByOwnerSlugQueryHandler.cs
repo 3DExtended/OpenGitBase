@@ -44,7 +44,6 @@ public class GetRepositoryByOwnerSlugQueryHandler
             entity = await context
                 .Set<RepositoryEntity>()
                 .AsNoTracking()
-                .Include(x => x.OwnerUser)
                 .FirstOrDefaultAsync(
                     x => x.OwnerUserId == user.Id && x.Slug == query.Slug,
                     cancellationToken

@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
-using OpenGitBase.Cqrs.EfCore;
-using OpenGitBase.Features.Users.Entities;
+﻿using OpenGitBase.Cqrs.EfCore;
 
 namespace OpenGitBase.Features.Repository.Entities;
 
@@ -10,10 +8,7 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
 
     public string Name { get; set; } = string.Empty;
 
-    [ForeignKey(nameof(OwnerUser))]
     public Guid OwnerUserId { get; set; }
-
-    public UserEntity? OwnerUser { get; set; }
 
     public string Slug { get; set; } = string.Empty;
 

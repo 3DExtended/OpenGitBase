@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using OpenGitBase.Features.StorageNode.Contracts;
 
 namespace OpenGitBase.Api.Services;
@@ -63,11 +64,12 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
 
         var requestUri =
             $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos";
+        var payload = receiveMaxBytes is null
+            ? JsonSerializer.Serialize(new { physicalPath })
+            : JsonSerializer.Serialize(new { physicalPath, receiveMaxBytes });
         using var request = new HttpRequestMessage(method, requestUri)
         {
-            Content = JsonContent.Create(
-                new { physicalPath, receiveMaxBytes }
-            ),
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
 
