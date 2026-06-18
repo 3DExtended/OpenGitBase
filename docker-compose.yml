@@ -10,7 +10,7 @@
       dispatcher-2:
         condition: service_healthy
     ports:
-      - "22:22"
+      - "2211:22"
     volumes:
       - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
 
