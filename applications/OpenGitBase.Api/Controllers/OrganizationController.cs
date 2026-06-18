@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Organization.Contracts;
@@ -275,14 +276,49 @@ public class OrganizationController : ControllerBase
         }
 
         var organizationId = OrganizationId.From(id);
+        var identifier = request.Identifier.Trim();
+        var isEmailIdentifier = IsEmailIdentifier(identifier);
         var resolvedUserId = await ResolveUserIdFromIdentifierAsync(
-            request.Identifier,
+            identifier,
             cancellationToken
         ).ConfigureAwait(false);
 
         if (resolvedUserId.IsNone)
         {
-            return NotFound(new { error = "User not found." });
+            if (!isEmailIdentifier)
+            {
+                return NotFound(new { error = "User not found." });
+            }
+
+            var inviteResult = await _queryProcessor
+                .RunQueryAsync(
+                    new CreateOrRefreshOrganizationInviteQuery
+                    {
+                        OrganizationId = organizationId,
+                        Email = identifier,
+                        Role = request.Role,
+                        InvitedByUserId = _userContext.GetUserId().Value,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (inviteResult.IsNone)
+            {
+                return BadRequest(new { error = "Could not create invitation." });
+            }
+
+            var sent = await SendOrganizationInviteEmailAsync(
+                access.Organization!,
+                identifier,
+                inviteResult.Get().Token,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (!sent)
+            {
+                return BadRequest(new { error = "Could not send invitation email." });
+            }
+
+            return Accepted(new { invited = true });
         }
 
         var userId = resolvedUserId.Get();
@@ -461,6 +497,110 @@ public class OrganizationController : ControllerBase
         return result.IsSome ? NoContent() : NotFound();
     }
 
+    [HttpGet("{id:guid}/invites")]
+    public async Task<IActionResult> ListInvites(Guid id, CancellationToken cancellationToken)
+    {
+        var organizationId = OrganizationId.From(id);
+        var access = await _organizationAccess
+            .CheckMemberAccessAsync(organizationId, _userContext.GetUserId(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!access.OrganizationExists)
+        {
+            return NotFound();
+        }
+
+        if (!access.IsMember)
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new ListOrganizationInvitesQuery
+                {
+                    OrganizationId = organizationId,
+                    RevealEmail = access.IsOwner,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return ToActionResult(result);
+    }
+
+    [HttpPost("{id:guid}/invites/{inviteId:guid}/resend")]
+    public async Task<IActionResult> ResendInvite(
+        Guid id,
+        Guid inviteId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationId = OrganizationId.From(id);
+        var access = await _organizationAccess
+            .CheckOwnerAccessAsync(organizationId, _userContext.GetUserId(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!access.OrganizationExists)
+        {
+            return NotFound();
+        }
+
+        if (!access.IsOwner)
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new ResendOrganizationInviteQuery
+                {
+                    OrganizationId = organizationId,
+                    InviteId = OrganizationInviteId.From(inviteId),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return result.IsSome ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("{id:guid}/invites/{inviteId:guid}")]
+    public async Task<IActionResult> RevokeInvite(
+        Guid id,
+        Guid inviteId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationId = OrganizationId.From(id);
+        var access = await _organizationAccess
+            .CheckOwnerAccessAsync(organizationId, _userContext.GetUserId(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!access.OrganizationExists)
+        {
+            return NotFound();
+        }
+
+        if (!access.IsOwner)
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new RevokeOrganizationInviteQuery
+                {
+                    OrganizationId = organizationId,
+                    InviteId = OrganizationInviteId.From(inviteId),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return result.IsSome ? NoContent() : NotFound();
+    }
+
+    private static bool IsEmailIdentifier(string identifier) =>
+        identifier.Contains('@', StringComparison.Ordinal);
+
     private async Task<Option<UserId>> ResolveUserIdFromIdentifierAsync(
         string identifier,
         CancellationToken cancellationToken
@@ -483,6 +623,29 @@ public class OrganizationController : ControllerBase
                 cancellationToken
             )
             .ConfigureAwait(false);
+    }
+
+    private async Task<bool> SendOrganizationInviteEmailAsync(
+        OrganizationDto organization,
+        string email,
+        string token,
+        CancellationToken cancellationToken
+    )
+    {
+        var emailResult = await _queryProcessor
+            .RunQueryAsync(
+                new EmailSendQuery
+                {
+                    To = new EmailAddress { Email = email },
+                    Subject = $"Invitation to join {organization.Name}",
+                    HtmlBody =
+                        $"You have been invited to join {organization.Name}.<br><br>Accept invitation: <a href=\"/invite/{token}\">/invite/{token}</a>",
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return emailResult.IsSome;
     }
 
     private IActionResult ToActionResult<T>(Option<T> result)
