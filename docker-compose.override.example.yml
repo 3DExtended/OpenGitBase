@@ -32,6 +32,8 @@ services:
       AdminSeed__Enabled: "true"
       AdminSeed__Username: "admin"
       AdminSeed__Email: "admin@localhost"
+      AdminSeed__OrganizationName: "OpenGitBase"
+      AdminSeed__OrganizationSlug: "opengitbase"
 
       # Repository storage quotas
       RepositoryStorageQuota__Enabled: "true"

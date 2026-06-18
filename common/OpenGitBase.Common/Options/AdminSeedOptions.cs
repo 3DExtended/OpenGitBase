@@ -9,4 +9,8 @@ public sealed class AdminSeedOptions
     public string Password { get; set; } = "change-me-admin";
 
     public string Email { get; set; } = "admin@localhost";
+
+    public string OrganizationName { get; set; } = "OpenGitBase";
+
+    public string OrganizationSlug { get; set; } = "opengitbase";
 }
