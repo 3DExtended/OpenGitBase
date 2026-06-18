@@ -178,6 +178,17 @@
       retries: 5
       start_period: 10s
 
+  opengitbase_cloudflare_tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: opengitbase_cloudflare_tunnel
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+    restart: always
+    command: tunnel --no-autoupdate run --url http://api:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+
 volumes:
   opengitbase_pgdata:
   opengitbase_storage1_repos:
