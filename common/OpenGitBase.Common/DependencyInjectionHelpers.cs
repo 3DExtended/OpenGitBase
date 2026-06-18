@@ -58,6 +58,7 @@ public static class DependencyInjectionHelpers
         IConfiguration configuration,
         IHostEnvironment env,
         bool requireDatabase = true,
+        IReadOnlyList<Assembly>? featureAssemblies = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -70,6 +71,9 @@ public static class DependencyInjectionHelpers
         services.AddSingleton(env);
         services.AddSingleton(configuration);
         services.AddLogging();
+
+        var assemblies = featureAssemblies ?? Array.Empty<Assembly>();
+        services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider(assemblies));
 
         ConfigureDatabase(services, configuration, env);
 

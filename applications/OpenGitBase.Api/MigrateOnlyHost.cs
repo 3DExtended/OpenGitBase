@@ -18,7 +18,8 @@ internal static class MigrateOnlyHost
         var builder = Host.CreateApplicationBuilder(args);
         return await OpenGitBase.Common.DependencyInjectionHelpers.RunDatabaseMigrationsAsync(
             builder.Configuration,
-            builder.Environment
+            builder.Environment,
+            featureAssemblies: FeatureRegistration.GetFeatureAssemblies()
         );
     }
 }

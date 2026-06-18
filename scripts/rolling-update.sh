@@ -124,17 +124,17 @@ run_step "Validate HAProxy configuration" \
   haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
 
 run_step "Ensure postgres is up" \
-  compose up -d --wait postgres
+  compose up -d --remove-orphans --wait postgres
 
 run_step "Build service images" \
   compose build "${BUILD_SERVICES[@]}"
 
 run_step "Run database migrations (api-migrate)" \
-  compose --profile tools run --rm --no-deps api-migrate
+  compose --profile tools run --rm --no-deps --remove-orphans api-migrate
 
 for service in "${ROLL_SERVICES[@]}"; do
   run_step "Roll ${service}" \
-    compose up -d --build --no-deps --wait "${service}"
+    compose up -d --build --no-deps --wait --remove-orphans "${service}"
 done
 
 run_step "Verify API health via load balancer (${API_URL}/health)" \
