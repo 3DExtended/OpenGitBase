@@ -3,10 +3,47 @@
 # Fleet enrollment tokens and dispatcher SSH keys are written automatically by:
 #   ./scripts/bootstrap-fleet.sh
 #
+# API settings use ASP.NET Core env vars (appsettings.json sections joined with __).
+# Uncomment optional secrets only when overriding appsettings defaults.
+#
 # Start the stack:
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build && docker builder prune -f && docker image prune -f
 
 services:
+  api:
+    environment:
+      # SendGrid — set ApiKey and IsDisabled to "false" to send mail
+      SendGrid__ApiKey: "SG.replace-me"
+      SendGrid__FromEmailAddress: "noreply@example.com"
+      SendGrid__FromSenderName: "OpenGitBase"
+      SendGrid__IsDisabled: "true"
+
+      # Optional secrets (uncomment; env vars override appsettings — do not leave blank):
+      # Jwt__Key: "REPLACE_WITH_JWT_SIGNING_KEY"
+      # Encryption__DataKey: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+      # Encryption__Pepper: "REPLACE_WITH_UNIQUE_PEPPER"
+      # AdminSeed__Password: "REPLACE_WITH_ADMIN_PASSWORD"
+
+      # OAuth client IDs (optional)
+      # Google__ClientId: "REPLACE_WITH_GOOGLE_CLIENT_ID"
+      # Apple__ClientId: "REPLACE_WITH_APPLE_CLIENT_ID"
+
+      # First-start admin user seed
+      AdminSeed__Enabled: "true"
+      AdminSeed__Username: "admin"
+      AdminSeed__Email: "admin@localhost"
+
+      # Repository storage quotas
+      RepositoryStorageQuota__Enabled: "true"
+      RepositoryStorageQuota__MaxBytes: "1073741824"
+      RepositoryStorageQuota__MaxFileBytes: "52428800"
+
+      # Debug feature flags
+      Debug__Features__EmailVerification: "true"
+
+      # Restrict internal fleet endpoints to the Docker network
+      InternalNetwork__Enabled: "true"
+
   storage-1:
     environment:
       STORAGE_ENROLLMENT_TOKEN: ""
@@ -28,6 +65,9 @@ services:
   web:
     build:
       args:
+        NUXT_PUBLIC_INSTANCE_NAME: "OpenGitBase"
+        NUXT_PUBLIC_INSTANCE_LOGO_URL: ""
+        NUXT_PUBLIC_API_BASE: "/api"
         NUXT_PUBLIC_SITE_GATE_ENABLED: "true"
 
   opengitbase_cloudflare_tunnel:

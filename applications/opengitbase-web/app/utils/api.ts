@@ -395,7 +395,7 @@ export function createApi(baseUrl: string) {
         }
       },
 
-      create: (body: { modelToCreate: { name: string } }) =>
+      create: (body: { modelToCreate: { name: string, slug: string } }) =>
         request<string>('/organization', { method: 'POST', body: JSON.stringify(body) }),
 
       update: (id: string, body: { updatedModel: { name: string } }) =>
