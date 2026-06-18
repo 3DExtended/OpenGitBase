@@ -9,6 +9,9 @@
 # First-time start (before bootstrap-fleet.sh):
 #   docker compose up -d --build postgres api-1 api-2 ssh-lb
 #
+# Run bootstrap:
+#.  ./scripts/bootstrap-fleet.sh
+#
 # After bootstrap, use rolling updates for code changes:
 #   ./scripts/rolling-update.sh
 #
