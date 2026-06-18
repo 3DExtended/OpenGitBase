@@ -4,6 +4,7 @@ using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -267,6 +268,58 @@ public class OrganizationControllerTests
         );
 
         Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddMember_WhenEmailUserMissing_CreatesInviteAndReturnsAccepted()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserGetIdByEmailQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<UserId>.None);
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<CreateOrRefreshOrganizationInviteQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                Option.From(
+                    new CreateOrRefreshOrganizationInviteResult
+                    {
+                        InviteId = OrganizationInviteId.From(Guid.NewGuid()),
+                        Token = "invite-token",
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<EmailSendQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Unit.Value);
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.AddMember(
+            organizationId.Value,
+            new OpenGitBase.Api.Models.AddOrganizationMemberRequest
+            {
+                Identifier = "newperson@example.com",
+                Role = OrganizationMemberRole.Member,
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<AcceptedResult>(result);
     }
 
     [Fact]
@@ -714,6 +767,97 @@ public class OrganizationControllerTests
         );
 
         Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
+    public async Task ListInvites_WhenOwner_ReturnsOk()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationMemberAccessCheck(
+                    true,
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListOrganizationInvitesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From((IReadOnlyList<OrganizationInviteDto>)Array.Empty<OrganizationInviteDto>())
+            );
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.ListInvites(organizationId.Value, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ResendInvite_WhenOwner_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var inviteId = Guid.NewGuid();
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ResendOrganizationInviteQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Unit.Value);
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.ResendInvite(
+            organizationId.Value,
+            inviteId,
+            CancellationToken.None
+        );
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RevokeInvite_WhenOwner_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var inviteId = Guid.NewGuid();
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RevokeOrganizationInviteQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Unit.Value);
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.RevokeInvite(
+            organizationId.Value,
+            inviteId,
+            CancellationToken.None
+        );
+        Assert.IsType<NoContentResult>(result);
     }
 
     private static OrganizationController CreateController(
