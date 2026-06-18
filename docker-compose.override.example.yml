@@ -1,0 +1,44 @@
+# Copy to docker-compose.override.yml (gitignored) and fill in values.
+#
+# Fleet enrollment tokens and dispatcher SSH keys are written automatically by:
+#   ./scripts/bootstrap-fleet.sh
+#
+# Start the stack:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build && docker builder prune -f && docker image prune -f
+
+services:
+  storage-1:
+    environment:
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
+
+  storage-2:
+    environment:
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
+
+  dispatcher-1:
+    environment:
+      FLEET_BOOTSTRAP_TOKEN: ""
+
+  dispatcher-2:
+    environment:
+      FLEET_BOOTSTRAP_TOKEN: ""
+
+  web:
+    build:
+      args:
+        NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
+        NUXT_PUBLIC_API_BASE: /api
+        NUXT_PUBLIC_SITE_GATE_ENABLED: "true"
+
+  opengitbase_cloudflare_tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: opengitbase_cloudflare_tunnel
+    depends_on:
+      api:
+        condition: service_started
+      web:
+        condition: service_started
+    restart: always
+    command: tunnel --no-autoupdate run --url http://api:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN

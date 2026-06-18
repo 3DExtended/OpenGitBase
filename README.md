@@ -62,15 +62,21 @@ docker compose up -d --build postgres api
 # Wait until the API is healthy
 curl -fsS http://localhost:8080/health
 
-# 2. Generate PKI, admin enrollments, and fleet SSH keys
+# 2. Copy override template and generate PKI, admin enrollments, and fleet SSH keys
+cp docker-compose.override.example.yml docker-compose.override.yml
+# Edit REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN in docker-compose.override.yml if using the tunnel
 ./scripts/bootstrap-fleet.sh
-# writes docker/.env (tokens + dispatcher public key — do not commit)
+# writes fleet tokens into docker-compose.override.yml (do not commit)
 
 # 3. Start the full stack
-docker compose --env-file docker/.env up -d --build
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 ### After bootstrap
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build && docker builder prune -f && docker image prune -f
+```
 
 | Service | URL |
 |---------|-----|
@@ -98,7 +104,7 @@ new fleet bootstrap token (for example after wiping the database). Then recreate
 storage and dispatcher containers:
 
 ```bash
-docker compose --env-file docker/.env up -d --force-recreate storage-1 storage-2 dispatcher-1 dispatcher-2
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --force-recreate storage-1 storage-2 dispatcher-1 dispatcher-2
 ```
 
 ### Tests

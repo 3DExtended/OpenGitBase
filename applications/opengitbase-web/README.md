@@ -69,15 +69,15 @@ Production hosting uses the Caddy reverse-proxy config in [`docker/Caddyfile`](d
 
 ### Docker Compose
 
-From the repo root, the `web` service builds this app and serves it on port **3000** with `/api` proxied to the `api` service:
+From the repo root, copy `docker-compose.override.example.yml` to `docker-compose.override.yml`, fill in secrets (Cloudflare tunnel token), then:
 
 ```bash
-docker compose up -d --build web api postgres
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The API remains available directly at [http://localhost:8080](http://localhost:8080).
+Fleet enrollment tokens are written by `./scripts/bootstrap-fleet.sh` into `docker-compose.override.yml`.
 
-Override branding at **image build time** via compose `build.args` (`NUXT_PUBLIC_INSTANCE_NAME`, `NUXT_PUBLIC_INSTANCE_LOGO_URL`, `NUXT_PUBLIC_API_BASE`).
+Override branding at **image build time** via the `web.build.args` section in `docker-compose.override.yml` (`NUXT_PUBLIC_INSTANCE_NAME`, `NUXT_PUBLIC_INSTANCE_LOGO_URL`, `NUXT_PUBLIC_API_BASE`, `NUXT_PUBLIC_SITE_GATE_ENABLED`).
 
 Set `NUXT_PUBLIC_*` variables at **build time** (they are baked into the static bundle).
 

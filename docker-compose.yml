@@ -34,8 +34,8 @@
       STORAGE_NODE_ID: "storage-1"
       STORAGE_INTERNAL_HOST: "storage-1"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
-      STORAGE_ENROLLMENT_TOKEN: "${STORAGE_1_ENROLLMENT_TOKEN}"
-      DISPATCHER_SSH_PUBLIC_KEY: "${DISPATCHER_SSH_PUBLIC_KEY:-}"
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage1_repos:/srv/git
       - ./docker/pki/storage-1.crt:/etc/opengitbase/node.crt:ro
@@ -61,8 +61,8 @@
       STORAGE_NODE_ID: "storage-2"
       STORAGE_INTERNAL_HOST: "storage-2"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
-      STORAGE_ENROLLMENT_TOKEN: "${STORAGE_2_ENROLLMENT_TOKEN}"
-      DISPATCHER_SSH_PUBLIC_KEY: "${DISPATCHER_SSH_PUBLIC_KEY:-}"
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage2_repos:/srv/git
       - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
@@ -93,7 +93,7 @@
       Dispatcher__DispatcherId: "dispatcher-1"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
-      FLEET_BOOTSTRAP_TOKEN: "${FLEET_BOOTSTRAP_TOKEN}"
+      FLEET_BOOTSTRAP_TOKEN: ""
 
   dispatcher-2:
     container_name: opengitbase_dispatcher_2
@@ -120,7 +120,7 @@
       Dispatcher__DispatcherId: "dispatcher-2"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
-      FLEET_BOOTSTRAP_TOKEN: "${FLEET_BOOTSTRAP_TOKEN}"
+      FLEET_BOOTSTRAP_TOKEN: ""
 
   postgres:
     image: postgres:16
@@ -177,18 +177,6 @@
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  opengitbase_cloudflare_tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: opengitbase_cloudflare_tunnel
-    depends_on:
-      api:
-        condition: service_started
-      web:
-        condition: service_started
-
-    restart: always
-    command: tunnel --no-autoupdate run --url http://api:8080 --token ${CLOUDFLARE_TUNNEL_KEY}
 
 volumes:
   opengitbase_pgdata:

@@ -39,12 +39,15 @@ const createExpiresInHours = ref<number | null>(null)
 const createLoading = ref(false)
 const createdEnrollmentToken = ref<string | null>(null)
 const createdEnrollmentNodeId = ref<string | null>(null)
-const createdEnrollmentEnvLine = computed(() => {
+const createdEnrollmentOverrideSnippet = computed(() => {
   if (!createdEnrollmentToken.value || !createdEnrollmentNodeId.value) return null
-  const match = createdEnrollmentNodeId.value.match(/storage-(\d+)/i)
-  const suffix = match?.[1]
-  const varName = suffix ? `STORAGE_${suffix}_ENROLLMENT_TOKEN` : 'STORAGE_ENROLLMENT_TOKEN'
-  return `${varName}=${createdEnrollmentToken.value}`
+  const nodeId = createdEnrollmentNodeId.value
+  return [
+    'services:',
+    `  ${nodeId}:`,
+    '    environment:',
+    `      STORAGE_ENROLLMENT_TOKEN: "${createdEnrollmentToken.value}"`,
+  ].join('\n')
 })
 
 const fleetPublicKey = ref<string | null>(null)
@@ -259,9 +262,9 @@ onMounted(refreshAll)
         <template #description>
           <div class="space-y-2">
             <div class="text-sm text-[var(--ogb-text-muted)]">
-              Copy this into <code>docker/.env</code> (and don’t commit it):
+              Copy this into <code>docker-compose.override.yml</code> (and don’t commit it):
             </div>
-            <code class="block break-all text-xs">{{ createdEnrollmentEnvLine }}</code>
+            <pre class="overflow-x-auto rounded bg-[var(--ogb-surface-muted)] p-2 text-xs"><code>{{ createdEnrollmentOverrideSnippet }}</code></pre>
             <div class="text-sm text-[var(--ogb-text-muted)]">
               You won’t be able to view this token again after leaving the page.
             </div>
