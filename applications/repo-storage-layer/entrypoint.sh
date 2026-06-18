@@ -23,8 +23,12 @@ fi
 
 source /usr/local/bin/storage-agent.sh
 
+configure_dispatcher_authorized_keys
+
 python3 /usr/local/bin/storage-http-server.py &
 STORAGE_HTTP_PID=$!
+
+start_storage_agent_background
 
 cleanup() {
   if kill -0 "$STORAGE_HTTP_PID" 2>/dev/null; then

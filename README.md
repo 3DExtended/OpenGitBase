@@ -83,7 +83,8 @@ instead of tearing down and recreating the whole stack:
 
 Requires `docker-compose.override.yml` (created during bootstrap). The script
 rebuilds images and recreates containers one at a time while waiting for health
-checks.
+checks. By default only API and web are rolled; pass `--full` when storage or
+dispatcher code changed.
 
 ### Wipe and reseed
 

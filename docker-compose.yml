@@ -87,8 +87,8 @@ services:
       test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
       interval: 5s
       timeout: 3s
-      retries: 10
-      start_period: 15s
+      retries: 12
+      start_period: 30s
     environment:
       STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-1"
@@ -116,8 +116,8 @@ services:
       test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
       interval: 5s
       timeout: 3s
-      retries: 10
-      start_period: 15s
+      retries: 12
+      start_period: 30s
     environment:
       STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-2"

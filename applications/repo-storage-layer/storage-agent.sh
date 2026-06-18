@@ -150,18 +150,9 @@ configure_dispatcher_authorized_keys() {
   chown git:git /home/git/.ssh/authorized_keys
 }
 
-configure_dispatcher_authorized_keys
-register_node
-
-export STORAGE_API_TOKEN
-if [ -z "${STORAGE_API_TOKEN:-}" ] && [ -f "${TOKEN_FILE}" ]; then
-  STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"
-  export STORAGE_API_TOKEN
-fi
-
-if [ -z "${STORAGE_API_TOKEN:-}" ]; then
-  echo "entrypoint: storage API token unavailable after registration" >&2
-  exit 1
-fi
-
-heartbeat_loop &
+start_storage_agent_background() {
+  (
+    register_node || true
+    heartbeat_loop
+  ) &
+}
