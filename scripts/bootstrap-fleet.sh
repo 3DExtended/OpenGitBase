@@ -2,7 +2,7 @@
 # Bootstrap fleet SSH keys and storage node enrollments via admin API.
 set -euo pipefail
 
-API_URL="${API_URL:-http://localhost:8080}"
+API_URL="${API_URL:-http://localhost:8089}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PKI_SCRIPT="${REPO_ROOT}/docker/pki/generate-node-pki.sh"
