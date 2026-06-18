@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Organization, OrganizationMember } from '~/utils/api'
+import type { Organization, OrganizationInvite, OrganizationMember } from '~/utils/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -12,6 +12,7 @@ const orgSlug = computed(() => String(route.params.owner))
 
 const organization = ref<Organization | null>(null)
 const members = ref<OrganizationMember[]>([])
+const invites = ref<OrganizationInvite[]>([])
 const loading = ref(true)
 const forbidden = ref(false)
 const notFound = ref(false)
@@ -20,6 +21,7 @@ const identifier = ref('')
 const addRole = ref(1)
 const adding = ref(false)
 const addError = ref<string | null>(null)
+const addSuccess = ref<string | null>(null)
 
 const roleOptions = [
   { label: t('org.members.roles.member'), value: 0 },
@@ -44,12 +46,21 @@ function roleLabel(value: number) {
   return roleOptions.find(r => r.value === value)?.label ?? String(value)
 }
 
+async function loadInvites() {
+  if (!organization.value) {
+    return
+  }
+  const invitesResult = await api.organizations.invites.list(organization.value.id)
+  invites.value = invitesResult.data ?? []
+}
+
 async function loadMembers() {
   if (!organization.value) {
     return
   }
   const membersResult = await api.organizations.members.list(organization.value.id)
   members.value = membersResult.data ?? []
+  await loadInvites()
 }
 
 onMounted(async () => {
@@ -80,6 +91,7 @@ onMounted(async () => {
   }
 
   members.value = membersResult.data ?? []
+  await loadInvites()
   loading.value = false
 })
 
@@ -113,6 +125,7 @@ async function addMember() {
   }
   adding.value = true
   addError.value = null
+  addSuccess.value = null
   try {
     const result = await api.organizations.members.add(organization.value.id, {
       identifier: identifier.value,
@@ -123,11 +136,30 @@ async function addMember() {
       return
     }
     identifier.value = ''
+    if (result.status === 202) {
+      addSuccess.value = t('org.members.invites.sent')
+    }
     await loadMembers()
   }
   finally {
     adding.value = false
   }
+}
+
+async function resendInvite(invite: OrganizationInvite) {
+  if (!organization.value) {
+    return
+  }
+  await api.organizations.invites.resend(organization.value.id, invite.id)
+  await loadInvites()
+}
+
+async function revokeInvite(invite: OrganizationInvite) {
+  if (!organization.value) {
+    return
+  }
+  await api.organizations.invites.revoke(organization.value.id, invite.id)
+  await loadInvites()
 }
 </script>
 
@@ -211,6 +243,12 @@ async function addMember() {
             variant="subtle"
             :description="addError"
           />
+          <UAlert
+            v-if="addSuccess"
+            color="success"
+            variant="subtle"
+            :description="addSuccess"
+          />
           <UButton
             type="submit"
             :loading="adding"
@@ -271,6 +309,56 @@ async function addMember() {
               icon="i-lucide-user-minus"
               @click="removeMember(member)"
             />
+          </li>
+        </ul>
+      </UCard>
+
+      <UCard
+        v-if="invites.length"
+        class="mt-6"
+      >
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('org.members.invites.title') }}
+          </h2>
+        </template>
+        <ul
+          class="divide-y"
+          style="border-color: var(--ogb-border);"
+        >
+          <li
+            v-for="invite in invites"
+            :key="invite.id"
+            class="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+          >
+            <div>
+              <p class="font-medium">
+                {{ invite.email }}
+              </p>
+              <p class="text-xs text-[var(--ogb-text-muted)]">
+                {{ roleLabel(invite.role) }} · {{ t('org.members.invites.expires', { date: new Date(invite.expiresAt).toLocaleDateString() }) }}
+              </p>
+            </div>
+            <div
+              v-if="isOwner"
+              class="flex gap-2"
+            >
+              <UButton
+                variant="ghost"
+                size="sm"
+                @click="resendInvite(invite)"
+              >
+                {{ t('org.members.invites.resend') }}
+              </UButton>
+              <UButton
+                color="error"
+                variant="ghost"
+                size="sm"
+                @click="revokeInvite(invite)"
+              >
+                {{ t('org.members.invites.revoke') }}
+              </UButton>
+            </div>
           </li>
         </ul>
       </UCard>

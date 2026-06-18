@@ -32,15 +32,16 @@ public class ListOrganizationInvitesQueryHandler
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var utcNow = _systemClock.UtcNow;
+        var organizationId = query.OrganizationId.Value;
         var invites = await context
             .Set<OrganizationInviteEntity>()
             .AsNoTracking()
-            .Where(x => x.OrganizationId == query.OrganizationId.Value)
-            .OrderBy(x => x.CreatedAt)
+            .Where(x => x.OrganizationId == organizationId)
             .ToListAsync(cancellationToken);
 
         invites = invites
             .Where(x => x.Status == OrganizationInviteStatus.Pending && x.ExpiresAt > utcNow)
+            .OrderBy(x => x.CreatedAt)
             .ToList();
 
         var mapped = invites

@@ -44,6 +44,19 @@ const mockOrgMembers = [
   },
 ]
 
+const mockOrgInvites = [
+  {
+    id: '77777777-7777-7777-7777-777777777777',
+    organizationId: '44444444-4444-4444-4444-444444444444',
+    email: 'pe***@example.com',
+    role: 0,
+    invitedByUserId: '22222222-2222-2222-2222-222222222222',
+    createdAt: '2026-06-01T12:00:00Z',
+    expiresAt: '2026-06-08T12:00:00Z',
+    status: 0,
+  },
+]
+
 export const handlers = [
   http.get('/api/account/me', () => {
     return HttpResponse.json(mockUser)
@@ -70,6 +83,31 @@ export const handlers = [
       return HttpResponse.json(mockOrgMembers)
     }
     return new HttpResponse(null, { status: 403 })
+  }),
+
+  http.get('/api/organization/:id/invites', ({ params }) => {
+    if (params.id === '44444444-4444-4444-4444-444444444444') {
+      return HttpResponse.json(mockOrgInvites)
+    }
+    return new HttpResponse(null, { status: 403 })
+  }),
+
+  http.post('/api/organization/:id/members', () => {
+    return new HttpResponse(JSON.stringify({ invited: true }), { status: 202 })
+  }),
+
+  http.get('/api/invite/:token', ({ params }) => {
+    if (params.token === 'demo-token') {
+      return HttpResponse.json({
+        organizationName: 'Acme Corp',
+        organizationSlug: 'acme-corp',
+        email: 'person@example.com',
+        role: 0,
+        expiresAt: '2026-06-08T12:00:00Z',
+        status: 0,
+      })
+    }
+    return new HttpResponse(null, { status: 404 })
   }),
 
   http.get('/api/discovery/repositories', () => {

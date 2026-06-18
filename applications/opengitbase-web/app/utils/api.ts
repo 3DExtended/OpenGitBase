@@ -76,6 +76,26 @@ export interface OrganizationMember {
   role: number
 }
 
+export interface OrganizationInvite {
+  id: string
+  organizationId: string
+  email: string
+  role: number
+  invitedByUserId: string
+  createdAt: string
+  expiresAt: string
+  status: number
+}
+
+export interface OrganizationInvitePublic {
+  organizationName: string
+  organizationSlug: string
+  email: string
+  role: number
+  expiresAt: string
+  status: number
+}
+
 export interface PublicGitSshKey {
   id: string
   name: string
@@ -157,6 +177,30 @@ function normalizeOrganizationMember(raw: Record<string, unknown>): Organization
     userId: normalizeId(raw.userId),
     username: raw.username ? String(raw.username) : undefined,
     role: Number(raw.role ?? 0),
+  }
+}
+
+function normalizeOrganizationInvite(raw: Record<string, unknown>): OrganizationInvite {
+  return {
+    id: normalizeId(raw.id),
+    organizationId: normalizeId(raw.organizationId),
+    email: String(raw.email ?? ''),
+    role: Number(raw.role ?? 0),
+    invitedByUserId: normalizeId(raw.invitedByUserId),
+    createdAt: String(raw.createdAt ?? ''),
+    expiresAt: String(raw.expiresAt ?? ''),
+    status: Number(raw.status ?? 0),
+  }
+}
+
+function normalizeOrganizationInvitePublic(raw: Record<string, unknown>): OrganizationInvitePublic {
+  return {
+    organizationName: String(raw.organizationName ?? ''),
+    organizationSlug: String(raw.organizationSlug ?? ''),
+    email: String(raw.email ?? ''),
+    role: Number(raw.role ?? 0),
+    expiresAt: String(raw.expiresAt ?? ''),
+    status: Number(raw.status ?? 0),
   }
 }
 
@@ -448,6 +492,22 @@ export function createApi(baseUrl: string) {
           }),
       },
 
+      invites: {
+        list: async (organizationId: string) => {
+          const result = await request<Record<string, unknown>[]>(`/organization/${organizationId}/invites`)
+          return {
+            ...result,
+            data: result.data?.map(normalizeOrganizationInvite) ?? null,
+          }
+        },
+
+        resend: (organizationId: string, inviteId: string) =>
+          request<null>(`/organization/${organizationId}/invites/${inviteId}/resend`, { method: 'POST' }),
+
+        revoke: (organizationId: string, inviteId: string) =>
+          request<null>(`/organization/${organizationId}/invites/${inviteId}`, { method: 'DELETE' }),
+      },
+
       create: (body: { modelToCreate: { name: string, slug: string } }) =>
         request<string>('/organization', { method: 'POST', body: JSON.stringify(body) }),
 
@@ -511,6 +571,22 @@ export function createApi(baseUrl: string) {
           },
         }
       },
+    },
+
+    invite: {
+      getByToken: async (token: string) => {
+        const result = await request<Record<string, unknown>>(`/invite/${encodeURIComponent(token)}`)
+        return {
+          ...result,
+          data: result.data ? normalizeOrganizationInvitePublic(result.data) : null,
+        }
+      },
+
+      accept: (token: string) =>
+        request<null>(`/invite/${encodeURIComponent(token)}/accept`, { method: 'POST' }),
+
+      decline: (token: string) =>
+        request<null>(`/invite/${encodeURIComponent(token)}/decline`, { method: 'POST' }),
     },
 
     admin: {

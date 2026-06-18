@@ -181,8 +181,29 @@
       "identifierLabel": "Username or email",
       "identifierPlaceholder": "username or email@example.com",
       "roleLabel": "Role",
-      "addButton": "Add member"
+      "addButton": "Add member",
+      "invites": {
+        "title": "Pending invitations",
+        "sent": "Invitation email sent.",
+        "expires": "Expires {date}",
+        "resend": "Resend",
+        "revoke": "Revoke"
+      }
     }
+  },
+  "invite": {
+    "title": "Organization invitation",
+    "organization": "Organization",
+    "role": "Invited role",
+    "expired": "This invitation has expired.",
+    "declined": "This invitation was declined.",
+    "accepted": "You have joined the organization.",
+    "accept": "Accept invitation",
+    "decline": "Decline",
+    "signInRequired": "Sign in or create an account to respond to this invitation.",
+    "signIn": "Sign in",
+    "signUp": "Create account",
+    "notFound": "Invitation not found."
   },
   "repo": {
     "notFound": "Repository not found.",
