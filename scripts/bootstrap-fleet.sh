@@ -20,8 +20,8 @@ ADMIN_PASS="${ADMIN_PASS:-change-me-admin}"
 echo "==> Checking API health at ${API_URL}"
 if ! curl -fsS "${API_URL}/health" >/dev/null; then
   echo "API is not reachable at ${API_URL}." >&2
-  echo "Start postgres and api first:" >&2
-  echo "  docker compose up -d --build postgres api" >&2
+  echo "Start postgres, API replicas, and HAProxy first:" >&2
+  echo "  docker compose up -d --build postgres api-1 api-2 ssh-lb" >&2
   echo "  curl -fsS ${API_URL}/health" >&2
   exit 1
 fi
@@ -40,7 +40,7 @@ login() {
     echo "If the admin user already exists, AdminUserSeedService does not reset the password." >&2
     echo "Fix options:" >&2
     echo "  - Set ADMIN_PASS to the current admin password, or" >&2
-    echo "  - Wipe the database and re-seed: docker compose down -v && docker compose up -d --build postgres api" >&2
+    echo "  - Wipe the database and re-seed: docker compose down -v && docker compose up -d --build postgres api-1 api-2 ssh-lb" >&2
     [ -n "${response}" ] && echo "Response: ${response}" >&2
     exit 1
   fi

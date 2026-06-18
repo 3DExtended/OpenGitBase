@@ -5,9 +5,15 @@ namespace OpenGitBase.Api;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
-        CreateHostBuilder(args).Build().Run();
+        if (MigrateOnlyHost.IsEnabled())
+        {
+            Environment.Exit(await MigrateOnlyHost.RunAsync(args));
+            return;
+        }
+
+        await CreateHostBuilder(args).Build().RunAsync();
     }
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>

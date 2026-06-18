@@ -1,18 +1,76 @@
-﻿services:
+﻿x-api-build: &api-build
+  context: .
+  dockerfile: applications/OpenGitBase.Api/Dockerfile
+
+x-api-image: &api-image
+  image: opengitbase-api
+  build: *api-build
+
+x-api-environment: &api-environment
+  ASPNETCORE_ENVIRONMENT: Development
+  ASPNETCORE_URLS: http://+:8080
+  Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
+  Debug__Features__EmailVerification: "true"
+
+x-api-common: &api-common
+  <<: *api-image
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment: *api-environment
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+    start_period: 30s
+
+x-web-build: &web-build
+  context: ./applications/opengitbase-web
+  dockerfile: Dockerfile
+  args:
+    NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
+    NUXT_PUBLIC_API_BASE: /api
+
+x-web-common: &web-common
+  restart: unless-stopped
+  build: *web-build
+  depends_on:
+    ssh-lb:
+      condition: service_started
+    api-1:
+      condition: service_healthy
+    api-2:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 10s
+
+services:
 
   ssh-lb:
     image: haproxy:3.2
     container_name: opengitbase_ssh_lb
     restart: unless-stopped
     depends_on:
-      dispatcher-1:
+      api-1:
         condition: service_healthy
-      dispatcher-2:
+      api-2:
         condition: service_healthy
     ports:
       - "2211:22"
+      - "8089:8080"
+      - "3000:8081"
     volumes:
       - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      default:
+        aliases:
+          - api-lb
 
   storage-1:
     container_name: opengitbase_storage_1
@@ -21,8 +79,10 @@
       context: ./applications/repo-storage-layer
       dockerfile: Dockerfile
     depends_on:
-      api:
-        condition: service_started
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
       interval: 5s
@@ -30,7 +90,7 @@
       retries: 10
       start_period: 15s
     environment:
-      STORAGE_API_URL: "http://api:8080"
+      STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-1"
       STORAGE_INTERNAL_HOST: "storage-1"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
@@ -48,8 +108,10 @@
       context: ./applications/repo-storage-layer
       dockerfile: Dockerfile
     depends_on:
-      api:
-        condition: service_started
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
       interval: 5s
@@ -57,7 +119,7 @@
       retries: 10
       start_period: 15s
     environment:
-      STORAGE_API_URL: "http://api:8080"
+      STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-2"
       STORAGE_INTERNAL_HOST: "storage-2"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
@@ -75,8 +137,10 @@
       context: ./applications/OpenGitBase.Dispatcher
       dockerfile: Dockerfile
     depends_on:
-      api:
-        condition: service_started
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
       storage-1:
         condition: service_healthy
       storage-2:
@@ -88,8 +152,8 @@
       retries: 5
       start_period: 5s
     environment:
-      DISPATCHER_API_URL: "http://api:8080"
-      Dispatcher__ApiUrl: "http://api:8080"
+      DISPATCHER_API_URL: "http://api-lb:8080"
+      Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-1"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
@@ -102,8 +166,10 @@
       context: ./applications/OpenGitBase.Dispatcher
       dockerfile: Dockerfile
     depends_on:
-      api:
-        condition: service_started
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
       storage-1:
         condition: service_healthy
       storage-2:
@@ -115,8 +181,8 @@
       retries: 5
       start_period: 5s
     environment:
-      DISPATCHER_API_URL: "http://api:8080"
-      Dispatcher__ApiUrl: "http://api:8080"
+      DISPATCHER_API_URL: "http://api-lb:8080"
+      Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-2"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
@@ -140,54 +206,47 @@
       timeout: 5s
       retries: 5
 
-  api:
-    container_name: opengitbase_api
-    restart: unless-stopped
-    build:
-      context: .
-      dockerfile: applications/OpenGitBase.Api/Dockerfile
+  api-1:
+    <<: *api-common
+    container_name: opengitbase_api_1
+
+  api-2:
+    <<: *api-common
+    container_name: opengitbase_api_2
+
+  api-migrate:
+    <<: *api-image
+    container_name: opengitbase_api_migrate
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "8089:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
-      Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
-      Debug__Features__EmailVerification: "true"
+      <<: *api-environment
+      OPENGITBASE_MIGRATE_ONLY: "true"
+    restart: "no"
+    profiles:
+      - tools
 
-  web:
-    container_name: opengitbase_web
-    restart: unless-stopped
-    build:
-      context: ./applications/opengitbase-web
-      dockerfile: Dockerfile
-      args:
-        NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
-        NUXT_PUBLIC_API_BASE: /api
-    depends_on:
-      api:
-        condition: service_started
-    ports:
-      - "3000:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+  web-1:
+    <<: *web-common
+    container_name: opengitbase_web_1
+
+  web-2:
+    <<: *web-common
+    container_name: opengitbase_web_2
 
   opengitbase_cloudflare_tunnel:
     image: cloudflare/cloudflared:latest
     container_name: opengitbase_cloudflare_tunnel
     depends_on:
-      api:
+      ssh-lb:
         condition: service_started
-      web:
+      web-1:
+        condition: service_started
+      web-2:
         condition: service_started
     restart: always
-    command: tunnel --no-autoupdate run --url http://api:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+    command: tunnel --no-autoupdate run --url http://api-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
 
 volumes:
   opengitbase_pgdata:

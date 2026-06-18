@@ -56,11 +56,11 @@ machine certificates — fleet SSH keys are not checked into the repo.
 ### First-time startup
 
 ```bash
-# 1. Start database and API
-docker compose up -d --build postgres api
+# 1. Start database, API replicas, and HAProxy
+docker compose up -d --build postgres api-1 api-2 ssh-lb
 
-# Wait until the API is healthy
-curl -fsS http://localhost:8080/health
+# Wait until the API is healthy (via HAProxy)
+curl -fsS http://localhost:8089/health
 
 # 2. Copy override template and generate PKI, admin enrollments, and fleet SSH keys
 cp docker-compose.override.example.yml docker-compose.override.yml
@@ -74,14 +74,31 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --buil
 
 ### After bootstrap
 
+For daily code updates after the initial bootstrap, use the rolling update script
+instead of tearing down and recreating the whole stack:
+
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build && docker builder prune -f && docker image prune -f
+./scripts/rolling-update.sh
 ```
+
+Requires `docker-compose.override.yml` (created during bootstrap). The script
+rebuilds images and recreates containers one at a time while waiting for health
+checks.
+
+### Wipe and reseed
+
+To reset the database and start fresh:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml down -v
+```
+
+Then repeat the first-time startup steps.
 
 | Service | URL |
 |---------|-----|
 | Web UI | http://localhost:3000 |
-| API | http://localhost:8080 |
+| API | http://localhost:8089 |
 | Git (SSH entrypoint) | `ssh://git@localhost/owner/repo` |
 
 Default admin user (change in `applications/OpenGitBase.Api/appsettings.json`):
@@ -94,7 +111,7 @@ host gets 403 by design):
 
 ```bash
 docker exec opengitbase_storage_1 \
-  curl -fsS http://api:8080/api/v1/storage-nodes/healthy
+  curl -fsS http://api-lb:8080/api/v1/storage-nodes/healthy
 ```
 
 ### Re-bootstrap

@@ -54,6 +54,66 @@ public static class DependencyInjectionHelpers
         return Task.CompletedTask;
     }
 
+    public static async Task<int> RunDatabaseMigrationsAsync(
+        IConfiguration configuration,
+        IHostEnvironment env,
+        bool requireDatabase = true,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (env.IsEnvironment("E2ETest"))
+        {
+            return 0;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSingleton(env);
+        services.AddSingleton(configuration);
+        services.AddLogging();
+
+        ConfigureDatabase(services, configuration, env);
+
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
+
+        if (factory == null)
+        {
+            if (!requireDatabase)
+            {
+                return 0;
+            }
+
+            Console.Error.WriteLine("Database migrations skipped: no Sql connection configured.");
+            return 1;
+        }
+
+        try
+        {
+            await using var context = await factory.CreateDbContextAsync(cancellationToken);
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync(
+                cancellationToken
+            );
+
+            if (pendingMigrations.Any())
+            {
+                Console.WriteLine("Applying pending migrations...");
+                await context.Database.MigrateAsync(cancellationToken);
+                Console.WriteLine("Migrations applied successfully.");
+            }
+            else
+            {
+                Console.WriteLine("No pending migrations.");
+            }
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Migration failed: {ex.Message}");
+            return 1;
+        }
+    }
+
     private static void ConfigureDatabase(
         IServiceCollection services,
         IConfiguration configuration,
@@ -150,22 +210,13 @@ public static class DependencyInjectionHelpers
             return;
         }
 
-        await using var scope = services.BuildServiceProvider().CreateAsyncScope();
-        var factory = scope.ServiceProvider.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
-
-        if (factory == null)
+        var configuration = services
+            .BuildServiceProvider()
+            .GetRequiredService<IConfiguration>();
+        var exitCode = await RunDatabaseMigrationsAsync(configuration, env, requireDatabase: false);
+        if (exitCode != 0)
         {
-            return;
-        }
-
-        await using var context = await factory.CreateDbContextAsync();
-        var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-
-        if (pendingMigrations.Any())
-        {
-            Console.WriteLine("Applying pending migrations...");
-            await context.Database.MigrateAsync();
-            Console.WriteLine("Migrations applied successfully.");
+            throw new InvalidOperationException("Database migration failed during API startup.");
         }
     }
 }

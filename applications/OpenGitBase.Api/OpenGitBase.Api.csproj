@@ -34,4 +34,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenGitBase.Api.Tests" />
+  </ItemGroup>
 </Project>
