@@ -10,6 +10,7 @@ const owner = computed(() => String(route.params.owner))
 const profile = ref<OwnerProfile | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
+const isOrgMember = ref(false)
 
 useHead({
   title: computed(() => profile.value?.name ?? owner.value),
@@ -24,6 +25,14 @@ onMounted(async () => {
     return
   }
   profile.value = result.data
+
+  if (profile.value.kind === 'organization' && auth.isAuthenticated) {
+    const orgsResult = await api.organizations.list()
+    isOrgMember.value = orgsResult.data?.some(
+      org => (org.slug ?? org.name).toLowerCase() === owner.value.toLowerCase(),
+    ) ?? false
+  }
+
   loading.value = false
 })
 
@@ -63,7 +72,7 @@ const isOwnProfile = computed(() =>
       </p>
 
       <div
-        v-if="isOwnProfile || (profile.kind === 'organization' && auth.isAuthenticated)"
+        v-if="isOwnProfile || isOrgMember"
         class="flex flex-wrap gap-2"
       >
         <UButton
@@ -75,12 +84,12 @@ const isOwnProfile = computed(() =>
           {{ t('settings.title') }}
         </UButton>
         <UButton
-          v-if="profile.kind === 'organization'"
-          :to="`/orgs/new`"
+          v-if="profile.kind === 'organization' && isOrgMember"
+          :to="`/${owner}/members`"
           variant="soft"
           size="sm"
         >
-          {{ t('org.settings') }}
+          {{ t('org.members.title') }}
         </UButton>
       </div>
 

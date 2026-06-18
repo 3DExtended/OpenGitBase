@@ -165,7 +165,18 @@
       "nameHint": "This becomes the URL slug (e.g. /acme-corp).",
       "submit": "Create organization"
     },
-    "settings": "Organization settings"
+    "settings": "Organization settings",
+    "members": {
+      "title": "Members",
+      "listTitle": "Current members",
+      "empty": "No members yet.",
+      "notFound": "Organization not found.",
+      "forbidden": "You do not have access to view this organization's members.",
+      "roles": {
+        "member": "Member",
+        "owner": "Owner"
+      }
+    }
   },
   "repo": {
     "notFound": "Repository not found.",

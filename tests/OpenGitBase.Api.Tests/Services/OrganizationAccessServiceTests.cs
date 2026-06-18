@@ -101,6 +101,80 @@ public class OrganizationAccessServiceTests
     }
 
     [Fact]
+    public async Task CheckMemberAccessAsync_WhenUserIsRegularMember_ReturnsMember()
+    {
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var memberUserId = UserId.From(Guid.NewGuid());
+        var organization = new OrganizationDto
+        {
+            Id = organizationId,
+            Name = "Acme",
+            Slug = "acme",
+            OwnerUserId = Guid.NewGuid(),
+        };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(organization));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationMemberDto
+                    {
+                        OrganizationId = organizationId,
+                        UserId = memberUserId,
+                        Role = OrganizationMemberRole.Member,
+                    }
+                )
+            );
+
+        var service = new OrganizationAccessService(queryProcessor);
+        var result = await service.CheckMemberAccessAsync(
+            organizationId,
+            memberUserId,
+            CancellationToken.None
+        );
+
+        Assert.True(result.OrganizationExists);
+        Assert.True(result.IsMember);
+        Assert.False(result.IsOwner);
+    }
+
+    [Fact]
+    public async Task CheckMemberAccessAsync_WhenUserIsNotMember_ReturnsNotMember()
+    {
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organization = new OrganizationDto
+        {
+            Id = organizationId,
+            Name = "Acme",
+            Slug = "acme",
+            OwnerUserId = Guid.NewGuid(),
+        };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(organization));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationMemberDto>.None);
+
+        var service = new OrganizationAccessService(queryProcessor);
+        var result = await service.CheckMemberAccessAsync(
+            organizationId,
+            UserId.From(Guid.NewGuid()),
+            CancellationToken.None
+        );
+
+        Assert.True(result.OrganizationExists);
+        Assert.False(result.IsMember);
+        Assert.False(result.IsOwner);
+    }
+
+    [Fact]
     public async Task GetDeleteBlockersAsync_WhenRepositoriesExist_ReturnsBlockers()
     {
         var organizationId = OrganizationId.From(Guid.NewGuid());

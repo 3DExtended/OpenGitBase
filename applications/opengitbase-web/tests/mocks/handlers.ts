@@ -30,6 +30,17 @@ const mockOrgs = [
   {
     id: '44444444-4444-4444-4444-444444444444',
     name: 'acme-corp',
+    slug: 'acme-corp',
+  },
+]
+
+const mockOrgMembers = [
+  {
+    id: '66666666-6666-6666-6666-666666666666',
+    organizationId: '44444444-4444-4444-4444-444444444444',
+    userId: '22222222-2222-2222-2222-222222222222',
+    username: 'demo-user',
+    role: 1,
   },
 ]
 
@@ -44,6 +55,21 @@ export const handlers = [
 
   http.get('/api/organization', () => {
     return HttpResponse.json(mockOrgs)
+  }),
+
+  http.get('/api/organization/by-slug/:slug', ({ params }) => {
+    const org = mockOrgs.find(o => o.slug === params.slug)
+    if (!org) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    return HttpResponse.json(org)
+  }),
+
+  http.get('/api/organization/:id/members', ({ params }) => {
+    if (params.id === '44444444-4444-4444-4444-444444444444') {
+      return HttpResponse.json(mockOrgMembers)
+    }
+    return new HttpResponse(null, { status: 403 })
   }),
 
   http.get('/api/discovery/repositories', () => {

@@ -1,4 +1,4 @@
-﻿﻿using OpenGitBase.Cqrs;
+﻿using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -33,6 +33,45 @@ public class OrganizationAccessService : IOrganizationAccessService
         var isOwner = await IsOwnerAsync(organization, userId, cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationOwnerAccessCheck(true, isOwner, organization);
+    }
+
+    public async Task<OrganizationMemberAccessCheck> CheckMemberAccessAsync(
+        OrganizationId organizationId,
+        UserId userId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationResult = await _queryProcessor
+            .RunQueryAsync(new GetOrganizationQuery { ModelId = organizationId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (organizationResult.IsNone)
+        {
+            return new OrganizationMemberAccessCheck(false, false, false, null);
+        }
+
+        var organization = organizationResult.Get();
+        var isOwner = await IsOwnerAsync(organization, userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (isOwner)
+        {
+            return new OrganizationMemberAccessCheck(true, true, true, organization);
+        }
+
+        var membershipResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationMemberQuery
+                {
+                    OrganizationId = organization.Id,
+                    UserId = userId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var isMember = membershipResult.IsSome;
+        return new OrganizationMemberAccessCheck(true, isMember, false, organization);
     }
 
     public async Task<IReadOnlyList<OrganizationDeleteBlocker>> GetDeleteBlockersAsync(

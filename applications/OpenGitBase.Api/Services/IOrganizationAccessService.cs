@@ -1,4 +1,4 @@
-﻿﻿using OpenGitBase.Features.Organization.Contracts;
+﻿using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Api.Services;
@@ -6,6 +6,12 @@ namespace OpenGitBase.Api.Services;
 public interface IOrganizationAccessService
 {
     Task<OrganizationOwnerAccessCheck> CheckOwnerAccessAsync(
+        OrganizationId organizationId,
+        UserId userId,
+        CancellationToken cancellationToken
+    );
+
+    Task<OrganizationMemberAccessCheck> CheckMemberAccessAsync(
         OrganizationId organizationId,
         UserId userId,
         CancellationToken cancellationToken

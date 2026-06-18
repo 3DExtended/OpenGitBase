@@ -101,6 +101,19 @@ public class OrganizationControllerTests
     public async Task ListMembers_WhenFound_ReturnsOk()
     {
         var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationMemberAccessCheck(
+                    true,
+                    true,
+                    false,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
             .RunQueryAsync(Arg.Any<ListOrganizationMembersQuery>(), Arg.Any<CancellationToken>())
@@ -110,10 +123,60 @@ public class OrganizationControllerTests
                 )
             );
 
-        var controller = CreateController(queryProcessor, userId);
-        var result = await controller.ListMembers(Guid.NewGuid(), CancellationToken.None);
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.ListMembers(organizationId.Value, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ListMembers_WhenNonMember_ReturnsForbid()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationMemberAccessCheck(
+                    true,
+                    false,
+                    false,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.ListMembers(organizationId.Value, CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result);
+        await queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(
+                Arg.Any<ListOrganizationMembersQuery>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task ListMembers_WhenOrganizationMissing_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckMemberAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(new OrganizationMemberAccessCheck(false, false, false, null));
+
+        var controller = CreateController(
+            Substitute.For<IQueryProcessor>(),
+            userId,
+            organizationAccess
+        );
+        var result = await controller.ListMembers(organizationId.Value, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
     }
 
     [Fact]

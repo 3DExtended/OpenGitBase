@@ -215,9 +215,24 @@ public class OrganizationController : ControllerBase
     [HttpGet("{id:guid}/members")]
     public async Task<IActionResult> ListMembers(Guid id, CancellationToken cancellationToken)
     {
+        var organizationId = OrganizationId.From(id);
+        var access = await _organizationAccess
+            .CheckMemberAccessAsync(organizationId, _userContext.GetUserId(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!access.OrganizationExists)
+        {
+            return NotFound();
+        }
+
+        if (!access.IsMember)
+        {
+            return Forbid();
+        }
+
         var result = await _queryProcessor
             .RunQueryAsync(
-                new ListOrganizationMembersQuery { OrganizationId = OrganizationId.From(id) },
+                new ListOrganizationMembersQuery { OrganizationId = organizationId },
                 cancellationToken
             )
             .ConfigureAwait(false);

@@ -65,6 +65,15 @@ export interface Repository {
 export interface Organization {
   id: string
   name: string
+  slug?: string
+}
+
+export interface OrganizationMember {
+  id: string
+  organizationId: string
+  userId: string
+  username?: string
+  role: number
 }
 
 export interface PublicGitSshKey {
@@ -137,6 +146,17 @@ function normalizeOrganization(raw: Record<string, unknown>): Organization {
   return {
     id: normalizeId(raw.id),
     name: String(raw.name ?? ''),
+    slug: raw.slug ? String(raw.slug) : undefined,
+  }
+}
+
+function normalizeOrganizationMember(raw: Record<string, unknown>): OrganizationMember {
+  return {
+    id: normalizeId(raw.id),
+    organizationId: normalizeId(raw.organizationId),
+    userId: normalizeId(raw.userId),
+    username: raw.username ? String(raw.username) : undefined,
+    role: Number(raw.role ?? 0),
   }
 }
 
@@ -393,6 +413,24 @@ export function createApi(baseUrl: string) {
           ...result,
           data: result.data ? normalizeOrganization(result.data) : null,
         }
+      },
+
+      getBySlug: async (slug: string) => {
+        const result = await request<Record<string, unknown>>(`/organization/by-slug/${encodeURIComponent(slug)}`)
+        return {
+          ...result,
+          data: result.data ? normalizeOrganization(result.data) : null,
+        }
+      },
+
+      members: {
+        list: async (organizationId: string) => {
+          const result = await request<Record<string, unknown>[]>(`/organization/${organizationId}/members`)
+          return {
+            ...result,
+            data: result.data?.map(normalizeOrganizationMember) ?? null,
+          }
+        },
       },
 
       create: (body: { modelToCreate: { name: string, slug: string } }) =>
