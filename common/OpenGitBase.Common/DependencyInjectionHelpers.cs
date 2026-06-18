@@ -48,7 +48,7 @@ public static class DependencyInjectionHelpers
 
         if (!env.IsEnvironment("E2ETest"))
         {
-            return ApplyEfCoreMigrations(services);
+            return ApplyEfCoreMigrations(services, assemblies);
         }
 
         return Task.CompletedTask;
@@ -132,22 +132,26 @@ public static class DependencyInjectionHelpers
 
         services.AddSingleton(sqlOptions);
 
-        services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
-        {
-            options.UseNpgsql(
-                sqlOptions.ConnectionString,
-                npgsql =>
-                {
-                    npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-                    npgsql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
-                }
-            );
-
-            if (!env.IsProduction())
+        services.AddDbContextFactory<OpenGitBaseDbContext>(
+            (serviceProvider, options) =>
             {
-                options.EnableDetailedErrors();
+                options
+                    .UseNpgsql(
+                        sqlOptions.ConnectionString,
+                        npgsql =>
+                        {
+                            npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                            npgsql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+                        }
+                    )
+                    .EnableServiceProviderCaching(false);
+
+                if (!env.IsProduction())
+                {
+                    options.EnableDetailedErrors();
+                }
             }
-        });
+        );
     }
 
     private static void ConfigureSendGrid(IServiceCollection services, IConfiguration configuration)
@@ -191,7 +195,10 @@ public static class DependencyInjectionHelpers
         });
     }
 
-    private static async Task ApplyEfCoreMigrations(IServiceCollection services)
+    private static async Task ApplyEfCoreMigrations(
+        IServiceCollection services,
+        IReadOnlyList<Assembly> featureAssemblies
+    )
     {
         if (Debugger.IsAttached)
         {
@@ -217,7 +224,12 @@ public static class DependencyInjectionHelpers
         var configuration = services
             .BuildServiceProvider()
             .GetRequiredService<IConfiguration>();
-        var exitCode = await RunDatabaseMigrationsAsync(configuration, env, requireDatabase: false);
+        var exitCode = await RunDatabaseMigrationsAsync(
+            configuration,
+            env,
+            requireDatabase: false,
+            featureAssemblies: featureAssemblies
+        );
         if (exitCode != 0)
         {
             throw new InvalidOperationException("Database migration failed during API startup.");
