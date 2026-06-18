@@ -37,5 +37,16 @@ public class OrganizationMapsterConfig : IRegister
             .Map(dest => dest.OrganizationId, src => src.OrganizationId.Value)
             .Map(dest => dest.UserId, src => src.UserId.Value)
             .Map(dest => dest.Role, src => src.Role);
+
+        config
+            .NewConfig<OrganizationInviteEntity, OrganizationInviteDto>()
+            .Map(dest => dest.Id, src => OrganizationInviteId.From(src.Id))
+            .Map(dest => dest.OrganizationId, src => OrganizationId.From(src.OrganizationId))
+            .Map(dest => dest.Role, src => src.Role)
+            .Map(dest => dest.InvitedByUserId, src => src.InvitedByUserId)
+            .Map(dest => dest.CreatedAt, src => src.CreatedAt)
+            .Map(dest => dest.ExpiresAt, src => src.ExpiresAt)
+            .Map(dest => dest.Status, src => src.Status)
+            .Ignore(dest => dest.Email);
     }
 }
