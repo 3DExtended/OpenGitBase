@@ -47,12 +47,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _get_api_token(self) -> str:
-        if STORAGE_API_TOKEN:
-            return STORAGE_API_TOKEN
         try:
-            return Path(STORAGE_TOKEN_FILE).read_text(encoding="utf-8").strip()
+            token = Path(STORAGE_TOKEN_FILE).read_text(encoding="utf-8").strip()
+            if token:
+                return token
         except OSError:
-            return ""
+            pass
+        return STORAGE_API_TOKEN
 
     def _check_auth(self) -> bool:
         auth = self.headers.get("Authorization", "")

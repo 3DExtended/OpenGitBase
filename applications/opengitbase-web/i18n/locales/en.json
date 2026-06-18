@@ -176,7 +176,12 @@
         "member": "Member",
         "owner": "Owner"
       },
-      "leave": "Leave organization"
+      "leave": "Leave organization",
+      "addTitle": "Add member",
+      "identifierLabel": "Username or email",
+      "identifierPlaceholder": "username or email@example.com",
+      "roleLabel": "Role",
+      "addButton": "Add member"
     }
   },
   "repo": {

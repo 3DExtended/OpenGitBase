@@ -152,7 +152,6 @@ configure_dispatcher_authorized_keys() {
 
 start_storage_agent_background() {
   (
-    register_node || true
     heartbeat_loop
   ) &
 }

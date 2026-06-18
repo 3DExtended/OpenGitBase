@@ -269,12 +269,45 @@ public class OrganizationController : ControllerBase
             return Forbid();
         }
 
+        if (string.IsNullOrWhiteSpace(request.Identifier))
+        {
+            return BadRequest();
+        }
+
+        var organizationId = OrganizationId.From(id);
+        var resolvedUserId = await ResolveUserIdFromIdentifierAsync(
+            request.Identifier,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (resolvedUserId.IsNone)
+        {
+            return NotFound(new { error = "User not found." });
+        }
+
+        var userId = resolvedUserId.Get();
+        var existingMember = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationMemberQuery
+                {
+                    OrganizationId = organizationId,
+                    UserId = userId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (existingMember.IsSome)
+        {
+            return Conflict(new { error = "User is already a member of this organization." });
+        }
+
         var result = await _queryProcessor
             .RunQueryAsync(
                 new AddOrganizationMemberQuery
                 {
-                    OrganizationId = OrganizationId.From(id),
-                    UserId = UserId.From(request.UserId),
+                    OrganizationId = organizationId,
+                    UserId = userId,
                     Role = request.Role,
                 },
                 cancellationToken
@@ -426,6 +459,30 @@ public class OrganizationController : ControllerBase
             .ConfigureAwait(false);
 
         return result.IsSome ? NoContent() : NotFound();
+    }
+
+    private async Task<Option<UserId>> ResolveUserIdFromIdentifierAsync(
+        string identifier,
+        CancellationToken cancellationToken
+    )
+    {
+        var trimmed = identifier.Trim();
+        if (trimmed.Contains('@', StringComparison.Ordinal))
+        {
+            return await _queryProcessor
+                .RunQueryAsync(
+                    new UserGetIdByEmailQuery { Email = trimmed },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+
+        return await _queryProcessor
+            .RunQueryAsync(
+                new UserExistsByUsernameQuery { Username = trimmed },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private IActionResult ToActionResult<T>(Option<T> result)

@@ -16,6 +16,11 @@ const loading = ref(true)
 const forbidden = ref(false)
 const notFound = ref(false)
 
+const identifier = ref('')
+const addRole = ref(1)
+const adding = ref(false)
+const addError = ref<string | null>(null)
+
 const roleOptions = [
   { label: t('org.members.roles.member'), value: 0 },
   { label: t('org.members.roles.owner'), value: 1 },
@@ -101,6 +106,29 @@ async function leaveOrganization() {
   await api.organizations.members.remove(organization.value.id, currentMember.value.userId)
   await navigateTo(`/${orgSlug.value}`)
 }
+
+async function addMember() {
+  if (!organization.value) {
+    return
+  }
+  adding.value = true
+  addError.value = null
+  try {
+    const result = await api.organizations.members.add(organization.value.id, {
+      identifier: identifier.value,
+      role: addRole.value,
+    })
+    if (result.error) {
+      addError.value = result.error
+      return
+    }
+    identifier.value = ''
+    await loadMembers()
+  }
+  finally {
+    adding.value = false
+  }
+}
 </script>
 
 <template>
@@ -148,59 +176,104 @@ async function leaveOrganization() {
       </p>
     </UCard>
 
-    <UCard v-else-if="organization">
-      <template #header>
-        <h2 class="font-semibold">
-          {{ t('org.members.listTitle') }}
-        </h2>
-      </template>
-
-      <p
-        v-if="!members.length"
-        class="text-sm text-[var(--ogb-text-muted)]"
+    <template v-else-if="organization">
+      <UCard
+        v-if="isOwner"
+        class="mb-6"
       >
-        {{ t('org.members.empty') }}
-      </p>
-
-      <ul
-        v-else
-        class="divide-y"
-        style="border-color: var(--ogb-border);"
-      >
-        <li
-          v-for="member in members"
-          :key="member.id"
-          class="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('org.members.addTitle') }}
+          </h2>
+        </template>
+        <form
+          class="space-y-4"
+          @submit.prevent="addMember"
         >
-          <div class="min-w-0 flex-1">
-            <p class="font-medium">
-              {{ member.username ?? member.userId }}
-            </p>
-            <USelect
-              v-if="isOwner"
-              :model-value="member.role"
-              :items="roleOptions"
-              size="sm"
-              class="mt-1 max-w-xs"
-              @update:model-value="updateRole(member, $event as number)"
+          <UFormField
+            :label="t('org.members.identifierLabel')"
+            required
+          >
+            <UInput
+              v-model="identifier"
+              :placeholder="t('org.members.identifierPlaceholder')"
             />
-            <p
-              v-else
-              class="text-xs text-[var(--ogb-text-muted)]"
-            >
-              {{ roleLabel(member.role) }}
-            </p>
-          </div>
-          <UButton
-            v-if="isOwner && member.userId !== currentMember?.userId"
+          </UFormField>
+          <UFormField :label="t('org.members.roleLabel')">
+            <USelect
+              v-model="addRole"
+              :items="roleOptions"
+            />
+          </UFormField>
+          <UAlert
+            v-if="addError"
             color="error"
-            variant="ghost"
-            size="sm"
-            icon="i-lucide-user-minus"
-            @click="removeMember(member)"
+            variant="subtle"
+            :description="addError"
           />
-        </li>
-      </ul>
-    </UCard>
+          <UButton
+            type="submit"
+            :loading="adding"
+          >
+            {{ t('org.members.addButton') }}
+          </UButton>
+        </form>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('org.members.listTitle') }}
+          </h2>
+        </template>
+
+        <p
+          v-if="!members.length"
+          class="text-sm text-[var(--ogb-text-muted)]"
+        >
+          {{ t('org.members.empty') }}
+        </p>
+
+        <ul
+          v-else
+          class="divide-y"
+          style="border-color: var(--ogb-border);"
+        >
+          <li
+            v-for="member in members"
+            :key="member.id"
+            class="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+          >
+            <div class="min-w-0 flex-1">
+              <p class="font-medium">
+                {{ member.username ?? member.userId }}
+              </p>
+              <USelect
+                v-if="isOwner"
+                :model-value="member.role"
+                :items="roleOptions"
+                size="sm"
+                class="mt-1 max-w-xs"
+                @update:model-value="updateRole(member, $event as number)"
+              />
+              <p
+                v-else
+                class="text-xs text-[var(--ogb-text-muted)]"
+              >
+                {{ roleLabel(member.role) }}
+              </p>
+            </div>
+            <UButton
+              v-if="isOwner && member.userId !== currentMember?.userId"
+              color="error"
+              variant="ghost"
+              size="sm"
+              icon="i-lucide-user-minus"
+              @click="removeMember(member)"
+            />
+          </li>
+        </ul>
+      </UCard>
+    </template>
   </div>
 </template>

@@ -440,6 +440,12 @@ export function createApi(baseUrl: string) {
 
         remove: (organizationId: string, userId: string) =>
           request<null>(`/organization/${organizationId}/members/${userId}`, { method: 'DELETE' }),
+
+        add: (organizationId: string, body: { identifier: string, role: number }) =>
+          request<null>(`/organization/${organizationId}/members`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
       },
 
       create: (body: { modelToCreate: { name: string, slug: string } }) =>

@@ -184,6 +184,7 @@ public class OrganizationControllerTests
     {
         var userId = UserId.From(Guid.NewGuid());
         var organizationId = OrganizationId.From(Guid.NewGuid());
+        var newMemberUserId = UserId.From(Guid.NewGuid());
         var organizationAccess = Substitute.For<IOrganizationAccessService>();
         organizationAccess
             .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
@@ -197,6 +198,12 @@ public class OrganizationControllerTests
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(newMemberUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationMemberDto>.None);
+        queryProcessor
             .RunQueryAsync(Arg.Any<AddOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
             .Returns(Unit.Value);
 
@@ -205,13 +212,61 @@ public class OrganizationControllerTests
             organizationId.Value,
             new OpenGitBase.Api.Models.AddOrganizationMemberRequest
             {
-                UserId = Guid.NewGuid(),
+                Identifier = "newmember",
                 Role = OrganizationMemberRole.Member,
             },
             CancellationToken.None
         );
 
         Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task AddMember_WhenAlreadyMember_ReturnsConflict()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var memberUserId = UserId.From(Guid.NewGuid());
+        var organizationAccess = Substitute.For<IOrganizationAccessService>();
+        organizationAccess
+            .CheckOwnerAccessAsync(organizationId, userId, Arg.Any<CancellationToken>())
+            .Returns(
+                new OrganizationOwnerAccessCheck(
+                    true,
+                    true,
+                    new OrganizationDto { Id = organizationId, Name = "Acme", Slug = "acme" }
+                )
+            );
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(memberUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationMemberDto
+                    {
+                        OrganizationId = organizationId,
+                        UserId = memberUserId,
+                        Role = OrganizationMemberRole.Member,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor, userId, organizationAccess);
+        var result = await controller.AddMember(
+            organizationId.Value,
+            new OpenGitBase.Api.Models.AddOrganizationMemberRequest
+            {
+                Identifier = "existing",
+                Role = OrganizationMemberRole.Member,
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<ConflictObjectResult>(result);
     }
 
     [Fact]
@@ -652,7 +707,7 @@ public class OrganizationControllerTests
             organizationId.Value,
             new OpenGitBase.Api.Models.AddOrganizationMemberRequest
             {
-                UserId = Guid.NewGuid(),
+                Identifier = "someone",
                 Role = OrganizationMemberRole.Member,
             },
             CancellationToken.None

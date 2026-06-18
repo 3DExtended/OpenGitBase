@@ -4,7 +4,7 @@ namespace OpenGitBase.Api.Models;
 
 public class AddOrganizationMemberRequest
 {
-    public Guid UserId { get; set; }
+    public string Identifier { get; set; } = string.Empty;
 
     public OrganizationMemberRole Role { get; set; } = OrganizationMemberRole.Member;
 }
