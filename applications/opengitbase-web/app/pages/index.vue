@@ -109,7 +109,7 @@ onMounted(async () => {
             v-for="repo in repos"
             :key="repo.id"
             :repo="repo"
-            :owner-slug="auth.user?.username"
+            :owner-slug="repo.ownerSlug"
           />
         </div>
       </section>

@@ -19,4 +19,8 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
     public bool IsPrivate { get; set; } = false;
 
     public long StorageBytesUsed { get; set; }
+
+    public string OwnerKind { get; set; } = "user";
+
+    public string OwnerSlug { get; set; } = string.Empty;
 }

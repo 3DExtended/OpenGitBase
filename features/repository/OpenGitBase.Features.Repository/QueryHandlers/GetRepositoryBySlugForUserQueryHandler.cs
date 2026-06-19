@@ -43,7 +43,16 @@ public class GetRepositoryBySlugForUserQueryHandler
                 )
                 .ConfigureAwait(false);
 
-            return entity == null ? Option.None : Option.From(_mapper.Map<RepositoryDto>(entity));
+            if (entity == null)
+            {
+                return Option.None;
+            }
+
+            var dto = _mapper.Map<RepositoryDto>(entity);
+            await RepositoryOwnerMetadataEnricher
+                .EnrichAsync([dto], context, cancellationToken)
+                .ConfigureAwait(false);
+            return Option.From(dto);
         }
     }
 }

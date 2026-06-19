@@ -46,8 +46,11 @@ public class ListPublicRepositoriesQueryHandler
             .Take(100)
             .ToListAsync(cancellationToken);
 
-        return Option.From<IReadOnlyList<RepositoryDto>>(
-            entities.Select(entity => _mapper.Map<RepositoryDto>(entity)).ToList()
-        );
+        var dtos = entities.Select(entity => _mapper.Map<RepositoryDto>(entity)).ToList();
+        await RepositoryOwnerMetadataEnricher
+            .EnrichAsync(dtos, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From<IReadOnlyList<RepositoryDto>>(dtos);
     }
 }

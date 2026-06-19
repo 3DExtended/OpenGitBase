@@ -51,7 +51,7 @@ public class GetOwnerProfileQueryHandler : IQueryHandler<GetOwnerProfileQuery, O
                     Slug = user.Username,
                     Name = user.Username,
                     Kind = "user",
-                    Repositories = repos.Select(x => _mapper.Map<RepositoryDto>(x)).ToList(),
+                    Repositories = await MapRepositoriesAsync(repos, context, cancellationToken),
                 }
             );
         }
@@ -79,8 +79,21 @@ public class GetOwnerProfileQueryHandler : IQueryHandler<GetOwnerProfileQuery, O
                 Slug = org.Slug,
                 Name = org.Name,
                 Kind = "organization",
-                Repositories = orgRepos.Select(x => _mapper.Map<RepositoryDto>(x)).ToList(),
+                Repositories = await MapRepositoriesAsync(orgRepos, context, cancellationToken),
             }
         );
+    }
+
+    private async Task<IReadOnlyList<RepositoryDto>> MapRepositoriesAsync(
+        IReadOnlyList<RepositoryEntity> entities,
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var repositories = entities.Select(entity => _mapper.Map<RepositoryDto>(entity)).ToList();
+        await RepositoryOwnerMetadataEnricher
+            .EnrichAsync(repositories, context, cancellationToken)
+            .ConfigureAwait(false);
+        return repositories;
     }
 }
