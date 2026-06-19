@@ -100,7 +100,7 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
         os.makedirs(os.path.dirname(physical_path), exist_ok=True)
         subprocess.run(
-            ["git", "init", "--bare", physical_path],
+            ["git", "init", "--bare", "--initial-branch=main", physical_path],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -112,16 +112,18 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             stderr=subprocess.DEVNULL,
         )
         receive_max_bytes = int(data.get("receiveMaxBytes") or 0)
+        git_config_env = {**os.environ, "GIT_DIR": physical_path}
+        subprocess.run(
+            ["git", "config", "http.receivepack", "true"],
+            env=git_config_env,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         if receive_max_bytes > 0:
             subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    physical_path,
-                    "config",
-                    "receive.maxSize",
-                    str(receive_max_bytes),
-                ],
+                ["git", "config", "receive.maxSize", str(receive_max_bytes)],
+                env=git_config_env,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

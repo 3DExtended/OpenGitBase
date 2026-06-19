@@ -8,7 +8,7 @@ cd "${ROOT}"
 
 GIT_HTTP_PORT="${GIT_HTTP_PORT:-8089}"
 API_URL="${API_URL:-http://localhost:${GIT_HTTP_PORT}}"
-TEST_USER="${TEST_USER:-https-git-e2e}"
+TEST_USER="${TEST_USER:-https-git-e2e-$(date +%s)}"
 TEST_PASS="${TEST_PASS:-Password123!}"
 TEST_REPO="${TEST_REPO:-https-e2e-repo}"
 WORK_DIR="$(mktemp -d)"
@@ -27,7 +27,10 @@ curl -fsS -X POST "${API_URL}/api/register/register" \
 JWT=$(curl -fsS -X POST "${API_URL}/api/signin/login" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"${TEST_USER}\",\"password\":\"${TEST_PASS}\"}" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin))')
+  | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); print(json.loads(raw) if raw.startswith("\"") or raw.startswith("{") else raw)')
+
+curl -fsS -X POST "${API_URL}/api/account/debug/verify-email" \
+  -H "Authorization: Bearer ${JWT}" >/dev/null 2>&1 || true
 
 curl -fsS -X POST "${API_URL}/api/repository/${TEST_REPO}" \
   -H "Authorization: Bearer ${JWT}" \

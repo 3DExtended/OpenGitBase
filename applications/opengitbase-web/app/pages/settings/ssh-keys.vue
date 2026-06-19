@@ -118,47 +118,48 @@ onMounted(async () => {
     </UCard>
 
     <template v-else>
-      <template #header>
-        <h2 class="font-semibold">
-          {{ t('settings.sshKeys.addTitle') }}
-        </h2>
-      </template>
-      <form
-        class="space-y-4"
-        @submit.prevent="addKey"
-      >
-        <UFormField
-          :label="t('settings.sshKeys.nameLabel')"
-          required
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('settings.sshKeys.addTitle') }}
+          </h2>
+        </template>
+        <form
+          class="space-y-4"
+          @submit.prevent="addKey"
         >
-          <UInput v-model="name" />
-        </UFormField>
-        <UFormField
-          :label="t('settings.sshKeys.keyLabel')"
-          required
-        >
-          <UTextarea
-            v-model="publicKey"
-            :rows="4"
-            class="font-mono text-xs"
+          <UFormField
+            :label="t('settings.sshKeys.nameLabel')"
+            required
+          >
+            <UInput v-model="name" />
+          </UFormField>
+          <UFormField
+            :label="t('settings.sshKeys.keyLabel')"
+            required
+          >
+            <UTextarea
+              v-model="publicKey"
+              :rows="4"
+              class="font-mono text-xs"
+            />
+          </UFormField>
+          <UAlert
+            v-if="addError"
+            color="error"
+            variant="subtle"
+            :description="addError"
           />
-        </UFormField>
-        <UAlert
-          v-if="addError"
-          color="error"
-          variant="subtle"
-          :description="addError"
-        />
-        <UButton
-          type="submit"
-          :loading="adding"
-        >
-          {{ t('settings.sshKeys.addButton') }}
-        </UButton>
-      </form>
-    </UCard>
+          <UButton
+            type="submit"
+            :loading="adding"
+          >
+            {{ t('settings.sshKeys.addButton') }}
+          </UButton>
+        </form>
+      </UCard>
 
-    <UCard>
+      <UCard>
       <template #header>
         <h2 class="font-semibold">
           {{ t('settings.sshKeys.listTitle') }}
