@@ -70,6 +70,7 @@ public sealed class StorageNodeRegistryController : ControllerBase
                 InternalHost = request.InternalHost,
                 InternalSshPort = request.InternalSshPort,
                 InternalHttpPort = request.InternalHttpPort,
+                InternalGitHttpPort = request.InternalGitHttpPort,
                 FreeBytesAvailable = request.FreeBytesAvailable,
                 TotalBytesAvailable = request.TotalBytesAvailable,
                 EnrollmentToken = enrollmentHeader.ToString(),

@@ -12,6 +12,8 @@ public class StorageNodeDto : ModelBase<StorageNodeId, Guid>
 
     public int InternalHttpPort { get; set; }
 
+    public int InternalGitHttpPort { get; set; } = 8082;
+
     public long FreeBytesAvailable { get; set; }
 
     public long TotalBytesAvailable { get; set; }

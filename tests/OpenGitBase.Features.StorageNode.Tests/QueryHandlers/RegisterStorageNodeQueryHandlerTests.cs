@@ -66,6 +66,12 @@ public class RegisterStorageNodeQueryHandlerTests
         Assert.True(result.IsSome);
         Assert.NotEmpty(result.Get().ApiToken);
         Assert.Equal(30, result.Get().HeartbeatIntervalSeconds);
+
+        await using var verifyContext = await contextFactory.CreateDbContextAsync();
+        var entity = await verifyContext
+            .Set<Entities.StorageNodeEntity>()
+            .SingleAsync(node => node.NodeId == "storage-1");
+        Assert.Equal(8082, entity.InternalGitHttpPort);
     }
 
     [Fact]
