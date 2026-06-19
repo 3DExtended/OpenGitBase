@@ -1,11 +1,14 @@
+# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["OpenGitBase.Dispatcher.csproj", "./"]
-RUN dotnet restore "OpenGitBase.Dispatcher.csproj"
+RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
+    dotnet restore "OpenGitBase.Dispatcher.csproj"
 
 COPY . .
-RUN dotnet publish "OpenGitBase.Dispatcher.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
+    dotnet publish "OpenGitBase.Dispatcher.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

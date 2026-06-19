@@ -10,3 +10,12 @@ tests/
 **/.dart_tool/
 applications/*/build/
 applications/*/.fvm/
+applications/opengitbase-web/node_modules/
+applications/opengitbase-web/.nuxt/
+applications/opengitbase-web/.output/
+applications/opengitbase-web/test-results/
+applications/opengitbase-web/playwright-report/
+docs/
+.agents/
+**/playwright-report/
+**/test-results/

@@ -16,20 +16,23 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
 
 SKIP_TUNNEL_CHECK=false
 ROLL_FLEET=false
+PRUNE_CACHE=false
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--full] [--skip-tunnel-check]
+Usage: $(basename "$0") [--full] [--skip-tunnel-check] [--prune-cache]
 
 Rebuild images and roll services one at a time for zero-downtime updates.
 Compose: docker-compose.yml plus docker-compose.override.yml when present.
 
 By default only API and web replicas are rolled (typical code changes).
 Use --full to also roll storage nodes and dispatchers.
+BuildKit layer and package caches are retained between runs unless --prune-cache is passed.
 
 Options:
   --full                Also roll storage and dispatcher services
   --skip-tunnel-check   Skip Cloudflare tunnel API check when tunnel is running
+  --prune-cache         Prune unused BuildKit cache and dangling images after success
   -h, --help            Show this help
 
 Environment:
@@ -47,6 +50,10 @@ while [ $# -gt 0 ]; do
       ;;
     --skip-tunnel-check)
       SKIP_TUNNEL_CHECK=true
+      shift
+      ;;
+    --prune-cache)
+      PRUNE_CACHE=true
       shift
       ;;
     -h | --help)
@@ -86,28 +93,30 @@ APP_ROLL_SERVICES=(
 
 FLEET_BUILD_SERVICES=(
   storage-1
-  storage-2
   dispatcher-1
-  dispatcher-2
 )
 
 APP_BUILD_SERVICES=(
   api-1
-  api-2
   web-1
-  web-2
 )
 
-declare -A SERVICE_CONTAINERS=(
-  [storage-1]=opengitbase_storage_1
-  [storage-2]=opengitbase_storage_2
-  [dispatcher-1]=opengitbase_dispatcher_1
-  [dispatcher-2]=opengitbase_dispatcher_2
-  [api-1]=opengitbase_api_1
-  [api-2]=opengitbase_api_2
-  [web-1]=opengitbase_web_1
-  [web-2]=opengitbase_web_2
-)
+service_container() {
+  case "$1" in
+    storage-1) echo opengitbase_storage_1 ;;
+    storage-2) echo opengitbase_storage_2 ;;
+    dispatcher-1) echo opengitbase_dispatcher_1 ;;
+    dispatcher-2) echo opengitbase_dispatcher_2 ;;
+    api-1) echo opengitbase_api_1 ;;
+    api-2) echo opengitbase_api_2 ;;
+    web-1) echo opengitbase_web_1 ;;
+    web-2) echo opengitbase_web_2 ;;
+    *)
+      echo "Unknown service: $1" >&2
+      return 1
+      ;;
+  esac
+}
 
 FAILED_STEP=""
 
@@ -152,7 +161,8 @@ container_running() {
 
 wait_for_healthy() {
   local service="$1"
-  local container="${SERVICE_CONTAINERS[$service]}"
+  local container
+  container="$(service_container "${service}")"
   local timeout="${WAIT_TIMEOUT}"
   local elapsed=0
   local status="starting"
@@ -184,7 +194,7 @@ wait_for_healthy() {
 
 roll_service() {
   local service="$1"
-  compose up -d --build --no-deps --remove-orphans "${service}"
+  compose up -d --no-deps --remove-orphans "${service}"
   wait_for_healthy "${service}"
 }
 
@@ -273,8 +283,12 @@ else
   echo "==> Cloudflare tunnel not running; skipping tunnel API check"
 fi
 
-run_step "Prune unused build cache and dangling images" \
-  bash -c 'docker builder prune -f && docker image prune -f'
+if [ "${PRUNE_CACHE}" = true ]; then
+  run_step "Prune unused build cache and dangling images" \
+    bash -c 'docker builder prune -f && docker image prune -f'
+else
+  echo "==> Skipping build cache prune (pass --prune-cache to reclaim disk space)"
+fi
 
 echo ""
 echo "Rolling update completed successfully."

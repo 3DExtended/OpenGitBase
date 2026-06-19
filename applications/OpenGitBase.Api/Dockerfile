@@ -1,4 +1,5 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+﻿# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl openssh-client \
@@ -22,15 +23,27 @@ COPY ["features/repository/OpenGitBase.Features.Repository/OpenGitBase.Features.
 COPY ["features/repository/OpenGitBase.Features.Repository.Contracts/OpenGitBase.Features.Repository.Contracts.csproj", "features/repository/OpenGitBase.Features.Repository.Contracts/"]
 COPY ["features/repository-member/OpenGitBase.Features.RepositoryMember/OpenGitBase.Features.RepositoryMember.csproj", "features/repository-member/OpenGitBase.Features.RepositoryMember/"]
 COPY ["features/repository-member/OpenGitBase.Features.RepositoryMember.Contracts/OpenGitBase.Features.RepositoryMember.Contracts.csproj", "features/repository-member/OpenGitBase.Features.RepositoryMember.Contracts/"]
+COPY ["features/organization/OpenGitBase.Features.Organization/OpenGitBase.Features.Organization.csproj", "features/organization/OpenGitBase.Features.Organization/"]
+COPY ["features/organization/OpenGitBase.Features.Organization.Contracts/OpenGitBase.Features.Organization.Contracts.csproj", "features/organization/OpenGitBase.Features.Organization.Contracts/"]
+COPY ["features/storage-node/OpenGitBase.Features.StorageNode/OpenGitBase.Features.StorageNode.csproj", "features/storage-node/OpenGitBase.Features.StorageNode/"]
+COPY ["features/storage-node/OpenGitBase.Features.StorageNode.Contracts/OpenGitBase.Features.StorageNode.Contracts.csproj", "features/storage-node/OpenGitBase.Features.StorageNode.Contracts/"]
+COPY ["features/git-access-token/OpenGitBase.Features.GitAccessToken/OpenGitBase.Features.GitAccessToken.csproj", "features/git-access-token/OpenGitBase.Features.GitAccessToken/"]
+COPY ["features/git-access-token/OpenGitBase.Features.GitAccessToken.Contracts/OpenGitBase.Features.GitAccessToken.Contracts.csproj", "features/git-access-token/OpenGitBase.Features.GitAccessToken.Contracts/"]
 
-RUN dotnet restore "applications/OpenGitBase.Api/OpenGitBase.Api.csproj"
+RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
+    dotnet restore "applications/OpenGitBase.Api/OpenGitBase.Api.csproj"
 
-COPY . .
+COPY stylecop.json pesser-Default.ruleset ./
+COPY common/ common/
+COPY features/ features/
+COPY applications/OpenGitBase.Api/ applications/OpenGitBase.Api/
 WORKDIR "/src/applications/OpenGitBase.Api"
-RUN dotnet build "OpenGitBase.Api.csproj" -c Release -o /app/build
+RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
+    dotnet build "OpenGitBase.Api.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "OpenGitBase.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
+    dotnet publish "OpenGitBase.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app

@@ -12,7 +12,7 @@ x-api-environment: &api-environment
   Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
   Debug__Features__EmailVerification: "true"
   GIT_SSH_ENABLED: "false"
-  Git__PublicBaseUrl: "http://localhost:8089"
+  Git__PublicBaseUrl: "https://opengitbase.com"
 
 x-api-common: &api-common
   <<: *api-image
@@ -35,9 +35,13 @@ x-web-build: &web-build
     NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
     NUXT_PUBLIC_API_BASE: /api
 
-x-web-common: &web-common
-  restart: unless-stopped
+x-web-image: &web-image
+  image: opengitbase-web
   build: *web-build
+
+x-web-common: &web-common
+  <<: *web-image
+  restart: unless-stopped
   depends_on:
     ssh-lb:
       condition: service_started
@@ -51,6 +55,50 @@ x-web-common: &web-common
     timeout: 5s
     retries: 5
     start_period: 10s
+
+x-storage-build: &storage-build
+  context: ./applications/repo-storage-layer
+  dockerfile: Dockerfile
+
+x-storage-common: &storage-common
+  image: opengitbase-storage
+  restart: unless-stopped
+  build: *storage-build
+  depends_on:
+    api-1:
+      condition: service_healthy
+    api-2:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null && pgrep -x nginx > /dev/null"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 30s
+
+x-dispatcher-build: &dispatcher-build
+  context: ./applications/OpenGitBase.Dispatcher
+  dockerfile: Dockerfile
+
+x-dispatcher-common: &dispatcher-common
+  image: opengitbase-dispatcher
+  restart: unless-stopped
+  build: *dispatcher-build
+  depends_on:
+    api-1:
+      condition: service_healthy
+    api-2:
+      condition: service_healthy
+    storage-1:
+      condition: service_healthy
+    storage-2:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
+    interval: 5s
+    timeout: 3s
+    retries: 5
+    start_period: 5s
 
 services:
 
@@ -74,22 +122,8 @@ services:
           - api-lb
 
   storage-1:
+    <<: *storage-common
     container_name: opengitbase_storage_1
-    restart: unless-stopped
-    build:
-      context: ./applications/repo-storage-layer
-      dockerfile: Dockerfile
-    depends_on:
-      api-1:
-        condition: service_healthy
-      api-2:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null && pgrep -x nginx > /dev/null"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 30s
     environment:
       STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-1"
@@ -105,22 +139,8 @@ services:
       - ./docker/pki/storage-1.key:/etc/opengitbase/node.key:ro
 
   storage-2:
+    <<: *storage-common
     container_name: opengitbase_storage_2
-    restart: unless-stopped
-    build:
-      context: ./applications/repo-storage-layer
-      dockerfile: Dockerfile
-    depends_on:
-      api-1:
-        condition: service_healthy
-      api-2:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null && pgrep -x nginx > /dev/null"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 30s
     environment:
       STORAGE_API_URL: "http://api-lb:8080"
       STORAGE_NODE_ID: "storage-2"
@@ -136,28 +156,10 @@ services:
       - ./docker/pki/storage-2.key:/etc/opengitbase/node.key:ro
 
   dispatcher-1:
+    <<: *dispatcher-common
     container_name: opengitbase_dispatcher_1
-    restart: unless-stopped
-    build:
-      context: ./applications/OpenGitBase.Dispatcher
-      dockerfile: Dockerfile
-    depends_on:
-      api-1:
-        condition: service_healthy
-      api-2:
-        condition: service_healthy
-      storage-1:
-        condition: service_healthy
-      storage-2:
-        condition: service_healthy
     ports:
       - "8822:8082"
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
     environment:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
@@ -169,26 +171,8 @@ services:
       FLEET_BOOTSTRAP_TOKEN: ""
 
   dispatcher-2:
+    <<: *dispatcher-common
     container_name: opengitbase_dispatcher_2
-    restart: unless-stopped
-    build:
-      context: ./applications/OpenGitBase.Dispatcher
-      dockerfile: Dockerfile
-    depends_on:
-      api-1:
-        condition: service_healthy
-      api-2:
-        condition: service_healthy
-      storage-1:
-        condition: service_healthy
-      storage-2:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
     environment:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
