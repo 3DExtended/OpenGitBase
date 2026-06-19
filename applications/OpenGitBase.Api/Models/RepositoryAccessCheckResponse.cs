@@ -13,4 +13,6 @@ public sealed class RepositoryAccessCheckResponse
     public string? StorageNodeInternalHost { get; init; }
 
     public int? StorageNodeInternalSshPort { get; init; }
+
+    public int? StorageNodeInternalGitHttpPort { get; init; }
 }

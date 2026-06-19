@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Fetch dispatcher SSH private key from API fleet bootstrap and start sshd.
+# Fetch dispatcher SSH private key from API fleet bootstrap, start Smart HTTP, and optional sshd.
 set -euo pipefail
 
 API_URL="${DISPATCHER_API_URL:-http://api:8080}"
 FLEET_BOOTSTRAP_TOKEN="${FLEET_BOOTSTRAP_TOKEN:-}"
 PRIVATE_KEY_PATH="${DISPATCHER_STORAGE_SSH_KEY_PATH:-/run/secrets/dispatcher_storage_ssh}"
+GIT_SSH_ENABLED="${GIT_SSH_ENABLED:-false}"
 
 mkdir -p /var/run/sshd
 
@@ -20,4 +21,18 @@ if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -f "${PRIVATE_KEY_PATH}" ]; then
   chmod 600 "${PRIVATE_KEY_PATH}"
 fi
 
-exec /usr/sbin/sshd -D -e
+dotnet /app/OpenGitBase.Dispatcher.dll --serve-http &
+DISPATCHER_HTTP_PID=$!
+
+cleanup() {
+  if kill -0 "${DISPATCHER_HTTP_PID}" 2>/dev/null; then
+    kill "${DISPATCHER_HTTP_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+if [ "${GIT_SSH_ENABLED}" = "true" ]; then
+  exec /usr/sbin/sshd -D -e
+fi
+
+wait "${DISPATCHER_HTTP_PID}"

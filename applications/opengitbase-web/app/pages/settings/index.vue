@@ -4,6 +4,7 @@ definePageMeta({ middleware: 'auth' })
 const { t } = useI18n()
 const auth = useAuth()
 const api = useApi()
+const { config: gitConfig, load: loadGitConfig } = useGitConfig()
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -18,6 +19,10 @@ const deleteBlockers = ref<Array<{ type: string, name: string, slug: string }>>(
 const showDeleteConfirm = ref(false)
 
 useHead({ title: t('settings.title') })
+
+onMounted(() => {
+  void loadGitConfig()
+})
 
 async function changePassword() {
   changeLoading.value = true
@@ -109,12 +114,27 @@ async function deleteAccount() {
       </dl>
       <EmailVerificationDebugPanel />
       <template #footer>
-        <UButton
-          to="/settings/ssh-keys"
-          variant="soft"
+        <div class="flex flex-wrap gap-2">
+          <UButton
+            to="/settings/access-tokens"
+            variant="soft"
+          >
+            {{ t('settings.accessTokens.link') }}
+          </UButton>
+          <UButton
+            v-if="gitConfig?.sshEnabled"
+            to="/settings/ssh-keys"
+            variant="ghost"
+          >
+            {{ t('settings.sshKeys.link') }}
+          </UButton>
+        </div>
+        <p
+          v-if="gitConfig && !gitConfig.sshEnabled"
+          class="mt-3 text-sm text-[var(--ogb-text-muted)]"
         >
-          {{ t('settings.sshKeys.link') }}
-        </UButton>
+          {{ t('settings.sshKeys.disabledHint') }}
+        </p>
       </template>
     </UCard>
 

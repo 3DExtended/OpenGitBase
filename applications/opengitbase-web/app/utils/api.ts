@@ -104,6 +104,27 @@ export interface PublicGitSshKey {
   ownerUserId?: string
 }
 
+export interface GitConfig {
+  gitBaseUrl: string
+  sshEnabled: boolean
+}
+
+export interface GitAccessToken {
+  id: string
+  name: string
+  scope: string
+  createdAt: string
+  expiresAt?: string | null
+  revokedAt?: string | null
+  ownerUserId?: string
+}
+
+export interface CreateGitAccessTokenResult {
+  id: string
+  token: string
+  metadata: GitAccessToken
+}
+
 export interface RepositoryMember {
   id: string
   repositoryId: string
@@ -210,6 +231,18 @@ function normalizeSshKey(raw: Record<string, unknown>): PublicGitSshKey {
     name: String(raw.name ?? ''),
     publicSSHKey: String(raw.publicSSHKey ?? raw.publicSshKey ?? ''),
     fingerprint: raw.fingerprint ? String(raw.fingerprint) : undefined,
+    ownerUserId: raw.ownerUserId ? normalizeId(raw.ownerUserId) : undefined,
+  }
+}
+
+function normalizeGitAccessToken(raw: Record<string, unknown>): GitAccessToken {
+  return {
+    id: normalizeId(raw.id),
+    name: String(raw.name ?? ''),
+    scope: String(raw.scope ?? ''),
+    createdAt: String(raw.createdAt ?? ''),
+    expiresAt: raw.expiresAt ? String(raw.expiresAt) : null,
+    revokedAt: raw.revokedAt ? String(raw.revokedAt) : null,
     ownerUserId: raw.ownerUserId ? normalizeId(raw.ownerUserId) : undefined,
   }
 }
@@ -532,6 +565,60 @@ export function createApi(baseUrl: string) {
 
       delete: (id: string) =>
         request<null>(`/public-git-ssh-key/${id}`, { method: 'DELETE' }),
+    },
+
+    git: {
+      getConfig: async () => {
+        const result = await request<Record<string, unknown>>('/v1/git/config')
+        if (!result.data) {
+          return { ...result, data: null } satisfies ApiResult<GitConfig>
+        }
+        return {
+          ...result,
+          data: {
+            gitBaseUrl: String(result.data.gitBaseUrl ?? ''),
+            sshEnabled: Boolean(result.data.sshEnabled),
+          },
+        }
+      },
+    },
+
+    accessTokens: {
+      list: async () => {
+        const result = await request<Record<string, unknown>[]>('/git-access-token')
+        return {
+          ...result,
+          data: result.data?.map(normalizeGitAccessToken) ?? null,
+        }
+      },
+
+      create: async (body: {
+        name: string
+        scope: string
+        expiresAt?: string | null
+        neverExpires?: boolean
+      }) => {
+        const result = await request<Record<string, unknown>>('/git-access-token', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+        if (!result.data) {
+          return { ...result, data: null } satisfies ApiResult<CreateGitAccessTokenResult>
+        }
+        return {
+          ...result,
+          data: {
+            id: normalizeId(result.data.id),
+            token: String(result.data.token ?? ''),
+            metadata: normalizeGitAccessToken(
+              (result.data.metadata as Record<string, unknown> | undefined) ?? result.data,
+            ),
+          },
+        }
+      },
+
+      delete: (id: string) =>
+        request<null>(`/git-access-token/${id}`, { method: 'DELETE' }),
     },
 
     discovery: {

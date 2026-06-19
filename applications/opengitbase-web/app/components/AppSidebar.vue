@@ -10,19 +10,34 @@ defineEmits<{
 const { t } = useI18n()
 const auth = useAuth()
 const route = useRoute()
+const { config: gitConfig, load: loadGitConfig } = useGitConfig()
+
+onMounted(() => {
+  void loadGitConfig()
+})
 
 const navItems = computed(() => {
   if (!auth.isAuthenticated) {
     return []
   }
-  return [
+  const items = [
     { label: t('dashboard.repositories'), to: '/', icon: 'i-lucide-layout-dashboard' },
     { label: t('repo.create.title'), to: '/repos/new', icon: 'i-lucide-plus' },
     { label: t('org.create.title'), to: '/orgs/new', icon: 'i-lucide-building-2' },
     { label: t('settings.title'), to: '/settings', icon: 'i-lucide-settings' },
-    { label: t('settings.sshKeys.title'), to: '/settings/ssh-keys', icon: 'i-lucide-key' },
-    ...(auth.isAdmin ? [{ label: t('admin.nav'), to: '/admin', icon: 'i-lucide-shield' }] : []),
+    { label: t('settings.accessTokens.link'), to: '/settings/access-tokens', icon: 'i-lucide-key-round' },
   ]
+  if (gitConfig.value?.sshEnabled) {
+    items.push({
+      label: t('settings.sshKeys.title'),
+      to: '/settings/ssh-keys',
+      icon: 'i-lucide-key',
+    })
+  }
+  if (auth.isAdmin) {
+    items.push({ label: t('admin.nav'), to: '/admin', icon: 'i-lucide-shield' })
+  }
+  return items
 })
 
 function isActive(to: string) {

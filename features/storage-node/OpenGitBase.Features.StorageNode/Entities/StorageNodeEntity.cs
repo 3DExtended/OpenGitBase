@@ -14,6 +14,8 @@ public class StorageNodeEntity : IIdentifiableEntity<Guid>
 
     public int InternalHttpPort { get; set; }
 
+    public int InternalGitHttpPort { get; set; } = 8082;
+
     public string ApiTokenHash { get; set; } = string.Empty;
 
     public string ApiTokenProtected { get; set; } = string.Empty;

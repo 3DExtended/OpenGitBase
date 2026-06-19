@@ -7,6 +7,7 @@ using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.GitAccessToken.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
@@ -85,6 +86,139 @@ public class RepositoryAccessChecksControllerTests
         Assert.True(
             details.Errors.ContainsKey(nameof(RepositoryAccessCheckRequest.RepositoryPath))
         );
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenBothCredentialsProvided_ReturnsValidationProblem()
+    {
+        var controller = CreateController();
+
+        var result = await controller.CheckRepositoryAccess(
+            new RepositoryAccessCheckRequest
+            {
+                PublicKey = SamplePublicKey,
+                AccessToken = "ogb_test",
+                RepositoryPath = "alice/repo",
+                Operation = RepositoryOperation.ReadGit,
+            },
+            CancellationToken.None
+        );
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var details = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.True(details.Errors.ContainsKey(nameof(RepositoryAccessCheckRequest.PublicKey)));
+        Assert.True(details.Errors.ContainsKey(nameof(RepositoryAccessCheckRequest.AccessToken)));
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenAccessTokenInvalid_ReturnsDenied()
+    {
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<ValidateGitAccessTokenQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Option<ValidateGitAccessTokenResult>.None);
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(
+            ValidTokenRequest(),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("Access token is invalid or expired.", response.Reason);
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenReadTokenDeniesWrite_ReturnsDenied()
+    {
+        var authenticatingUserId = UserId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureTokenValidation(
+            queryProcessor,
+            authenticatingUserId,
+            GitAccessTokenScopes.Read
+        );
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(
+            ValidTokenRequest(operation: RepositoryOperation.WriteGit),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal(authenticatingUserId.Value, response.ResolvedUserId);
+        Assert.Equal("Token does not allow write access.", response.Reason);
+    }
+
+    [Theory]
+    [InlineData(RepositoryOperation.ReadGit, GitAccessTokenScopes.Read)]
+    [InlineData(RepositoryOperation.WriteGit, GitAccessTokenScopes.Write)]
+    public async Task CheckRepositoryAccess_WhenOwnerWithValidToken_AllowsOperation(
+        RepositoryOperation operation,
+        string scope
+    )
+    {
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureTokenValidation(queryProcessor, ownerUserId, scope);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(ownerUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = ownerUserId,
+                        Slug = "repo",
+                        Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new StorageNodeDto
+                    {
+                        Id = storageNodeId,
+                        NodeId = "storage-1",
+                        InternalHost = "storage-1",
+                        InternalSshPort = 22,
+                        InternalGitHttpPort = 8082,
+                        IsHealthy = true,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(
+            ValidTokenRequest(operation: operation),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.True(response.Allowed);
+        Assert.Equal("storage-1", response.StorageNodeInternalHost);
+        Assert.Equal(22, response.StorageNodeInternalSshPort);
+        Assert.Equal(8082, response.StorageNodeInternalGitHttpPort);
     }
 
     [Fact]
@@ -211,6 +345,7 @@ public class RepositoryAccessChecksControllerTests
                         NodeId = "storage-1",
                         InternalHost = "storage-1",
                         InternalSshPort = 22,
+                        InternalGitHttpPort = 8082,
                         IsHealthy = true,
                     }
                 )
@@ -229,6 +364,7 @@ public class RepositoryAccessChecksControllerTests
         Assert.Equal($"/srv/git/{repositoryId.Value}.git", response.PhysicalPath);
         Assert.Equal("storage-1", response.StorageNodeInternalHost);
         Assert.Equal(22, response.StorageNodeInternalSshPort);
+        Assert.Equal(8082, response.StorageNodeInternalGitHttpPort);
 
         await queryProcessor
             .DidNotReceive()
@@ -456,6 +592,28 @@ public class RepositoryAccessChecksControllerTests
         return sshKeyService;
     }
 
+    private static void ConfigureTokenValidation(
+        IQueryProcessor queryProcessor,
+        UserId authenticatingUserId,
+        string scope
+    )
+    {
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<ValidateGitAccessTokenQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                Option.From(
+                    new ValidateGitAccessTokenResult
+                    {
+                        UserId = authenticatingUserId,
+                        Scope = scope,
+                    }
+                )
+            );
+    }
+
     private static void ConfigureFingerprintLookup(
         IQueryProcessor queryProcessor,
         UserId authenticatingUserId
@@ -506,11 +664,24 @@ public class RepositoryAccessChecksControllerTests
                         NodeId = "storage-1",
                         InternalHost = "storage-1",
                         InternalSshPort = 22,
+                        InternalGitHttpPort = 8082,
                         IsHealthy = true,
                     }
                 )
             );
     }
+
+    private static RepositoryAccessCheckRequest ValidTokenRequest(
+        string accessToken = "ogb_test_token",
+        string repositoryPath = "alice/repo",
+        RepositoryOperation operation = RepositoryOperation.ReadGit
+    ) =>
+        new()
+        {
+            AccessToken = accessToken,
+            RepositoryPath = repositoryPath,
+            Operation = operation,
+        };
 
     private static RepositoryAccessCheckRequest ValidRequest(
         string publicKey = SamplePublicKey,

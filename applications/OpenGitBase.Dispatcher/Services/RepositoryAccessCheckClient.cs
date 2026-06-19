@@ -9,26 +9,52 @@ public sealed class RepositoryAccessCheckClient
     private readonly HttpClient _httpClient;
     private readonly DispatcherOptions _options;
 
-    public RepositoryAccessCheckClient(HttpClient httpClient, Microsoft.Extensions.Options.IOptions<DispatcherOptions> options)
+    public RepositoryAccessCheckClient(
+        HttpClient httpClient,
+        Microsoft.Extensions.Options.IOptions<DispatcherOptions> options
+    )
     {
         _httpClient = httpClient;
         _options = options.Value;
     }
 
-    public async Task<RepositoryAccessCheckResponse> CheckAsync(
+    public Task<RepositoryAccessCheckResponse> CheckWithPublicKeyAsync(
         string publicKey,
         string repositoryPath,
         RepositoryOperation operation,
         CancellationToken cancellationToken
+    ) =>
+        CheckAsync(
+            new RepositoryAccessCheckRequest
+            {
+                PublicKey = publicKey,
+                RepositoryPath = repositoryPath,
+                Operation = operation,
+            },
+            cancellationToken
+        );
+
+    public Task<RepositoryAccessCheckResponse> CheckWithTokenAsync(
+        string accessToken,
+        string repositoryPath,
+        RepositoryOperation operation,
+        CancellationToken cancellationToken
+    ) =>
+        CheckAsync(
+            new RepositoryAccessCheckRequest
+            {
+                AccessToken = accessToken,
+                RepositoryPath = repositoryPath,
+                Operation = operation,
+            },
+            cancellationToken
+        );
+
+    private async Task<RepositoryAccessCheckResponse> CheckAsync(
+        RepositoryAccessCheckRequest request,
+        CancellationToken cancellationToken
     )
     {
-        var request = new RepositoryAccessCheckRequest
-        {
-            PublicKey = publicKey,
-            RepositoryPath = repositoryPath,
-            Operation = operation,
-        };
-
         using var response = await _httpClient.PostAsJsonAsync(
             $"{_options.ApiUrl.TrimEnd('/')}/api/v1/access-checks/repositories",
             request,

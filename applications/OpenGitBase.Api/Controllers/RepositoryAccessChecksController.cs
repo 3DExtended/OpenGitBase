@@ -5,6 +5,7 @@ using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.GitAccessToken.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
@@ -46,9 +47,14 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        if (string.IsNullOrWhiteSpace(request.PublicKey))
+        var hasPublicKey = !string.IsNullOrWhiteSpace(request.PublicKey);
+        var hasAccessToken = !string.IsNullOrWhiteSpace(request.AccessToken);
+        if (hasPublicKey == hasAccessToken)
         {
-            ModelState.AddModelError(nameof(request.PublicKey), "PublicKey is required.");
+            const string credentialMessage =
+                "Exactly one of PublicKey or AccessToken must be provided.";
+            ModelState.AddModelError(nameof(request.PublicKey), credentialMessage);
+            ModelState.AddModelError(nameof(request.AccessToken), credentialMessage);
         }
 
         if (string.IsNullOrWhiteSpace(request.RepositoryPath))
@@ -98,34 +104,78 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             return LogValidationFailureAndReturn(request);
         }
 
-        string fingerprint;
-        try
-        {
-            fingerprint =
-                _sshKeyService.ValidateAndGetFingerprint(request.PublicKey)
-                ?? throw new ArgumentException("Invalid SSH public key.");
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(nameof(request.PublicKey), ex.Message);
-            return LogValidationFailureAndReturn(request);
-        }
-
         var username = pathParts[0];
         var repositorySlug = pathParts[1];
 
-        var authenticatingUserId = await _queryProcessor.RunQueryAsync(
-            new GetUserIdBySshKeyFingerprintQuery { Fingerprint = fingerprint },
-            cancellationToken
-        );
-        if (authenticatingUserId.IsNone)
+        Option<UserId> authenticatingUserId;
+        string? accessTokenScope = null;
+
+        if (hasPublicKey)
+        {
+            string fingerprint;
+            try
+            {
+                fingerprint =
+                    _sshKeyService.ValidateAndGetFingerprint(request.PublicKey)
+                    ?? throw new ArgumentException("Invalid SSH public key.");
+            }
+            catch (ArgumentException ex)
+            {
+                ModelState.AddModelError(nameof(request.PublicKey), ex.Message);
+                return LogValidationFailureAndReturn(request);
+            }
+
+            authenticatingUserId = await _queryProcessor.RunQueryAsync(
+                new GetUserIdBySshKeyFingerprintQuery { Fingerprint = fingerprint },
+                cancellationToken
+            );
+            if (authenticatingUserId.IsNone)
+            {
+                return OkWithLog(
+                    request,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = false,
+                        Reason = "SSH public key is not registered.",
+                    }
+                );
+            }
+        }
+        else
+        {
+            var tokenValidation = await _queryProcessor.RunQueryAsync(
+                new ValidateGitAccessTokenQuery { Token = request.AccessToken },
+                cancellationToken
+            );
+            if (tokenValidation.IsNone)
+            {
+                return OkWithLog(
+                    request,
+                    new RepositoryAccessCheckResponse
+                    {
+                        Allowed = false,
+                        Reason = "Access token is invalid or expired.",
+                    }
+                );
+            }
+
+            accessTokenScope = tokenValidation.Get().Scope;
+            authenticatingUserId = Option.From(tokenValidation.Get().UserId);
+        }
+
+        if (
+            accessTokenScope is not null
+            && request.Operation == RepositoryOperation.WriteGit
+            && accessTokenScope == GitAccessTokenScopes.Read
+        )
         {
             return OkWithLog(
                 request,
                 new RepositoryAccessCheckResponse
                 {
                     Allowed = false,
-                    Reason = "SSH public key is not registered.",
+                    ResolvedUserId = authenticatingUserId.Get().Value,
+                    Reason = "Token does not allow write access.",
                 }
             );
         }
@@ -341,6 +391,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             PhysicalPath = repositoryDto.PhysicalPath,
             StorageNodeInternalHost = node.InternalHost,
             StorageNodeInternalSshPort = node.InternalSshPort,
+            StorageNodeInternalGitHttpPort = node.InternalGitHttpPort,
         };
     }
 

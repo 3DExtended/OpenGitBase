@@ -11,6 +11,8 @@ x-api-environment: &api-environment
   ASPNETCORE_URLS: http://+:8080
   Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
   Debug__Features__EmailVerification: "true"
+  GIT_SSH_ENABLED: "false"
+  Git__PublicBaseUrl: "http://localhost:8089"
 
 x-api-common: &api-common
   <<: *api-image
@@ -62,9 +64,8 @@ services:
       api-2:
         condition: service_healthy
     ports:
-      - "2211:22"
       - "8089:8080"
-      - "3000:8081"
+      - "3000:8080"
     volumes:
       - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     networks:
@@ -84,7 +85,7 @@ services:
       api-2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null && pgrep -x nginx > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -94,6 +95,8 @@ services:
       STORAGE_NODE_ID: "storage-1"
       STORAGE_INTERNAL_HOST: "storage-1"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
+      STORAGE_INTERNAL_GIT_HTTP_PORT: "8082"
+      STORAGE_GIT_HTTP_PORT: "8082"
       STORAGE_ENROLLMENT_TOKEN: ""
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
@@ -113,7 +116,7 @@ services:
       api-2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f storage-http-server.py > /dev/null && pgrep -x nginx > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -123,6 +126,8 @@ services:
       STORAGE_NODE_ID: "storage-2"
       STORAGE_INTERNAL_HOST: "storage-2"
       STORAGE_INTERNAL_HTTP_PORT: "8081"
+      STORAGE_INTERNAL_GIT_HTTP_PORT: "8082"
+      STORAGE_GIT_HTTP_PORT: "8082"
       STORAGE_ENROLLMENT_TOKEN: ""
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
@@ -145,8 +150,10 @@ services:
         condition: service_healthy
       storage-2:
         condition: service_healthy
+    ports:
+      - "8822:8082"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -155,8 +162,10 @@ services:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-1"
+      Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
+      GIT_SSH_ENABLED: "false"
       FLEET_BOOTSTRAP_TOKEN: ""
 
   dispatcher-2:
@@ -175,7 +184,7 @@ services:
       storage-2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -184,8 +193,10 @@ services:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-2"
+      Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
+      GIT_SSH_ENABLED: "false"
       FLEET_BOOTSTRAP_TOKEN: ""
 
   postgres:
@@ -246,7 +257,9 @@ services:
       web-2:
         condition: service_started
     restart: always
-    command: tunnel --no-autoupdate run --url http://api-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+    # Unified HTTP frontend (API + Git Smart HTTP + web UI). In Cloudflare, route
+    # opengitbase.com and www.opengitbase.com to this tunnel; git paths on www redirect to apex.
+    command: tunnel --no-autoupdate run --url http://ssh-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
 
 volumes:
   opengitbase_pgdata:

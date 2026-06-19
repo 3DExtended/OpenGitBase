@@ -142,12 +142,35 @@
       "title": "SSH keys",
       "subtitle": "Manage SSH public keys used for Git authentication.",
       "link": "SSH keys",
+      "disabledTitle": "SSH Git is disabled",
+      "disabledHint": "This instance uses HTTPS and personal access tokens for Git. Contact your operator to enable SSH.",
       "addTitle": "Add SSH key",
       "nameLabel": "Key name",
       "keyLabel": "Public key",
       "addButton": "Add key",
       "listTitle": "Your keys",
       "empty": "No SSH keys yet."
+    },
+    "accessTokens": {
+      "title": "Personal access tokens",
+      "subtitle": "Create tokens for Git over HTTPS (use the token as your Git password).",
+      "link": "Access tokens",
+      "addTitle": "New token",
+      "nameLabel": "Token name",
+      "scopeLabel": "Scope",
+      "scopeRead": "Read (clone, fetch, pull)",
+      "scopeWrite": "Write (includes push)",
+      "neverExpires": "Never expires",
+      "addButton": "Create token",
+      "listTitle": "Your tokens",
+      "empty": "No access tokens yet.",
+      "revoked": "Revoked",
+      "expires": "Expires {date}",
+      "noExpiry": "No expiration",
+      "createdTokenTitle": "Copy your token now",
+      "createdTokenHint": "You won't be able to see this token again. Use it as the password when Git prompts for credentials over HTTPS.",
+      "copyToken": "Copy token",
+      "copied": "Copied"
     }
   },
   "dashboard": {
@@ -229,7 +252,9 @@
     },
     "overview": {
       "title": "Repository",
-      "cloneTitle": "Clone with SSH",
+      "httpsCloneTitle": "Clone with HTTPS",
+      "httpsHint": "Use a personal access token as your Git password. Create one in",
+      "sshCloneTitle": "Clone with SSH",
       "sshHint": "Add an SSH key in"
     },
     "settings": {

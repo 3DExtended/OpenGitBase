@@ -213,7 +213,7 @@ verify_lb_api_health() {
 }
 
 verify_lb_web() {
-  lb_http_check "http://api-lb:8081/" "${WEB_URL}/"
+  lb_http_check "http://api-lb:8080/" "${WEB_URL}/"
 }
 
 echo "==> Zero-downtime rolling Docker Compose update"
@@ -263,8 +263,8 @@ run_step "Verify web UI via load balancer" \
   verify_lb_web
 
 if [ "${SKIP_TUNNEL_CHECK}" = false ] && container_running opengitbase_cloudflare_tunnel; then
-  run_step "Verify API via Cloudflare tunnel target (api-lb:8080)" \
-    lb_http_check "http://api-lb:8080/health" "${API_URL}/health"
+  run_step "Verify API via Cloudflare tunnel target (ssh-lb:8080)" \
+    lb_http_check "http://ssh-lb:8080/health" "${API_URL}/health"
 elif [ "${SKIP_TUNNEL_CHECK}" = true ]; then
   echo "==> Skipping Cloudflare tunnel API check (--skip-tunnel-check)"
 else

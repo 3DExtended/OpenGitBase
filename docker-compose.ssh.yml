@@ -1,0 +1,24 @@
+# Optional SSH git profile: docker compose -f docker-compose.yml -f docker-compose.ssh.yml --profile ssh up -d
+services:
+  ssh-tcp-lb:
+    profiles: [ssh]
+    image: haproxy:3.2
+    container_name: opengitbase_ssh_tcp_lb
+    restart: unless-stopped
+    depends_on:
+      dispatcher-1:
+        condition: service_healthy
+      dispatcher-2:
+        condition: service_healthy
+    ports:
+      - "2211:22"
+    volumes:
+      - ./docker/haproxy/haproxy-ssh.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+  dispatcher-1:
+    environment:
+      GIT_SSH_ENABLED: "true"
+
+  dispatcher-2:
+    environment:
+      GIT_SSH_ENABLED: "true"

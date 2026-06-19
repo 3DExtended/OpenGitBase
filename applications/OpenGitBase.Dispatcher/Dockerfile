@@ -7,7 +7,7 @@ RUN dotnet restore "OpenGitBase.Dispatcher.csproj"
 COPY . .
 RUN dotnet publish "OpenGitBase.Dispatcher.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 RUN apt-get update \
@@ -28,6 +28,6 @@ RUN chmod +x /app/ssh-auth-hook.sh /app/dispatcher-wrapper.sh /app/entrypoint.sh
 
 COPY --from=build /app/publish .
 
-EXPOSE 22
+EXPOSE 22 8082
 
 CMD ["/app/entrypoint.sh"]

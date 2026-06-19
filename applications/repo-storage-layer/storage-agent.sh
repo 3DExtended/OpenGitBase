@@ -9,6 +9,7 @@ NODE_ID="${STORAGE_NODE_ID:-${HOSTNAME:-storage}}"
 INTERNAL_HOST="${STORAGE_INTERNAL_HOST:-${HOSTNAME:-storage}}"
 INTERNAL_SSH_PORT="${STORAGE_INTERNAL_SSH_PORT:-22}"
 INTERNAL_HTTP_PORT="${STORAGE_INTERNAL_HTTP_PORT:-8081}"
+INTERNAL_GIT_HTTP_PORT="${STORAGE_INTERNAL_GIT_HTTP_PORT:-8082}"
 TOKEN_FILE="${STORAGE_TOKEN_FILE:-/var/lib/opengitbase/api-token}"
 HEARTBEAT_INTERVAL="${STORAGE_HEARTBEAT_INTERVAL:-30}"
 ENROLLMENT_TOKEN="${STORAGE_ENROLLMENT_TOKEN:-}"
@@ -44,6 +45,7 @@ register_node() {
   "internalHost": "${INTERNAL_HOST}",
   "internalSshPort": ${INTERNAL_SSH_PORT},
   "internalHttpPort": ${INTERNAL_HTTP_PORT},
+  "internalGitHttpPort": ${INTERNAL_GIT_HTTP_PORT},
   "freeBytesAvailable": ${free:-0},
   "totalBytesAvailable": ${total:-0}
 }

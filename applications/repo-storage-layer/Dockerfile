@@ -6,6 +6,7 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git openssh-server ca-certificates python3 curl openssl \
+    nginx-light fcgiwrap spawn-fcgi \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -21,9 +22,12 @@ COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY storage-agent.sh /usr/local/bin/storage-agent.sh
 COPY storage-http-server.py /usr/local/bin/storage-http-server.py
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh /usr/local/bin/storage-http-server.py
+COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
+COPY nginx-git-http.conf /etc/opengitbase/nginx-git-http.conf
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh \
+    /usr/local/bin/storage-http-server.py /usr/local/bin/storage-git-http.sh
 
-EXPOSE 22 8081
+EXPOSE 22 8081 8082
 VOLUME ["/home/git/.ssh", "/srv/git"]
 
 CMD ["/usr/local/bin/entrypoint.sh"]

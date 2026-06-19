@@ -22,6 +22,54 @@ namespace OpenGitBase.Common.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("OpenGitBase.Features.GitAccessToken.Entities.GitAccessTokenEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("TokenLookupHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TokenLookupHash")
+                        .IsUnique();
+
+                    b.ToTable("GitAccessToken", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -315,6 +363,9 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<long>("FreeBytesAvailable")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("InternalGitHttpPort")
+                        .HasColumnType("integer");
+
                     b.Property<string>("InternalHost")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -438,6 +489,17 @@ namespace OpenGitBase.Common.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.GitAccessToken.Entities.GitAccessTokenEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OwnerUser");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationEntity", b =>

@@ -10,6 +10,8 @@ public sealed class RegisterStorageNodeRequest
 
     public int InternalHttpPort { get; init; }
 
+    public int InternalGitHttpPort { get; init; } = 8082;
+
     public long FreeBytesAvailable { get; init; }
 
     public long TotalBytesAvailable { get; init; }

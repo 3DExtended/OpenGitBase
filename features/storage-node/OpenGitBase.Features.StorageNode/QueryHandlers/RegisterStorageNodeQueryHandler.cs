@@ -92,6 +92,7 @@ public sealed class RegisterStorageNodeQueryHandler
                 InternalHost = query.InternalHost.Trim(),
                 InternalSshPort = query.InternalSshPort,
                 InternalHttpPort = query.InternalHttpPort,
+                InternalGitHttpPort = query.InternalGitHttpPort > 0 ? query.InternalGitHttpPort : 8082,
                 ApiTokenHash = _passwordHasherService.HashPassword(apiToken),
                 ApiTokenProtected = _emailProtectionService.EncryptSecret(apiToken),
                 FreeBytesAvailable = query.FreeBytesAvailable,
@@ -118,6 +119,8 @@ public sealed class RegisterStorageNodeQueryHandler
             existing.InternalHost = query.InternalHost.Trim();
             existing.InternalSshPort = query.InternalSshPort;
             existing.InternalHttpPort = query.InternalHttpPort;
+            existing.InternalGitHttpPort =
+                query.InternalGitHttpPort > 0 ? query.InternalGitHttpPort : 8082;
             existing.FreeBytesAvailable = query.FreeBytesAvailable;
             existing.TotalBytesAvailable = query.TotalBytesAvailable;
             existing.LastHeartbeatAt = now;

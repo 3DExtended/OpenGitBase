@@ -94,4 +94,4 @@ services:
     <<: *web-build
 
   opengitbase_cloudflare_tunnel:
-    command: tunnel --no-autoupdate run --url http://api-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+    command: tunnel --no-autoupdate run --url http://ssh-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN

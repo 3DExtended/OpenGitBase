@@ -5,6 +5,8 @@
 
 set -euo pipefail
 
+STORAGE_STANDALONE="${STORAGE_STANDALONE:-0}"
+
 mkdir -p /var/run/sshd
 
 # SSH Hostkeys initialisieren
@@ -23,24 +25,42 @@ fi
 
 source /usr/local/bin/storage-agent.sh
 
-configure_dispatcher_authorized_keys
+if [ "${STORAGE_STANDALONE}" = "1" ]; then
+  if [ -z "${STORAGE_API_TOKEN:-}" ] && [ ! -f "${TOKEN_FILE}" ]; then
+    echo "entrypoint: STORAGE_API_TOKEN is required in standalone mode" >&2
+    exit 1
+  fi
+else
+  configure_dispatcher_authorized_keys
 
-register_node
-if [ -f "${TOKEN_FILE}" ]; then
-  export STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"
+  register_node
+  if [ -f "${TOKEN_FILE}" ]; then
+    export STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"
+  fi
 fi
 
 python3 /usr/local/bin/storage-http-server.py &
 STORAGE_HTTP_PID=$!
 
-start_storage_agent_background
+/usr/local/bin/storage-git-http.sh &
+STORAGE_GIT_HTTP_PID=$!
+
+if [ "${STORAGE_STANDALONE}" != "1" ]; then
+  start_storage_agent_background
+fi
 
 cleanup() {
-  if kill -0 "$STORAGE_HTTP_PID" 2>/dev/null; then
-    kill "$STORAGE_HTTP_PID" 2>/dev/null || true
-  fi
+  for pid in "$STORAGE_HTTP_PID" "$STORAGE_GIT_HTTP_PID"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
 }
 trap cleanup EXIT
 
-# SSH Daemon im Vordergrund starten
-exec /usr/sbin/sshd -D -e
+if [ "${STORAGE_STANDALONE}" = "1" ]; then
+  wait "$STORAGE_HTTP_PID" "$STORAGE_GIT_HTTP_PID"
+else
+  # SSH Daemon im Vordergrund starten
+  exec /usr/sbin/sshd -D -e
+fi

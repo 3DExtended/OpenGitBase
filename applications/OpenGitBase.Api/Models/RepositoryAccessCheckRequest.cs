@@ -2,7 +2,10 @@
 
 public class RepositoryAccessCheckRequest
 {
-    public string PublicKey { get; set; } = null!;
+    public string PublicKey { get; set; } = string.Empty;
+
+    public string AccessToken { get; set; } = string.Empty;
+
     public string RepositoryPath { get; set; } = null!;
     public RepositoryOperation Operation { get; set; }
 

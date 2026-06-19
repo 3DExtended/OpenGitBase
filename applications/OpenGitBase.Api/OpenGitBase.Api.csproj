@@ -27,6 +27,8 @@
     <ProjectReference Include="..\..\features\organization\OpenGitBase.Features.Organization\OpenGitBase.Features.Organization.csproj" />
     <ProjectReference Include="..\..\features\organization\OpenGitBase.Features.Organization.Contracts\OpenGitBase.Features.Organization.Contracts.csproj" />
     <ProjectReference Include="..\..\features\storage-node\OpenGitBase.Features.StorageNode\OpenGitBase.Features.StorageNode.csproj" />
+    <ProjectReference Include="..\..\features\git-access-token\OpenGitBase.Features.GitAccessToken\OpenGitBase.Features.GitAccessToken.csproj" />
+    <ProjectReference Include="..\..\features\git-access-token\OpenGitBase.Features.GitAccessToken.Contracts\OpenGitBase.Features.GitAccessToken.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

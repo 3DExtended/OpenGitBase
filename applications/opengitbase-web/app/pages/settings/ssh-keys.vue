@@ -5,6 +5,7 @@ definePageMeta({ middleware: 'auth' })
 
 const { t } = useI18n()
 const api = useApi()
+const { config: gitConfig, load: loadGitConfig } = useGitConfig()
 
 const keys = ref<PublicGitSshKey[]>([])
 const loading = ref(true)
@@ -61,7 +62,15 @@ async function removeKey(id: string) {
   await loadKeys()
 }
 
-onMounted(loadKeys)
+onMounted(async () => {
+  await loadGitConfig()
+  if (gitConfig.value?.sshEnabled) {
+    await loadKeys()
+  }
+  else {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
@@ -84,48 +93,73 @@ onMounted(loadKeys)
       </p>
     </div>
 
-    <UCard>
-      <template #header>
-        <h2 class="font-semibold">
-          {{ t('settings.sshKeys.addTitle') }}
-        </h2>
-      </template>
-      <form
-        class="space-y-4"
-        @submit.prevent="addKey"
-      >
-        <UFormField
-          :label="t('settings.sshKeys.nameLabel')"
-          required
-        >
-          <UInput v-model="name" />
-        </UFormField>
-        <UFormField
-          :label="t('settings.sshKeys.keyLabel')"
-          required
-        >
-          <UTextarea
-            v-model="publicKey"
-            :rows="4"
-            class="font-mono text-xs"
-          />
-        </UFormField>
-        <UAlert
-          v-if="addError"
-          color="error"
-          variant="subtle"
-          :description="addError"
-        />
+    <div
+      v-if="!gitConfig"
+      class="text-sm text-[var(--ogb-text-muted)]"
+    >
+      {{ t('common.loading') }}
+    </div>
+
+    <UCard v-else-if="!gitConfig.sshEnabled">
+      <h2 class="font-semibold">
+        {{ t('settings.sshKeys.disabledTitle') }}
+      </h2>
+      <p class="mt-2 text-sm text-[var(--ogb-text-muted)]">
+        {{ t('settings.sshKeys.disabledHint') }}
+      </p>
+      <template #footer>
         <UButton
-          type="submit"
-          :loading="adding"
+          to="/settings/access-tokens"
+          variant="soft"
         >
-          {{ t('settings.sshKeys.addButton') }}
+          {{ t('settings.accessTokens.link') }}
         </UButton>
-      </form>
+      </template>
     </UCard>
 
-    <UCard>
+    <template v-else>
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('settings.sshKeys.addTitle') }}
+          </h2>
+        </template>
+        <form
+          class="space-y-4"
+          @submit.prevent="addKey"
+        >
+          <UFormField
+            :label="t('settings.sshKeys.nameLabel')"
+            required
+          >
+            <UInput v-model="name" />
+          </UFormField>
+          <UFormField
+            :label="t('settings.sshKeys.keyLabel')"
+            required
+          >
+            <UTextarea
+              v-model="publicKey"
+              :rows="4"
+              class="font-mono text-xs"
+            />
+          </UFormField>
+          <UAlert
+            v-if="addError"
+            color="error"
+            variant="subtle"
+            :description="addError"
+          />
+          <UButton
+            type="submit"
+            :loading="adding"
+          >
+            {{ t('settings.sshKeys.addButton') }}
+          </UButton>
+        </form>
+      </UCard>
+
+      <UCard>
       <template #header>
         <h2 class="font-semibold">
           {{ t('settings.sshKeys.listTitle') }}
@@ -181,5 +215,6 @@ onMounted(loadKeys)
         </li>
       </ul>
     </UCard>
+    </template>
   </div>
 </template>
