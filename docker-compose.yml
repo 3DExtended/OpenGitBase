@@ -11,6 +11,8 @@ x-api-environment: &api-environment
   ASPNETCORE_URLS: http://+:8080
   Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
   Debug__Features__EmailVerification: "true"
+  GIT_SSH_ENABLED: "false"
+  Git__PublicBaseUrl: "http://localhost:8089"
 
 x-api-common: &api-common
   <<: *api-image
@@ -62,9 +64,8 @@ services:
       api-2:
         condition: service_healthy
     ports:
-      - "2211:22"
       - "8089:8080"
-      - "3000:8081"
+      - "3000:8080"
     volumes:
       - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     networks:
@@ -152,7 +153,7 @@ services:
     ports:
       - "8822:8082"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -164,6 +165,7 @@ services:
       Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
+      GIT_SSH_ENABLED: "false"
       FLEET_BOOTSTRAP_TOKEN: ""
 
   dispatcher-2:
@@ -182,7 +184,7 @@ services:
       storage-2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -194,6 +196,7 @@ services:
       Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
+      GIT_SSH_ENABLED: "false"
       FLEET_BOOTSTRAP_TOKEN: ""
 
   postgres:
@@ -254,7 +257,9 @@ services:
       web-2:
         condition: service_started
     restart: always
-    command: tunnel --no-autoupdate run --url http://api-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+    # Unified HTTP frontend (API + Git Smart HTTP + web UI). In Cloudflare, route
+    # opengitbase.com and www.opengitbase.com to this tunnel; git paths on www redirect to apex.
+    command: tunnel --no-autoupdate run --url http://ssh-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
 
 volumes:
   opengitbase_pgdata:

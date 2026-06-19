@@ -98,9 +98,40 @@ Then repeat the first-time startup steps.
 
 | Service | URL |
 |---------|-----|
-| Web UI | http://localhost:3000 |
-| API | http://localhost:8089 |
-| Git (SSH entrypoint) | `ssh://git@localhost/owner/repo` |
+| Unified HTTP (web, API, Git) | http://localhost:8089 |
+| Web UI (alias) | http://localhost:3000 |
+| Git over HTTPS (via HAProxy) | `http://localhost:8089/{owner}/{repo}.git` |
+| Git over HTTPS (dispatcher direct, debug) | http://localhost:8822 |
+| SSH git (optional `--profile ssh`) | `ssh://git@localhost:2211/owner/repo` |
+
+### Git over HTTPS (local)
+
+1. Create a [personal access token](http://localhost:8089/settings/access-tokens) in the web UI.
+2. Clone with the token as the password:
+
+```bash
+git clone http://git:YOUR_TOKEN@localhost:8089/OWNER/REPO.git
+```
+
+Run the end-to-end script against a running stack:
+
+```bash
+./scripts/e2e-https-git-test.sh
+```
+
+### SSH git (optional)
+
+SSH is disabled by default. To enable the legacy SSH path:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ssh.yml --profile ssh up -d
+```
+
+Set `GIT_SSH_ENABLED=true` on API and dispatchers via `docker-compose.ssh.yml`.
+
+### Cloudflare tunnel
+
+The tunnel container targets the unified HAProxy frontend (`ssh-lb:8080`). In the Cloudflare dashboard, route `opengitbase.com` (and optionally `www.opengitbase.com`) to the tunnel. Git Smart HTTP paths on `www` are redirected to the apex hostname by HAProxy.
 
 Default admin user (change in `applications/OpenGitBase.Api/appsettings.json`):
 

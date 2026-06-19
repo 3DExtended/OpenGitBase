@@ -569,7 +569,7 @@ export function createApi(baseUrl: string) {
 
     git: {
       getConfig: async () => {
-        const result = await request<Record<string, unknown>>('/api/v1/git/config')
+        const result = await request<Record<string, unknown>>('/v1/git/config')
         if (!result.data) {
           return { ...result, data: null } satisfies ApiResult<GitConfig>
         }

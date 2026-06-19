@@ -22,10 +22,10 @@ git-https-01,06 ─► git-https-07 ──────────────�
 | 2 | git-https-02 | PAT repository access-check + storage HTTP routing | completed |
 | 3 | git-https-03 | Storage git-http-backend | completed |
 | 4 | git-https-04 | Dispatcher Smart HTTP edge | completed |
-| 5 | git-https-05 | HAProxy unified HTTP routing + Cloudflare tunnel | pending |
-| 6 | git-https-06 | SSH disable gate | pending |
-| 7 | git-https-07 | Repository HTTPS clone URLs + settings navigation | pending |
-| 8 | git-https-08 | End-to-end HTTPS git integration test | pending |
+| 5 | git-https-05 | HAProxy unified HTTP routing + Cloudflare tunnel | completed |
+| 6 | git-https-06 | SSH disable gate | completed |
+| 7 | git-https-07 | Repository HTTPS clone URLs + settings navigation | completed |
+| 8 | git-https-08 | End-to-end HTTPS git integration test | completed |
 
 ## Branching
 

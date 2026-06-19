@@ -142,6 +142,8 @@
       "title": "SSH keys",
       "subtitle": "Manage SSH public keys used for Git authentication.",
       "link": "SSH keys",
+      "disabledTitle": "SSH Git is disabled",
+      "disabledHint": "This instance uses HTTPS and personal access tokens for Git. Contact your operator to enable SSH.",
       "addTitle": "Add SSH key",
       "nameLabel": "Key name",
       "keyLabel": "Public key",
@@ -250,7 +252,9 @@
     },
     "overview": {
       "title": "Repository",
-      "cloneTitle": "Clone with SSH",
+      "httpsCloneTitle": "Clone with HTTPS",
+      "httpsHint": "Use a personal access token as your Git password. Create one in",
+      "sshCloneTitle": "Clone with SSH",
       "sshHint": "Add an SSH key in"
     },
     "settings": {

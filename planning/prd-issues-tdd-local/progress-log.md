@@ -31,6 +31,26 @@
 - PAT via Basic auth → access-check → reverse proxy to storage git HTTP
 - Path parser + proxy unit tests; smoke script for compose verification
 
+### git-https-05 — completed
+
+- Unified HAProxy HTTP frontend (API + git + web)
+- Cloudflare tunnel → ssh-lb:8080
+- www→apex git redirect
+
+### git-https-06 — completed
+
+- `GIT_SSH_ENABLED=false` default; dispatcher skips sshd
+- `docker-compose.ssh.yml` + `--profile ssh` for SSH TCP LB
+
+### git-https-07 — completed
+
+- Repo overview HTTPS clone URL + PAT link
+- SSH UI hidden when disabled
+
+### git-https-08 — completed
+
+- `scripts/e2e-https-git-test.sh`
+
 ### Next
 
-- **git-https-05** — HAProxy unified HTTP routing + Cloudflare tunnel
+- PR ready on `feat/git-https-pat` — all 8 slices complete

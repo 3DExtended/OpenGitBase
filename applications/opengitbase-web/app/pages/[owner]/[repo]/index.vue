@@ -4,6 +4,7 @@ import type { Repository } from '~/utils/api'
 const route = useRoute()
 const { t } = useI18n()
 const api = useApi()
+const { config: gitConfig, load: loadGitConfig } = useGitConfig()
 
 const owner = computed(() => String(route.params.owner))
 const repoSlug = computed(() => String(route.params.repo))
@@ -12,10 +13,24 @@ const repo = ref<Repository | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
 
-const requestUrl = useRequestURL()
-const sshCloneUrl = computed(() =>
-  repo.value ? `git@${requestUrl.hostname}:${owner.value}/${repoSlug.value}.git` : '',
+const httpsCloneUrl = computed(() =>
+  repo.value && gitConfig.value
+    ? `${gitConfig.value.gitBaseUrl.replace(/\/$/, '')}/${owner.value}/${repoSlug.value}.git`
+    : '',
 )
+
+const sshCloneUrl = computed(() => {
+  if (!repo.value || !gitConfig.value?.sshEnabled) {
+    return ''
+  }
+  try {
+    const host = new URL(gitConfig.value.gitBaseUrl).hostname
+    return `git@${host}:${owner.value}/${repoSlug.value}.git`
+  }
+  catch {
+    return ''
+  }
+})
 
 useHead({
   title: computed(() => repo.value ? `${owner.value}/${repoSlug.value}` : t('repo.overview.title')),
@@ -23,6 +38,7 @@ useHead({
 
 onMounted(async () => {
   loading.value = true
+  await loadGitConfig()
   const result = await api.repositories.getBySlug(owner.value, repoSlug.value)
   if (!result.data) {
     const fallback = await api.repositories.list()
@@ -96,10 +112,30 @@ onMounted(async () => {
       <UCard>
         <template #header>
           <h2 class="font-semibold">
-            {{ t('repo.overview.cloneTitle') }}
+            {{ t('repo.overview.httpsCloneTitle') }}
           </h2>
         </template>
-        <code class="block rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm">
+        <code class="block rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
+          {{ httpsCloneUrl }}
+        </code>
+        <p class="mt-3 text-sm text-[var(--ogb-text-muted)]">
+          {{ t('repo.overview.httpsHint') }}
+          <NuxtLink
+            to="/settings/access-tokens"
+            class="text-[var(--ogb-accent)] hover:underline"
+          >
+            {{ t('settings.accessTokens.link') }}
+          </NuxtLink>
+        </p>
+      </UCard>
+
+      <UCard v-if="sshCloneUrl">
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('repo.overview.sshCloneTitle') }}
+          </h2>
+        </template>
+        <code class="block rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
           {{ sshCloneUrl }}
         </code>
         <p class="mt-3 text-sm text-[var(--ogb-text-muted)]">
