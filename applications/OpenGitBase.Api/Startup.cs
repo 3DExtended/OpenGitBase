@@ -140,6 +140,14 @@ public class Startup
             Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
                 ?? new StorageNodeOptions()
         );
+        var gitOptions =
+            Configuration.GetSection("Git").Get<GitOptions>() ?? new GitOptions();
+        if (bool.TryParse(Configuration["GIT_SSH_ENABLED"], out var sshEnabledFromEnv))
+        {
+            gitOptions.SshEnabled = sshEnabledFromEnv;
+        }
+
+        services.AddSingleton(gitOptions);
         services.Configure<InternalNetworkOptions>(Configuration.GetSection("InternalNetwork"));
         if (Environment.IsEnvironment("E2ETest"))
         {

@@ -601,7 +601,7 @@ public class OrganizationController : ControllerBase
     private static bool IsEmailIdentifier(string identifier) =>
         identifier.Contains('@', StringComparison.Ordinal);
 
-    private async Task<Option<UserId>> ResolveUserIdFromIdentifierAsync(
+    private Task<Option<UserId>> ResolveUserIdFromIdentifierAsync(
         string identifier,
         CancellationToken cancellationToken
     )
@@ -609,20 +609,20 @@ public class OrganizationController : ControllerBase
         var trimmed = identifier.Trim();
         if (trimmed.Contains('@', StringComparison.Ordinal))
         {
-            return await _queryProcessor
+            return _queryProcessor
                 .RunQueryAsync(
                     new UserGetIdByEmailQuery { Email = trimmed },
                     cancellationToken
                 )
-                .ConfigureAwait(false);
+;
         }
 
-        return await _queryProcessor
+        return _queryProcessor
             .RunQueryAsync(
                 new UserExistsByUsernameQuery { Username = trimmed },
                 cancellationToken
             )
-            .ConfigureAwait(false);
+;
     }
 
     private async Task<bool> SendOrganizationInviteEmailAsync(

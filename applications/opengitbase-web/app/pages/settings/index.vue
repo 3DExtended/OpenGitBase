@@ -109,12 +109,20 @@ async function deleteAccount() {
       </dl>
       <EmailVerificationDebugPanel />
       <template #footer>
-        <UButton
-          to="/settings/ssh-keys"
-          variant="soft"
-        >
-          {{ t('settings.sshKeys.link') }}
-        </UButton>
+        <div class="flex flex-wrap gap-2">
+          <UButton
+            to="/settings/access-tokens"
+            variant="soft"
+          >
+            {{ t('settings.accessTokens.link') }}
+          </UButton>
+          <UButton
+            to="/settings/ssh-keys"
+            variant="ghost"
+          >
+            {{ t('settings.sshKeys.link') }}
+          </UButton>
+        </div>
       </template>
     </UCard>
 

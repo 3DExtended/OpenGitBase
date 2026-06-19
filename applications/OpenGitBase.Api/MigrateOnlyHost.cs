@@ -13,10 +13,10 @@ internal static class MigrateOnlyHost
         );
     }
 
-    public static async Task<int> RunAsync(string[] args)
+    public static Task<int> RunAsync(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
-        return await OpenGitBase.Common.DependencyInjectionHelpers.RunDatabaseMigrationsAsync(
+        return OpenGitBase.Common.DependencyInjectionHelpers.RunDatabaseMigrationsAsync(
             builder.Configuration,
             builder.Environment,
             featureAssemblies: FeatureRegistration.GetFeatureAssemblies()
