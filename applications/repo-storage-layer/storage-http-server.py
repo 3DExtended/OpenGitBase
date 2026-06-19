@@ -105,6 +105,12 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        subprocess.run(
+            ["chown", "-R", "git:git", physical_path],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         receive_max_bytes = int(data.get("receiveMaxBytes") or 0)
         if receive_max_bytes > 0:
             subprocess.run(

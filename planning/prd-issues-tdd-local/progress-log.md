@@ -19,6 +19,12 @@
 - `StorageNodeInternalGitHttpPort` in routing response
 - Migration `AddStorageNodeInternalGitHttpPort`, storage-agent registration field
 
+### git-https-03 — completed
+
+- nginx + fcgiwrap + git-http-backend on internal :8082
+- Standalone integration test: provision → clone over Smart HTTP
+- Compose healthcheck includes git HTTP process
+
 ### Next
 
-- **git-https-03** — Storage git-http-backend
+- **git-https-04** — Dispatcher Smart HTTP edge
