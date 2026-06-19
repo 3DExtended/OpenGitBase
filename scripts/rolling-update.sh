@@ -4,6 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
 HAPROXY_CFG="${REPO_ROOT}/docker/haproxy/haproxy.cfg"
@@ -65,7 +67,7 @@ if [ -f "${OVERRIDE_FILE}" ]; then
 fi
 
 compose() {
-  docker compose "${COMPOSE_ARGS[@]}" "$@"
+  docker-compose "${COMPOSE_ARGS[@]}" "$@"
 }
 
 FLEET_ROLL_SERVICES=(
@@ -112,16 +114,16 @@ FAILED_STEP=""
 recovery_guidance() {
   cat >&2 <<'EOF'
 
-Recovery (do not run 'docker compose down' — healthy containers should still be serving traffic):
+Recovery (do not run 'docker-compose down' — healthy containers should still be serving traffic):
   1. Read logs for the failing service:
-       docker compose logs --tail=100 <service>
+       docker-compose logs --tail=100 <service>
   2. Fix the underlying issue (build error, migration, health check, config).
   3. Re-run this script from the repo root:
        ./scripts/rolling-update.sh
   For fleet-layer changes only, include --full:
        ./scripts/rolling-update.sh --full
   For a full wipe and re-seed (destructive), use only when intentional:
-       docker compose down -v && docker compose up -d --build
+       docker-compose down -v && docker-compose up -d --build
 EOF
 }
 
@@ -270,6 +272,9 @@ elif [ "${SKIP_TUNNEL_CHECK}" = true ]; then
 else
   echo "==> Cloudflare tunnel not running; skipping tunnel API check"
 fi
+
+run_step "Prune unused build cache and dangling images" \
+  bash -c 'docker builder prune -f && docker image prune -f'
 
 echo ""
 echo "Rolling update completed successfully."

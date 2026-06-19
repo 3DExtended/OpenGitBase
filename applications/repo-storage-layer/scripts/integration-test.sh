@@ -14,6 +14,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 APP_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+REPO_ROOT=$(cd "${APP_DIR}/../.." && pwd)
+# shellcheck source=../../../scripts/docker-env.sh
+source "${REPO_ROOT}/scripts/docker-env.sh"
 
 # Test constants — fixed values make assertions deterministic across runs.
 IMAGE_TAG="opengitbase/repo-storage-layer:test"
