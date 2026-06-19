@@ -94,6 +94,7 @@ public static class DependencyInjectionHelpers
         try
         {
             await using var context = await factory.CreateDbContextAsync(cancellationToken);
+            context.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
             var pendingMigrations = await context.Database.GetPendingMigrationsAsync(
                 cancellationToken
             );
@@ -101,6 +102,7 @@ public static class DependencyInjectionHelpers
             if (pendingMigrations.Any())
             {
                 Console.WriteLine("Applying pending migrations...");
+
                 await context.Database.MigrateAsync(cancellationToken);
                 Console.WriteLine("Migrations applied successfully.");
             }
@@ -108,6 +110,8 @@ public static class DependencyInjectionHelpers
             {
                 Console.WriteLine("No pending migrations.");
             }
+
+            context.Database.SetCommandTimeout(TimeSpan.FromSeconds(30));
 
             return 0;
         }
@@ -221,9 +225,7 @@ public static class DependencyInjectionHelpers
             return;
         }
 
-        var configuration = services
-            .BuildServiceProvider()
-            .GetRequiredService<IConfiguration>();
+        var configuration = services.BuildServiceProvider().GetRequiredService<IConfiguration>();
         var exitCode = await RunDatabaseMigrationsAsync(
             configuration,
             env,
