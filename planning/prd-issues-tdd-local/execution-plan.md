@@ -21,7 +21,7 @@ git-https-01,06 ─► git-https-07 ──────────────�
 | 1 | git-https-01 | Git access tokens + settings UI + git config | completed |
 | 2 | git-https-02 | PAT repository access-check + storage HTTP routing | completed |
 | 3 | git-https-03 | Storage git-http-backend | completed |
-| 4 | git-https-04 | Dispatcher Smart HTTP edge | pending |
+| 4 | git-https-04 | Dispatcher Smart HTTP edge | completed |
 | 5 | git-https-05 | HAProxy unified HTTP routing + Cloudflare tunnel | pending |
 | 6 | git-https-06 | SSH disable gate | pending |
 | 7 | git-https-07 | Repository HTTPS clone URLs + settings navigation | pending |

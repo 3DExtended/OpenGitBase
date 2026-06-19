@@ -149,8 +149,10 @@ services:
         condition: service_healthy
       storage-2:
         condition: service_healthy
+    ports:
+      - "8822:8082"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -159,6 +161,7 @@ services:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-1"
+      Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
       FLEET_BOOTSTRAP_TOKEN: ""
@@ -179,7 +182,7 @@ services:
       storage-2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null"]
+      test: ["CMD-SHELL", "pgrep -x sshd > /dev/null && pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -188,6 +191,7 @@ services:
       DISPATCHER_API_URL: "http://api-lb:8080"
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-2"
+      Dispatcher__HttpPort: "8082"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
       FLEET_BOOTSTRAP_TOKEN: ""

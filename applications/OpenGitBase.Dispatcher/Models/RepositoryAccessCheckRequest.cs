@@ -2,7 +2,11 @@
 
 public sealed class RepositoryAccessCheckRequest
 {
-    public required string PublicKey { get; init; }
+    public string PublicKey { get; init; } = string.Empty;
+
+    public string AccessToken { get; init; } = string.Empty;
+
     public required string RepositoryPath { get; init; }
+
     public RepositoryOperation Operation { get; init; }
 }

@@ -25,6 +25,12 @@
 - Standalone integration test: provision → clone over Smart HTTP
 - Compose healthcheck includes git HTTP process
 
+### git-https-04 — completed
+
+- Kestrel Smart HTTP on dispatcher :8082 (`--serve-http`)
+- PAT via Basic auth → access-check → reverse proxy to storage git HTTP
+- Path parser + proxy unit tests; smoke script for compose verification
+
 ### Next
 
-- **git-https-04** — Dispatcher Smart HTTP edge
+- **git-https-05** — HAProxy unified HTTP routing + Cloudflare tunnel

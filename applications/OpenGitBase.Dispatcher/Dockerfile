@@ -28,6 +28,6 @@ RUN chmod +x /app/ssh-auth-hook.sh /app/dispatcher-wrapper.sh /app/entrypoint.sh
 
 COPY --from=build /app/publish .
 
-EXPOSE 22
+EXPOSE 22 8082
 
 CMD ["/app/entrypoint.sh"]
