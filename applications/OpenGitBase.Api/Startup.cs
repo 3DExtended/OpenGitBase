@@ -185,6 +185,7 @@ public class Startup
         services.AddHostedService<HaStorageBackgroundService>();
         services.AddSingleton<Rf1BackfillService>();
         services.AddSingleton<RebalanceService>();
+        services.AddSingleton<AntiEntropyReconcilerService>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler

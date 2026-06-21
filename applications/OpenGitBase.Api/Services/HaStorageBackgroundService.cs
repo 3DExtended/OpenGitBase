@@ -38,6 +38,7 @@ public sealed class HaStorageBackgroundService : BackgroundService
         var failoverDue = DateTimeOffset.UtcNow;
         var backfillDue = DateTimeOffset.UtcNow;
         var rebalanceDue = DateTimeOffset.UtcNow;
+        var reconcileDue = DateTimeOffset.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -60,6 +61,12 @@ public sealed class HaStorageBackgroundService : BackgroundService
                 {
                     await RunRebalanceAsync(stoppingToken).ConfigureAwait(false);
                     rebalanceDue = now.AddSeconds(_options.RebalanceIntervalSeconds);
+                }
+
+                if (now >= reconcileDue)
+                {
+                    await RunReconcilerAsync(stoppingToken).ConfigureAwait(false);
+                    reconcileDue = now.AddSeconds(_options.ReconcilerIntervalSeconds);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -120,5 +127,12 @@ public sealed class HaStorageBackgroundService : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var rebalance = scope.ServiceProvider.GetRequiredService<RebalanceService>();
         await rebalance.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunReconcilerAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var reconciler = scope.ServiceProvider.GetRequiredService<AntiEntropyReconcilerService>();
+        await reconciler.RunOnceAsync(cancellationToken).ConfigureAwait(false);
     }
 }
