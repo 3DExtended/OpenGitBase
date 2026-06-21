@@ -162,7 +162,7 @@ useAdminReplicationPoll(refreshAll)
         :loading="loading"
         @click="refreshAll"
       >
-        Refresh
+        {{ t('admin.replication.refresh') }}
       </UButton>
     </div>
 
