@@ -13,6 +13,7 @@ x-api-environment: &api-environment
   Debug__Features__EmailVerification: "true"
   GIT_SSH_ENABLED: "false"
   Git__PublicBaseUrl: "https://api.opengitbase.com"
+  REDIS_URL: "redis://redis:6379"
 
 x-api-common: &api-common
   <<: *api-image
@@ -20,6 +21,8 @@ x-api-common: &api-common
   depends_on:
     postgres:
       condition: service_healthy
+    redis:
+      condition: service_started
   environment: *api-environment
   healthcheck:
     test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
@@ -222,6 +225,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: opengitbase_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
 
   api-1:
     <<: *api-common

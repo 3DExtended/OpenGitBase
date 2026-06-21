@@ -10,6 +10,8 @@ public sealed class RepositoryRoutingTargetDto
 
     public int InternalGitHttpPort { get; init; }
 
+    public int InternalHttpPort { get; init; }
+
     public string Role { get; init; } = string.Empty;
 
     public bool IsHealthy { get; init; }

@@ -113,6 +113,24 @@ public class Startup
         });
         services.AddHttpContextAccessor();
         services.AddMemoryCache();
+        var redisUrl = Configuration["REDIS_URL"];
+        if (!string.IsNullOrWhiteSpace(redisUrl))
+        {
+            var redisConfiguration = redisUrl.StartsWith("redis://", StringComparison.OrdinalIgnoreCase)
+                ? redisUrl["redis://".Length..]
+                : redisUrl;
+            services.AddStackExchangeRedisCache(options => options.Configuration = redisConfiguration);
+        }
+        else
+        {
+            services.AddDistributedMemoryCache();
+        }
+
+        services.AddScoped<RepositoryContentAuthorizationService>();
+        services.AddSingleton<WebReadReplicaSelector>();
+        services.AddScoped<RepositoryContentService>();
+        services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
+        services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
         services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
@@ -170,6 +188,26 @@ public class Startup
                                 Window = TimeSpan.FromMinutes(1),
                             }
                         )
+                );
+                options.AddPolicy(
+                    "content-browse-anonymous",
+                    context =>
+                    {
+                        var partitionKey =
+                            context.User.Identity?.IsAuthenticated == true
+                                ? $"auth-content:{context.User.FindFirst("identityproviderid")?.Value ?? "user"}"
+                                : $"anon-content:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+                        var permitLimit =
+                            context.User.Identity?.IsAuthenticated == true ? 600 : 120;
+                        return RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey,
+                            _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = permitLimit,
+                                Window = TimeSpan.FromMinutes(1),
+                            }
+                        );
+                    }
                 );
             });
         }
