@@ -16,7 +16,11 @@ from typing import Any
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
 STORAGE_HTTP_PORT = int(os.environ.get("STORAGE_HTTP_PORT", "8081"))
+STORAGE_MTLS_GIT_HTTP_PORT = int(os.environ.get("STORAGE_MTLS_GIT_HTTP_PORT", "8443"))
 REPOS_ROOT = Path("/srv/git")
+CA_CERT = Path("/etc/opengitbase/ca.crt")
+NODE_CERT = Path("/etc/opengitbase/node.crt")
+NODE_KEY = Path("/etc/opengitbase/node.key")
 
 
 def _is_valid_physical_path(physical_path: str) -> bool:
@@ -30,6 +34,53 @@ def _is_valid_physical_path(physical_path: str) -> bool:
         return False
 
     return resolved == repos_root or repos_root in resolved.parents
+
+
+def _git_mtls_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if CA_CERT.is_file():
+        env["GIT_SSL_CAINFO"] = str(CA_CERT)
+    if NODE_CERT.is_file():
+        env["GIT_SSL_CERT"] = str(NODE_CERT)
+    if NODE_KEY.is_file():
+        env["GIT_SSL_KEY"] = str(NODE_KEY)
+    return env
+
+
+def sync_from_peer(
+    physical_path: str,
+    source_host: str,
+    source_physical_path: str | None = None,
+    source_port: int | None = None,
+) -> None:
+    if not _is_valid_physical_path(physical_path):
+        raise ValueError("Invalid physicalPath.")
+
+    if not os.path.isdir(physical_path):
+        raise FileNotFoundError(f"Repository not found: {physical_path}")
+
+    remote_path = source_physical_path or physical_path
+    if not _is_valid_physical_path(remote_path):
+        raise ValueError("Invalid sourcePhysicalPath.")
+
+    port = source_port or STORAGE_MTLS_GIT_HTTP_PORT
+    repo_name = Path(remote_path).name
+    remote_url = f"https://{source_host}:{port}/{repo_name}"
+    env = _git_mtls_env()
+    git = ["git", "--git-dir", physical_path]
+
+    subprocess.run(
+        [*git, "fetch", remote_url, "+refs/*:refs/*"],
+        env=env,
+        check=True,
+    )
+    subprocess.run(
+        [*git, "update-server-info"],
+        env=env,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 class StorageHttpHandler(BaseHTTPRequestHandler):
@@ -70,7 +121,6 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             if length > 0:
                 return self.rfile.read(length)
 
-        # HttpClient may send chunked bodies without Content-Length.
         return self.rfile.read()
 
     def _read_json(self) -> dict[str, Any]:
@@ -80,12 +130,16 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def do_POST(self) -> None:
-        if self.path != "/internal/repos":
-            self.send_error(404)
-            return
-
         if not self._check_auth():
             self.send_error(401)
+            return
+
+        if self.path == "/internal/repos/sync-from":
+            self._handle_sync_from()
+            return
+
+        if self.path != "/internal/repos":
+            self.send_error(404)
             return
 
         data = self._read_json()
@@ -129,6 +183,44 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
                 stderr=subprocess.DEVNULL,
             )
         self._send_json(201, {"physicalPath": physical_path})
+
+    def _handle_sync_from(self) -> None:
+        data = self._read_json()
+        physical_path = data.get("physicalPath", "")
+        source_host = data.get("sourceHost", "")
+        source_physical_path = data.get("sourcePhysicalPath")
+        source_port = data.get("sourcePort")
+
+        if not source_host:
+            self._send_json(400, {"error": "sourceHost is required."})
+            return
+
+        if not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+
+        if source_physical_path and not _is_valid_physical_path(source_physical_path):
+            self._send_json(400, {"error": "Invalid sourcePhysicalPath."})
+            return
+
+        try:
+            sync_from_peer(
+                physical_path,
+                source_host,
+                source_physical_path,
+                int(source_port) if source_port is not None else None,
+            )
+        except FileNotFoundError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except subprocess.CalledProcessError as exc:
+            self._send_json(502, {"error": f"git fetch failed with exit code {exc.returncode}."})
+            return
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+
+        self._send_json(200, {"physicalPath": physical_path, "sourceHost": source_host})
 
     def do_DELETE(self) -> None:
         if self.path != "/internal/repos":

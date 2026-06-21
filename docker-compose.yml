@@ -139,6 +139,7 @@ services:
       - opengitbase_storage1_repos:/srv/git
       - ./docker/pki/storage-1.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-1.key:/etc/opengitbase/node.key:ro
+      - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
 
   storage-2:
     <<: *storage-common
@@ -156,6 +157,7 @@ services:
       - opengitbase_storage2_repos:/srv/git
       - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-2.key:/etc/opengitbase/node.key:ro
+      - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
 
   storage-3:
     <<: *storage-common
@@ -173,6 +175,7 @@ services:
       - opengitbase_storage3_repos:/srv/git
       - ./docker/pki/storage-3.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-3.key:/etc/opengitbase/node.key:ro
+      - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
 
   dispatcher-1:
     <<: *dispatcher-common

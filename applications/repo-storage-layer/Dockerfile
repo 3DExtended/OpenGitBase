@@ -27,7 +27,7 @@ COPY nginx-git-http.conf /etc/opengitbase/nginx-git-http.conf
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh \
     /usr/local/bin/storage-http-server.py /usr/local/bin/storage-git-http.sh
 
-EXPOSE 22 8081 8082
+EXPOSE 22 8081 8082 8443
 VOLUME ["/home/git/.ssh", "/srv/git"]
 
 CMD ["/usr/local/bin/entrypoint.sh"]
