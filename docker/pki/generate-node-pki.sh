@@ -34,5 +34,6 @@ issue_node_cert() {
 
 issue_node_cert storage-1
 issue_node_cert storage-2
+issue_node_cert storage-3
 
 echo "Generated node certificates in ${DIR}"

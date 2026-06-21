@@ -82,6 +82,11 @@ services:
       STORAGE_ENROLLMENT_TOKEN: ""
       DISPATCHER_SSH_PUBLIC_KEY: ""
 
+  storage-3:
+    environment:
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
+
   dispatcher-1:
     environment:
       FLEET_BOOTSTRAP_TOKEN: ""

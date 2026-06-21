@@ -68,6 +68,7 @@ create_enrollment() {
 echo "==> Creating storage enrollments"
 STORAGE_1_TOKEN=$(create_enrollment storage-1)
 STORAGE_2_TOKEN=$(create_enrollment storage-2)
+STORAGE_3_TOKEN=$(create_enrollment storage-3)
 
 if [ ! -f "${OVERRIDE_FILE}" ]; then
   if [ ! -f "${EXAMPLE_FILE}" ]; then
@@ -78,7 +79,7 @@ if [ ! -f "${OVERRIDE_FILE}" ]; then
   echo "Created ${OVERRIDE_FILE} from example — set REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN before starting the tunnel"
 fi
 
-python3 - "${OVERRIDE_FILE}" "${EXAMPLE_FILE}" "${STORAGE_1_TOKEN}" "${STORAGE_2_TOKEN}" "${FLEET_BOOTSTRAP_TOKEN}" "${DISPATCHER_SSH_PUBLIC_KEY}" <<'PY'
+python3 - "${OVERRIDE_FILE}" "${EXAMPLE_FILE}" "${STORAGE_1_TOKEN}" "${STORAGE_2_TOKEN}" "${STORAGE_3_TOKEN}" "${FLEET_BOOTSTRAP_TOKEN}" "${DISPATCHER_SSH_PUBLIC_KEY}" <<'PY'
 import json
 import re
 import sys
@@ -88,8 +89,9 @@ override_path = Path(sys.argv[1])
 example_path = Path(sys.argv[2])
 storage_1 = sys.argv[3]
 storage_2 = sys.argv[4]
-fleet_token = sys.argv[5]
-dispatcher_key = sys.argv[6]
+storage_3 = sys.argv[5]
+fleet_token = sys.argv[6]
+dispatcher_key = sys.argv[7]
 
 
 def q(value: str) -> str:
@@ -150,6 +152,14 @@ content = patch_service_env(
     "storage-2",
     {
         "STORAGE_ENROLLMENT_TOKEN": storage_2,
+        "DISPATCHER_SSH_PUBLIC_KEY": dispatcher_key,
+    },
+)
+content = patch_service_env(
+    content,
+    "storage-3",
+    {
+        "STORAGE_ENROLLMENT_TOKEN": storage_3,
         "DISPATCHER_SSH_PUBLIC_KEY": dispatcher_key,
     },
 )

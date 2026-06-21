@@ -44,9 +44,12 @@ Compliance is self-reported (honor system) in v1 — no license keys in the soft
 
 ## Local development (Docker)
 
-The default stack runs the API, web UI, Postgres, two storage nodes, and two
+The default stack runs the API, web UI, Postgres, **three storage nodes**, and two
 git dispatchers. Storage nodes are enrolled by an admin user and identified by
 machine certificates — fleet SSH keys are not checked into the repo.
+
+Repository replication (RF=3) requires all three storage nodes to be healthy before
+new repositories can be created.
 
 ### Prerequisites
 
@@ -153,7 +156,7 @@ new fleet bootstrap token (for example after wiping the database). Then recreate
 storage and dispatcher containers:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --force-recreate storage-1 storage-2 dispatcher-1 dispatcher-2
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --force-recreate storage-1 storage-2 storage-3 dispatcher-1 dispatcher-2
 ```
 
 ### Tests

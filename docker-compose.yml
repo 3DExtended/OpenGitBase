@@ -93,6 +93,8 @@ x-dispatcher-common: &dispatcher-common
       condition: service_healthy
     storage-2:
       condition: service_healthy
+    storage-3:
+      condition: service_healthy
   healthcheck:
     test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
     interval: 5s
@@ -154,6 +156,23 @@ services:
       - opengitbase_storage2_repos:/srv/git
       - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-2.key:/etc/opengitbase/node.key:ro
+
+  storage-3:
+    <<: *storage-common
+    container_name: opengitbase_storage_3
+    environment:
+      STORAGE_API_URL: "http://api-lb:8080"
+      STORAGE_NODE_ID: "storage-3"
+      STORAGE_INTERNAL_HOST: "storage-3"
+      STORAGE_INTERNAL_HTTP_PORT: "8081"
+      STORAGE_INTERNAL_GIT_HTTP_PORT: "8082"
+      STORAGE_GIT_HTTP_PORT: "8082"
+      STORAGE_ENROLLMENT_TOKEN: ""
+      DISPATCHER_SSH_PUBLIC_KEY: ""
+    volumes:
+      - opengitbase_storage3_repos:/srv/git
+      - ./docker/pki/storage-3.crt:/etc/opengitbase/node.crt:ro
+      - ./docker/pki/storage-3.key:/etc/opengitbase/node.key:ro
 
   dispatcher-1:
     <<: *dispatcher-common
@@ -249,3 +268,4 @@ volumes:
   opengitbase_pgdata:
   opengitbase_storage1_repos:
   opengitbase_storage2_repos:
+  opengitbase_storage3_repos:

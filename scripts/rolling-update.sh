@@ -80,6 +80,7 @@ compose() {
 FLEET_ROLL_SERVICES=(
   storage-1
   storage-2
+  storage-3
   dispatcher-1
   dispatcher-2
 )
@@ -105,6 +106,7 @@ service_container() {
   case "$1" in
     storage-1) echo opengitbase_storage_1 ;;
     storage-2) echo opengitbase_storage_2 ;;
+    storage-3) echo opengitbase_storage_3 ;;
     dispatcher-1) echo opengitbase_dispatcher_1 ;;
     dispatcher-2) echo opengitbase_dispatcher_2 ;;
     api-1) echo opengitbase_api_1 ;;
