@@ -175,7 +175,14 @@ public class Startup
         }
 
         services.Configure<AdminSeedOptions>(Configuration.GetSection("AdminSeed"));
+        services.Configure<HaStorageBackgroundOptions>(Configuration.GetSection("HaStorageBackground"));
+        if (Environment.IsEnvironment("E2ETest"))
+        {
+            services.PostConfigure<HaStorageBackgroundOptions>(options => options.Enabled = false);
+        }
+
         services.AddHostedService<AdminUserSeedService>();
+        services.AddHostedService<HaStorageBackgroundService>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler
@@ -241,6 +248,10 @@ public class Startup
                 RepositoryReplicationRoutingDto
             >,
             RepositoryReplicationRoutingQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<PromotePrimaryReplicaQuery, PromotePrimaryReplicaResult>,
+            PromotePrimaryReplicaQueryHandler
         >();
         services.AddTransient<
             IQueryHandler<UserDeleteAccountQuery, UserDeleteAccountResult>,

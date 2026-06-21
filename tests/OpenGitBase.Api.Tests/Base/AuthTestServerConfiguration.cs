@@ -134,14 +134,21 @@ internal static class AuthTestServerConfiguration
         }
 
         const string apiToken = "test-storage-token";
-        context
-            .Set<StorageNodeEntity>()
-            .Add(
+        var nodes = new[]
+        {
+            ("11111111-1111-1111-1111-111111111111", "test-storage-1", "storage-1"),
+            ("22222222-2222-2222-2222-222222222222", "test-storage-2", "storage-2"),
+            ("33333333-3333-3333-3333-333333333333", "test-storage-3", "storage-3"),
+        };
+
+        foreach (var (id, nodeId, host) in nodes)
+        {
+            context.Set<StorageNodeEntity>().Add(
                 new StorageNodeEntity
                 {
-                    Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-                    NodeId = "test-storage",
-                    InternalHost = "storage-1",
+                    Id = Guid.Parse(id),
+                    NodeId = nodeId,
+                    InternalHost = host,
                     InternalSshPort = 22,
                     InternalHttpPort = 8081,
                     ApiTokenHash = passwordHasher.HashPassword(apiToken),
@@ -153,6 +160,8 @@ internal static class AuthTestServerConfiguration
                     RegisteredAt = DateTimeOffset.UtcNow,
                 }
             );
+        }
+
         context.SaveChanges();
     }
 
