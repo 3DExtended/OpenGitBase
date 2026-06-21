@@ -42,48 +42,69 @@ public sealed class CreateRepositoryWithStorageQueryHandler
             .RunQueryAsync(new ListHealthyStorageNodesQuery(), cancellationToken)
             .ConfigureAwait(false);
         var nodes = healthyNodes.IsSome ? healthyNodes.Get() : Array.Empty<StorageNodeDto>();
-        var selectedNode = StorageNodeSelection.SelectBestNode(nodes);
-        if (selectedNode is null)
-        {
-            return Option.From(
-                CreateRepositoryWithStorageResult.Failed("No healthy storage node is available.")
-            );
-        }
-
-        var apiToken = await _queryProcessor
-            .RunQueryAsync(
-                new GetStorageNodeApiTokenQuery { StorageNodeId = selectedNode.Id },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (apiToken.IsNone)
+        var replicaSet = ReplicaSetPlanner.SelectReplicaSet(nodes);
+        if (replicaSet is null)
         {
             return Option.From(
                 CreateRepositoryWithStorageResult.Failed(
-                    "Storage node API token is unavailable."
+                    "At least three healthy storage nodes are required."
                 )
             );
+        }
+
+        var nodeTokens = new Dictionary<StorageNodeId, string>();
+        foreach (var node in replicaSet.AllNodes)
+        {
+            var apiToken = await _queryProcessor
+                .RunQueryAsync(
+                    new GetStorageNodeApiTokenQuery { StorageNodeId = node.Id },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (apiToken.IsNone)
+            {
+                return Option.From(
+                    CreateRepositoryWithStorageResult.Failed(
+                        "Storage node API token is unavailable."
+                    )
+                );
+            }
+
+            nodeTokens[node.Id] = apiToken.Get();
         }
 
         var repositoryId = Guid.NewGuid();
         var physicalPath = $"/srv/git/{repositoryId}.git";
         var receiveMaxBytes = _quotaOptions.Enabled ? _quotaOptions.MaxFileBytes : 0L;
-        var provisionResult = await _storageProvisionerClient
-            .ProvisionRepositoryAsync(
-                selectedNode,
-                apiToken.Get(),
-                physicalPath,
-                receiveMaxBytes,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (!provisionResult.Success)
+        var provisionedNodes = new List<StorageNodeDto>();
+
+        foreach (var node in replicaSet.AllNodes)
         {
-            return Option.From(
-                CreateRepositoryWithStorageResult.Failed(
-                    $"Storage provisioning failed: {provisionResult.Error}"
+            var provisionResult = await _storageProvisionerClient
+                .ProvisionRepositoryAsync(
+                    node,
+                    nodeTokens[node.Id],
+                    physicalPath,
+                    receiveMaxBytes,
+                    cancellationToken
                 )
-            );
+                .ConfigureAwait(false);
+            if (!provisionResult.Success)
+            {
+                await RollBackProvisionedAsync(
+                    provisionedNodes,
+                    nodeTokens,
+                    physicalPath,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                return Option.From(
+                    CreateRepositoryWithStorageResult.Failed(
+                        $"Storage provisioning failed: {provisionResult.Error}"
+                    )
+                );
+            }
+
+            provisionedNodes.Add(node);
         }
 
         try
@@ -91,14 +112,39 @@ public sealed class CreateRepositoryWithStorageQueryHandler
             var model = query.ModelToCreate;
             model.Id = RepositoryId.From(repositoryId);
             model.PhysicalPath = physicalPath;
-            model.StorageNodeId = selectedNode.Id;
+            model.StorageNodeId = replicaSet.Primary.Id;
 
             await using var context = await _contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
             var entity = _mapper.Map<RepositoryEntity>(model);
             entity.Id = repositoryId;
-            entity.StorageNodeId = selectedNode.Id.Value;
+            entity.StorageNodeId = replicaSet.Primary.Id.Value;
+            entity.PrimaryStorageNodeId = replicaSet.Primary.Id.Value;
+            entity.ReplicationEpoch = 1;
+            entity.PrimaryWatermark = 0;
+            entity.ReplicationState = ReplicationState.Rf3Healthy;
+            entity.Replicas =
+            [
+                new RepositoryReplicaEntity
+                {
+                    RepositoryId = repositoryId,
+                    StorageNodeId = replicaSet.Primary.Id.Value,
+                    Role = RepositoryReplicaRole.Primary,
+                },
+                new RepositoryReplicaEntity
+                {
+                    RepositoryId = repositoryId,
+                    StorageNodeId = replicaSet.ReplicaA.Id.Value,
+                    Role = RepositoryReplicaRole.Replica,
+                },
+                new RepositoryReplicaEntity
+                {
+                    RepositoryId = repositoryId,
+                    StorageNodeId = replicaSet.ReplicaB.Id.Value,
+                    Role = RepositoryReplicaRole.Replica,
+                },
+            ];
             context.Set<RepositoryEntity>().Add(entity);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -108,15 +154,33 @@ public sealed class CreateRepositoryWithStorageQueryHandler
         }
         catch (Exception)
         {
-            await _storageProvisionerClient
-                .DeleteRepositoryAsync(
-                    selectedNode,
-                    apiToken.Get(),
-                    physicalPath,
-                    CancellationToken.None
-                )
-                .ConfigureAwait(false);
+            await RollBackProvisionedAsync(
+                provisionedNodes,
+                nodeTokens,
+                physicalPath,
+                CancellationToken.None
+            ).ConfigureAwait(false);
             throw;
+        }
+    }
+
+    private async Task RollBackProvisionedAsync(
+        IReadOnlyList<StorageNodeDto> provisionedNodes,
+        IReadOnlyDictionary<StorageNodeId, string> nodeTokens,
+        string physicalPath,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var node in provisionedNodes)
+        {
+            if (!nodeTokens.TryGetValue(node.Id, out var token))
+            {
+                continue;
+            }
+
+            await _storageProvisionerClient
+                .DeleteRepositoryAsync(node, token, physicalPath, cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 }

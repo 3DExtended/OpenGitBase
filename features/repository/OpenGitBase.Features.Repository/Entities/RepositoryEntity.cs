@@ -16,6 +16,16 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
 
     public Guid? StorageNodeId { get; set; }
 
+    public Guid? PrimaryStorageNodeId { get; set; }
+
+    public long ReplicationEpoch { get; set; } = 1;
+
+    public long PrimaryWatermark { get; set; }
+
+    public ReplicationState ReplicationState { get; set; } = ReplicationState.Rf3Healthy;
+
+    public ICollection<RepositoryReplicaEntity> Replicas { get; set; } = [];
+
     public bool IsPrivate { get; set; } = false;
 
     public long StorageBytesUsed { get; set; }

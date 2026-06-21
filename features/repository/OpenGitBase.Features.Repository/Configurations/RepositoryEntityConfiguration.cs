@@ -15,6 +15,10 @@ public class RepositoryEntityConfiguration : IEntityTypeConfiguration<Entities.R
         builder.Property(entity => entity.PhysicalPath).HasMaxLength(512).IsRequired();
         builder.Property(entity => entity.OwnerUserId).IsRequired();
         builder.Property(entity => entity.StorageNodeId);
+        builder.Property(entity => entity.PrimaryStorageNodeId);
+        builder.Property(entity => entity.ReplicationEpoch).IsRequired();
+        builder.Property(entity => entity.PrimaryWatermark).IsRequired();
+        builder.Property(entity => entity.ReplicationState).IsRequired();
         builder.HasIndex(e => new { e.Slug, e.OwnerUserId }).IsUnique();
     }
 }
