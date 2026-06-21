@@ -71,6 +71,55 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
         return Ok(summaries);
     }
 
+    [HttpGet("repositories")]
+    public async Task<ActionResult<AdminRepositoryReplicationListResponse>> ListRepositories(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? sort = null,
+        [FromQuery] string? search = null,
+        [FromQuery] string? attention = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new ListAdminRepositoryReplicationQuery
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    Sort = ReplicationAttention.ParseSort(sort),
+                    Search = search,
+                    Attention = ReplicationAttention.ParsePreset(attention),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (result.IsNone)
+        {
+            return Ok(
+                new AdminRepositoryReplicationListResponse
+                {
+                    Items = [],
+                    TotalCount = 0,
+                    Page = Math.Max(1, page),
+                    PageSize = Math.Clamp(pageSize, 1, 100),
+                }
+            );
+        }
+
+        var payload = result.Get();
+        return Ok(
+            new AdminRepositoryReplicationListResponse
+            {
+                Items = payload.Items,
+                TotalCount = payload.TotalCount,
+                Page = payload.Page,
+                PageSize = payload.PageSize,
+            }
+        );
+    }
+
     [HttpGet("repositories/{repositoryId:guid}/replication")]
     public async Task<ActionResult<AdminRepositoryReplicationStatusResponse>> GetRepositoryStatus(
         Guid repositoryId,

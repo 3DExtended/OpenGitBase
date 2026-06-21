@@ -253,6 +253,13 @@ public class Startup
             RepositoryReplicationRoutingQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<
+                ListAdminRepositoryReplicationQuery,
+                ListAdminRepositoryReplicationResult
+            >,
+            ListAdminRepositoryReplicationQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<PromotePrimaryReplicaQuery, PromotePrimaryReplicaResult>,
             PromotePrimaryReplicaQueryHandler
         >();
