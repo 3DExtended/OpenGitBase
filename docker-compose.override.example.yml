@@ -20,6 +20,9 @@
 
 x-api-env: &api-env
   environment:
+    # Local dev clone URLs (production uses https://opengitbase.com from docker-compose.yml)
+    Git__PublicBaseUrl: "http://localhost:8089"
+
     # SendGrid — set ApiKey and IsDisabled to "false" to send mail
     SendGrid__ApiKey: "SG.replace-me"
     SendGrid__FromEmailAddress: "noreply@example.com"
