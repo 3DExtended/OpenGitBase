@@ -17,6 +17,7 @@ STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
 STORAGE_HTTP_PORT = int(os.environ.get("STORAGE_HTTP_PORT", "8081"))
 STORAGE_MTLS_GIT_HTTP_PORT = int(os.environ.get("STORAGE_MTLS_GIT_HTTP_PORT", "8443"))
+WATERMARK_DIR = Path(os.environ.get("STORAGE_WATERMARK_DIR", "/var/lib/opengitbase/watermarks"))
 REPOS_ROOT = Path("/srv/git")
 CA_CERT = Path("/etc/opengitbase/ca.crt")
 NODE_CERT = Path("/etc/opengitbase/node.crt")
@@ -45,6 +46,37 @@ def _git_mtls_env() -> dict[str, str]:
     if NODE_KEY.is_file():
         env["GIT_SSL_KEY"] = str(NODE_KEY)
     return env
+
+
+def _repository_id_from_path(physical_path: str) -> str:
+    return Path(physical_path).name.removesuffix(".git")
+
+
+def _write_initial_watermark(physical_path: str) -> None:
+    WATERMARK_DIR.mkdir(parents=True, exist_ok=True)
+    repo_id = _repository_id_from_path(physical_path)
+    watermark_file = WATERMARK_DIR / f"{repo_id}.txt"
+    if not watermark_file.is_file():
+        watermark_file.write_text("0", encoding="utf-8")
+
+
+def _install_replication_hook(physical_path: str) -> None:
+    hooks_dir = Path(physical_path) / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hook_path = hooks_dir / "post-receive"
+    hook_path.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'exec /usr/local/bin/storage-quorum-replicate.sh "{physical_path}"\n',
+        encoding="utf-8",
+    )
+    hook_path.chmod(0o755)
+    subprocess.run(
+        ["chown", "-R", "git:git", str(hooks_dir)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def sync_from_peer(
@@ -182,6 +214,8 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+        _write_initial_watermark(physical_path)
+        _install_replication_hook(physical_path)
         self._send_json(201, {"physicalPath": physical_path})
 
     def _handle_sync_from(self) -> None:

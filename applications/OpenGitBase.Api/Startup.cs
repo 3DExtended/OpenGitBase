@@ -211,6 +211,31 @@ public class Startup
             DeleteRepositoryWithStorageQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<
+                CommitReplicationWatermarkQuery,
+                CommitReplicationWatermarkResult
+            >,
+            CommitReplicationWatermarkQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<
+                GetRepositoryReplicationContextQuery,
+                RepositoryReplicationContextDto
+            >,
+            GetRepositoryReplicationContextQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<
+                QuorumReplicateRepositoryQuery,
+                QuorumReplicateRepositoryResult
+            >,
+            QuorumReplicateRepositoryQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<ApplyRepositoryWatermarksQuery, ApplyRepositoryWatermarksResult>,
+            ApplyRepositoryWatermarksQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<UserDeleteAccountQuery, UserDeleteAccountResult>,
             UserDeleteAccountQueryHandler
         >();

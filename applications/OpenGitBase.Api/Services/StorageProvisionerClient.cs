@@ -47,6 +47,74 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             cancellationToken
         );
 
+    public Task<StorageProvisionerResult> SyncRepositoryFromPeerAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        string sourceHost,
+        string sourcePhysicalPath,
+        int sourcePort,
+        CancellationToken cancellationToken
+    ) =>
+        SendSyncFromAsync(
+            node,
+            apiToken,
+            physicalPath,
+            sourceHost,
+            sourcePhysicalPath,
+            sourcePort,
+            cancellationToken
+        );
+
+    private async Task<StorageProvisionerResult> SendSyncFromAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        string sourceHost,
+        string sourcePhysicalPath,
+        int sourcePort,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return StorageProvisionerResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/sync-from";
+        var payload = JsonSerializer.Serialize(
+            new
+            {
+                physicalPath,
+                sourceHost,
+                sourcePhysicalPath,
+                sourcePort,
+            }
+        );
+        using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode == 200)
+        {
+            return StorageProvisionerResult.Ok((int)response.StatusCode);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var error = string.IsNullOrWhiteSpace(body)
+            ? $"Storage sync-from failed with status {(int)response.StatusCode}."
+            : body;
+
+        return StorageProvisionerResult.Fail((int)response.StatusCode, error);
+    }
+
     private async Task<StorageProvisionerResult> SendAsync(
         HttpMethod method,
         StorageNodeDto node,

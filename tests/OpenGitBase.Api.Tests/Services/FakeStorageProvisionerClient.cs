@@ -19,4 +19,14 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
         string physicalPath,
         CancellationToken cancellationToken
     ) => Task.FromResult(StorageProvisionerResult.Ok(200));
+
+    public Task<StorageProvisionerResult> SyncRepositoryFromPeerAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        string sourceHost,
+        string sourcePhysicalPath,
+        int sourcePort,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(StorageProvisionerResult.Ok(200));
 }

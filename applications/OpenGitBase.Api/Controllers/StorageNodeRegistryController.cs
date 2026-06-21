@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
 
 namespace OpenGitBase.Api.Controllers;
@@ -142,6 +143,26 @@ public sealed class StorageNodeRegistryController : ControllerBase
         if (result.IsNone)
         {
             return NotFound();
+        }
+
+        if (request.RepositoryWatermarks is { Count: > 0 })
+        {
+            await _queryProcessor
+                .RunQueryAsync(
+                    new ApplyRepositoryWatermarksQuery
+                    {
+                        NodeId = request.NodeId,
+                        RepositoryWatermarks = request.RepositoryWatermarks
+                            .Select(report => new StorageNodeRepositoryWatermark
+                            {
+                                RepositoryId = report.RepositoryId,
+                                AppliedWatermark = report.AppliedWatermark,
+                            })
+                            .ToList(),
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         return Ok(new StorageNodeHeartbeatResponse { Acknowledged = result.Get().Acknowledged });

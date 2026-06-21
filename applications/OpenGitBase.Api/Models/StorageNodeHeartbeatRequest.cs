@@ -7,4 +7,6 @@ public sealed class StorageNodeHeartbeatRequest
     public long FreeBytesAvailable { get; init; }
 
     public long TotalBytesAvailable { get; init; }
+
+    public IReadOnlyList<RepositoryWatermarkReport>? RepositoryWatermarks { get; init; }
 }

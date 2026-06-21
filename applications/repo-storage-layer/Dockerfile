@@ -23,9 +23,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY storage-agent.sh /usr/local/bin/storage-agent.sh
 COPY storage-http-server.py /usr/local/bin/storage-http-server.py
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
+COPY scripts/storage-quorum-replicate.sh /usr/local/bin/storage-quorum-replicate.sh
 COPY nginx-git-http.conf /etc/opengitbase/nginx-git-http.conf
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh \
-    /usr/local/bin/storage-http-server.py /usr/local/bin/storage-git-http.sh
+    /usr/local/bin/storage-http-server.py /usr/local/bin/storage-git-http.sh \
+    /usr/local/bin/storage-quorum-replicate.sh
 
 EXPOSE 22 8081 8082 8443
 VOLUME ["/home/git/.ssh", "/srv/git"]

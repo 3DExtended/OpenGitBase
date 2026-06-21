@@ -109,12 +109,37 @@ send_heartbeat() {
   fi
   local free total
   read -r free total < <(get_disk_stats)
+  local watermark_json=""
+  local watermark_dir="${STORAGE_WATERMARK_DIR:-/var/lib/opengitbase/watermarks}"
+  if [ -d "${watermark_dir}" ]; then
+    watermark_json=$(STORAGE_WATERMARK_DIR="${watermark_dir}" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+watermark_dir = Path(os.environ.get("STORAGE_WATERMARK_DIR", "/var/lib/opengitbase/watermarks"))
+reports = []
+if watermark_dir.is_dir():
+    for path in sorted(watermark_dir.glob("*.txt")):
+        repo_id = path.stem
+        try:
+            value = int(path.read_text(encoding="utf-8").strip() or "0")
+        except ValueError:
+            continue
+        reports.append({"repositoryId": repo_id, "appliedWatermark": value})
+print(json.dumps(reports))
+PY
+)
+  else
+    watermark_json="[]"
+  fi
   local payload
   payload=$(cat <<EOF
 {
   "nodeId": "${NODE_ID}",
   "freeBytesAvailable": ${free:-0},
-  "totalBytesAvailable": ${total:-0}
+  "totalBytesAvailable": ${total:-0},
+  "repositoryWatermarks": ${watermark_json}
 }
 EOF
 )

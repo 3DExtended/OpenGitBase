@@ -18,4 +18,14 @@ public interface IStorageProvisionerClient
         string physicalPath,
         CancellationToken cancellationToken
     );
+
+    Task<StorageProvisionerResult> SyncRepositoryFromPeerAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        string sourceHost,
+        string sourcePhysicalPath,
+        int sourcePort,
+        CancellationToken cancellationToken
+    );
 }
