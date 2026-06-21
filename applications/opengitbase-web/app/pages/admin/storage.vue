@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import type {
+  AdminRepositoryReplicationSummaryDto,
+  AdminStorageNodeReplicationSummaryDto,
+  StorageNodeDto,
+} from '~/utils/api'
+import {
+  repositoryNeedsAttention,
+  rollupReplicationStates,
+} from '~/composables/useAdminReplication'
+
 definePageMeta({ middleware: 'admin' })
 
 const { t } = useI18n()
@@ -6,19 +16,7 @@ const api = useApi()
 
 useHead({ title: t('admin.storage.title') })
 
-type StorageNode = {
-  id: string
-  nodeId: string
-  internalHost: string
-  internalSshPort: number
-  internalHttpPort: number
-  isHealthy: boolean
-  registeredAt: string
-  lastHeartbeatAt?: string | null
-  freeBytesAvailable: number
-  totalBytesAvailable: number
-  certificateThumbprint?: string
-}
+type StorageNode = StorageNodeDto
 
 type Enrollment = {
   id: string
@@ -31,8 +29,11 @@ type Enrollment = {
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-const nodes = ref<StorageNode[]>([])
+const nodes = ref<StorageNodeDto[]>([])
 const enrollments = ref<Enrollment[]>([])
+const replicationSummaries = ref<AdminStorageNodeReplicationSummaryDto[]>([])
+const replicationRollupItems = ref<AdminRepositoryReplicationSummaryDto[]>([])
+const attentionItems = ref<AdminRepositoryReplicationSummaryDto[]>([])
 
 const createNodeId = ref('storage-1')
 const createExpiresInHours = ref<number | null>(null)
@@ -54,18 +55,33 @@ const fleetPublicKey = ref<string | null>(null)
 const generatedBootstrapToken = ref<string | null>(null)
 const generateKeysLoading = ref(false)
 
+const healthyNodeCount = computed(() => nodes.value.filter(node => node.isHealthy).length)
+const rf3Eligible = computed(() => healthyNodeCount.value >= 3)
+const replicationRollup = computed(() => rollupReplicationStates(replicationRollupItems.value))
+
+function replicationSummaryFor(nodeId: string) {
+  return replicationSummaries.value.find(summary => summary.nodeId === nodeId)
+}
+
 async function refreshAll() {
   loading.value = true
   error.value = null
   try {
-    const [nodesResult, enrollmentsResult, pubKeyResult] = await Promise.all([
+    const [nodesResult, enrollmentsResult, pubKeyResult, replicationSummaryResult, repoListResult] = await Promise.all([
       api.admin.storageNodes.list(),
       api.admin.storageEnrollments.list(),
       api.admin.fleet.getDispatcherSshPublicKey(),
+      api.admin.replication.listStorageNodeSummary(),
+      api.admin.replication.listRepositories({ page: 1, pageSize: 100, sort: 'severity' }),
     ])
     nodes.value = nodesResult.data ?? []
     enrollments.value = enrollmentsResult.data ?? []
     fleetPublicKey.value = pubKeyResult.data?.publicKey ?? null
+    replicationSummaries.value = replicationSummaryResult.data ?? []
+    replicationRollupItems.value = repoListResult.data?.items ?? []
+    attentionItems.value = replicationRollupItems.value
+      .filter(repositoryNeedsAttention)
+      .slice(0, 5)
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load admin storage data.'
@@ -115,6 +131,7 @@ async function generateFleetKeys() {
 }
 
 onMounted(refreshAll)
+useAdminReplicationPoll(refreshAll)
 </script>
 
 <template>
@@ -137,12 +154,6 @@ onMounted(refreshAll)
         <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
           {{ t('admin.storage.description') }}
         </p>
-        <p class="mt-2 text-xs text-[var(--ogb-text-muted)]">
-          RF=3 replication requires three healthy storage nodes. Per-repository detail:
-          <code>GET /admin/repositories/{id}/replication</code>.
-          Fleet node summary:
-          <code>GET /admin/storage-nodes/replication-summary</code>.
-        </p>
       </div>
 
       <UButton
@@ -161,6 +172,75 @@ onMounted(refreshAll)
       variant="subtle"
       :description="error"
     />
+
+    <UCard>
+      <template #header>
+        <h2 class="font-semibold">
+          {{ t('admin.replication.rollup') }}
+        </h2>
+      </template>
+      <UAlert
+        :color="rf3Eligible ? 'success' : 'warning'"
+        variant="subtle"
+        :description="t(rf3Eligible ? 'admin.replication.fleetGate.eligible' : 'admin.replication.fleetGate.ineligible', { healthy: healthyNodeCount })"
+      />
+      <div class="mt-3 flex flex-wrap gap-2 text-sm">
+        <UBadge
+          v-for="(count, state) in replicationRollup"
+          :key="state"
+          color="neutral"
+          variant="subtle"
+        >
+          {{ count }} {{ t(`admin.replication.states.${state}`, state) }}
+        </UBadge>
+      </div>
+    </UCard>
+
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="font-semibold">
+            {{ t('admin.replication.attentionTitle') }}
+          </h2>
+          <UButton
+            to="/admin/repositories"
+            variant="link"
+            size="sm"
+          >
+            {{ t('admin.replication.viewAll') }}
+          </UButton>
+        </div>
+      </template>
+      <div
+        v-if="!attentionItems.length"
+        class="text-sm text-[var(--ogb-text-muted)]"
+      >
+        {{ t('admin.replication.attentionEmpty') }}
+      </div>
+      <div
+        v-else
+        class="space-y-2"
+      >
+        <UCard
+          v-for="item in attentionItems"
+          :key="item.repositoryId"
+          class="cursor-pointer bg-[var(--ogb-bg)]"
+          @click="navigateTo(`/admin/repositories/${item.repositoryId}`)"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="font-medium">
+                {{ item.ownerSlug }}/{{ item.name }}
+              </div>
+              <div class="mt-1 text-xs text-[var(--ogb-text-muted)]">
+                {{ item.primaryNodeId }} · lag {{ item.maxWatermarkLag }}
+              </div>
+            </div>
+            <AdminReplicationStateBadge :state="item.replicationState" />
+          </div>
+        </UCard>
+      </div>
+    </UCard>
 
     <UCard>
       <template #header>
@@ -210,9 +290,26 @@ onMounted(refreshAll)
                 >
                   {{ node.isHealthy ? 'Healthy' : 'Unhealthy' }}
                 </UBadge>
+                <UBadge
+                  v-if="replicationSummaryFor(node.nodeId)?.isSpare"
+                  color="neutral"
+                  variant="subtle"
+                >
+                  {{ t('admin.replication.nodeRoles.spare') }}
+                </UBadge>
               </div>
               <div class="mt-1 text-xs text-[var(--ogb-text-muted)]">
                 {{ node.internalHost }}:{{ node.internalHttpPort }} (ssh {{ node.internalSshPort }})
+              </div>
+              <div
+                v-if="replicationSummaryFor(node.nodeId)"
+                class="mt-1 text-xs text-[var(--ogb-text-muted)]"
+              >
+                {{ t('admin.replication.nodeRoles.primary') }}:
+                {{ replicationSummaryFor(node.nodeId)?.primaryRepositoryCount ?? 0 }}
+                ·
+                {{ t('admin.replication.nodeRoles.replica') }}:
+                {{ replicationSummaryFor(node.nodeId)?.replicaRepositoryCount ?? 0 }}
               </div>
               <div
                 v-if="node.certificateThumbprint"

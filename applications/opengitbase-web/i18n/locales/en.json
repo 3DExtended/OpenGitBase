@@ -330,6 +330,80 @@
     "storage": {
       "title": "Storage fleet",
       "description": "View storage nodes, create enrollments, and manage dispatcher SSH keys."
+    },
+    "replication": {
+      "title": "Repository replication",
+      "description": "Audit RF=3 health, backfill progress, and watermark lag across repositories.",
+      "indexTitle": "Repository replication",
+      "indexDescription": "Paginated fleet view of replication state, quorum, and sync progress.",
+      "detailTitle": "Replication detail",
+      "refresh": "Refresh",
+      "viewAll": "View all repositories",
+      "fleetGate": {
+        "eligible": "{healthy}/3 nodes healthy — RF=3 eligible",
+        "ineligible": "{healthy}/3 nodes healthy — RF=3 not available"
+      },
+      "rollup": "Replication rollup",
+      "attentionTitle": "Needs attention",
+      "attentionEmpty": "No repositories need attention.",
+      "empty": "No repositories found.",
+      "columns": {
+        "name": "Repository",
+        "owner": "Owner",
+        "state": "State",
+        "replicas": "Replicas",
+        "primary": "Primary",
+        "lag": "Max lag",
+        "quorum": "Write quorum",
+        "lastSynced": "Oldest sync",
+        "epoch": "Epoch"
+      },
+      "filters": {
+        "all": "All",
+        "backfilling": "Backfilling",
+        "degraded": "Degraded",
+        "lagging": "Lagging",
+        "noQuorum": "No quorum"
+      },
+      "sort": {
+        "severity": "Severity",
+        "name": "Name",
+        "lag": "Lag",
+        "state": "State"
+      },
+      "searchPlaceholder": "Search by name or owner…",
+      "progress": {
+        "provisioning": "Provisioning",
+        "sync": "Sync"
+      },
+      "states": {
+        "Rf1Backfilling": "Backfilling",
+        "Rf3Healthy": "RF=3 healthy",
+        "Degraded": "Degraded",
+        "Promoting": "Promoting"
+      },
+      "quorum": {
+        "yes": "Available",
+        "no": "Unavailable"
+      },
+      "detail": {
+        "publicRepo": "Open repository page",
+        "primaryWatermark": "Primary watermark",
+        "writeQuorum": "Write quorum",
+        "replicasTitle": "Replica set",
+        "primaryNode": "Primary",
+        "replicaNode": "Replica",
+        "appliedWatermark": "Applied watermark",
+        "lag": "Lag",
+        "inSync": "In sync",
+        "lastSynced": "Last synced",
+        "notFound": "Repository not found."
+      },
+      "nodeRoles": {
+        "primary": "Primary repos",
+        "replica": "Replica repos",
+        "spare": "Spare"
+      }
     }
   }
 }

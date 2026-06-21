@@ -33,6 +33,56 @@ export interface CreateStorageNodeEnrollmentResult {
   expiresAt: string
 }
 
+export interface AdminStorageNodeReplicationSummaryDto {
+  storageNodeId: string
+  nodeId: string
+  primaryRepositoryCount: number
+  replicaRepositoryCount: number
+  isSpare: boolean
+}
+
+export interface AdminRepositoryReplicationSummaryDto {
+  repositoryId: string
+  name: string
+  ownerSlug: string
+  replicationState: string
+  replicaCount: number
+  primaryNodeId: string
+  primaryWatermark: number
+  maxWatermarkLag: number
+  writeQuorumAvailable: boolean
+  replicationEpoch: number
+  oldestLastSyncedAt?: string | null
+}
+
+export interface AdminRepositoryReplicationListResponse {
+  items: AdminRepositoryReplicationSummaryDto[]
+  totalCount: number
+  page: number
+  pageSize: number
+}
+
+export interface AdminRepositoryReplicaStatusDto {
+  storageNodeId: string
+  nodeId: string
+  role: string
+  appliedWatermark: number
+  isInSync: boolean
+  lastSyncedAt?: string | null
+}
+
+export interface AdminRepositoryReplicationDetailDto {
+  repositoryId: string
+  name: string
+  slug: string
+  ownerSlug: string
+  replicationState: string
+  primaryWatermark: number
+  replicationEpoch: number
+  writeQuorumAvailable: boolean
+  replicas: AdminRepositoryReplicaStatusDto[]
+}
+
 export interface AccountDebugFeatures {
   emailVerification: boolean
 }
@@ -694,6 +744,28 @@ export function createApi(baseUrl: string) {
           request<{ dispatcherSshPublicKey: string, fleetBootstrapToken: string }>('/admin/fleet/dispatcher-ssh-keys/generate', {
             method: 'POST',
           }),
+      },
+      replication: {
+        listStorageNodeSummary: () =>
+          request<AdminStorageNodeReplicationSummaryDto[]>('/admin/storage-nodes/replication-summary'),
+        listRepositories: (params?: {
+          page?: number
+          pageSize?: number
+          sort?: string
+          search?: string
+          attention?: string
+        }) => {
+          const query = new URLSearchParams()
+          if (params?.page) query.set('page', String(params.page))
+          if (params?.pageSize) query.set('pageSize', String(params.pageSize))
+          if (params?.sort) query.set('sort', params.sort)
+          if (params?.search) query.set('search', params.search)
+          if (params?.attention) query.set('attention', params.attention)
+          const suffix = query.size ? `?${query.toString()}` : ''
+          return request<AdminRepositoryReplicationListResponse>(`/admin/repositories${suffix}`)
+        },
+        getRepository: (repositoryId: string) =>
+          request<AdminRepositoryReplicationDetailDto>(`/admin/repositories/${repositoryId}/replication`),
       },
     },
   }

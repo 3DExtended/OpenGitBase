@@ -13,6 +13,13 @@ const sections = computed(() => [
     icon: 'i-lucide-server',
     available: true,
   },
+  {
+    title: t('admin.replication.title'),
+    description: t('admin.replication.description'),
+    to: '/admin/repositories',
+    icon: 'i-lucide-database-backup',
+    available: true,
+  },
 ])
 </script>
 

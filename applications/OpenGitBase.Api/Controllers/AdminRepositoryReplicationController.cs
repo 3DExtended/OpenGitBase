@@ -139,6 +139,24 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
             return NotFound();
         }
 
+        var nodeIds = repository.Replicas.Select(replica => replica.StorageNodeId).ToList();
+        var nodes = new Dictionary<Guid, StorageNodeEntity>();
+        if (
+            nodeIds.Count > 0
+            && context.Model.FindEntityType(typeof(StorageNodeEntity)) is not null
+        )
+        {
+            nodes = await context
+                .Set<StorageNodeEntity>()
+                .AsNoTracking()
+                .Where(node => nodeIds.Contains(node.Id))
+                .ToDictionaryAsync(node => node.Id, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var ownerSlug = await ResolveOwnerSlugAsync(context, repository.OwnerUserId, cancellationToken)
+            .ConfigureAwait(false);
+
         var routing = await _queryProcessor
             .RunQueryAsync(
                 new RepositoryReplicationRoutingQuery
@@ -153,6 +171,9 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
             new AdminRepositoryReplicationStatusResponse
             {
                 RepositoryId = repository.Id,
+                Name = repository.Name,
+                Slug = repository.Slug,
+                OwnerSlug = ownerSlug,
                 ReplicationState = repository.ReplicationState.ToString(),
                 PrimaryWatermark = repository.PrimaryWatermark,
                 ReplicationEpoch = repository.ReplicationEpoch,
@@ -161,6 +182,9 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
                     .Select(replica => new AdminRepositoryReplicaStatusResponse
                     {
                         StorageNodeId = replica.StorageNodeId,
+                        NodeId = nodes.TryGetValue(replica.StorageNodeId, out var node)
+                            ? node.NodeId
+                            : string.Empty,
                         Role = replica.Role.ToString(),
                         AppliedWatermark = replica.AppliedWatermark,
                         IsInSync = ReplicationSync.IsInSync(
@@ -172,5 +196,43 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
                     .ToList(),
             }
         );
+    }
+
+    private static async Task<string> ResolveOwnerSlugAsync(
+        OpenGitBaseDbContext context,
+        Guid ownerUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (context.Model.FindEntityType(typeof(OpenGitBase.Features.Organization.Entities.OrganizationEntity)) != null)
+        {
+            var organization = await context
+                .Set<OpenGitBase.Features.Organization.Entities.OrganizationEntity>()
+                .AsNoTracking()
+                .Where(org => org.Id == ownerUserId)
+                .Select(org => org.Slug)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(organization))
+            {
+                return organization;
+            }
+        }
+
+        if (context.Model.FindEntityType(typeof(OpenGitBase.Features.Users.Entities.UserEntity)) != null)
+        {
+            var username = await context
+                .Set<OpenGitBase.Features.Users.Entities.UserEntity>()
+                .AsNoTracking()
+                .Where(user => user.Id == ownerUserId)
+                .Select(user => user.Username)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return username ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 }
