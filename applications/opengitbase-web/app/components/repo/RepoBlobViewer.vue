@@ -138,9 +138,10 @@ const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinar
       :source="blob.textContent!"
     />
 
-    <pre
+    <RepoHighlightedCode
       v-else-if="showText"
-      class="overflow-x-auto rounded-md border border-[var(--ogb-border)] bg-[var(--ogb-bg)] p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap"
-    ><code>{{ blob.textContent }}</code></pre>
+      :source="blob.textContent!"
+      :path="blob.path"
+    />
   </div>
 </template>
