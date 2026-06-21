@@ -35,6 +35,7 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
             .ConfigureAwait(false);
         var entity = await context
             .Set<RepositoryEntity>()
+            .Include(repository => repository.Replicas)
             .FirstOrDefaultAsync(repository => repository.Id == query.Id.Value, cancellationToken)
             .ConfigureAwait(false);
 
@@ -52,64 +53,118 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
             );
         }
 
-        var storageNodeId = StorageNodeId.From(entity.StorageNodeId.Value);
-        var storageNode = await _queryProcessor
-            .RunQueryAsync(
-                new GetStorageNodeQuery { ModelId = storageNodeId },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (storageNode.IsNone)
+        var targetNodeIds = entity.Replicas.Count > 0
+            ? entity.Replicas.Select(replica => replica.StorageNodeId).ToList()
+            : [entity.StorageNodeId.Value];
+
+        var deleteResults = new List<(Guid NodeId, bool Success)>();
+        foreach (var nodeId in targetNodeIds)
         {
-            return Option.From(
-                DeleteRepositoryWithStorageResult.Failed("Assigned storage node was not found.")
-            );
+            var storageNodeId = StorageNodeId.From(nodeId);
+            var storageNode = await _queryProcessor
+                .RunQueryAsync(
+                    new GetStorageNodeQuery { ModelId = storageNodeId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (storageNode.IsNone || !storageNode.Get().IsHealthy)
+            {
+                deleteResults.Add((nodeId, false));
+                continue;
+            }
+
+            var apiToken = await _queryProcessor
+                .RunQueryAsync(
+                    new GetStorageNodeApiTokenQuery { StorageNodeId = storageNodeId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (apiToken.IsNone)
+            {
+                deleteResults.Add((nodeId, false));
+                continue;
+            }
+
+            var deleteResult = await _storageProvisionerClient
+                .DeleteRepositoryAsync(
+                    storageNode.Get(),
+                    apiToken.Get(),
+                    entity.PhysicalPath,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            deleteResults.Add((nodeId, deleteResult.Success));
         }
 
-        var node = storageNode.Get();
-        if (!node.IsHealthy)
+        var successCount = deleteResults.Count(result => result.Success);
+        var requiredQuorum = entity.Replicas.Count >= 3 ? 2 : 1;
+        if (successCount < requiredQuorum)
         {
             return Option.From(
                 DeleteRepositoryWithStorageResult.Failed(
-                    "Assigned storage node is unavailable."
+                    "Quorum delete failed: fewer than two storage nodes confirmed deletion."
                 )
             );
         }
 
-        var apiToken = await _queryProcessor
-            .RunQueryAsync(
-                new GetStorageNodeApiTokenQuery { StorageNodeId = storageNodeId },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (apiToken.IsNone)
-        {
-            return Option.From(
-                DeleteRepositoryWithStorageResult.Failed(
-                    "Storage node API token is unavailable."
-                )
-            );
-        }
-
-        var deleteResult = await _storageProvisionerClient
-            .DeleteRepositoryAsync(
-                node,
-                apiToken.Get(),
-                entity.PhysicalPath,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (!deleteResult.Success)
-        {
-            return Option.From(
-                DeleteRepositoryWithStorageResult.Failed(
-                    $"Storage deletion failed: {deleteResult.Error}"
-                )
-            );
-        }
-
+        var pendingScrubNodeIds = deleteResults
+            .Where(result => !result.Success)
+            .Select(result => result.NodeId)
+            .ToList();
+        var physicalPath = entity.PhysicalPath;
         context.Remove(entity);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (pendingScrubNodeIds.Count > 0)
+        {
+            _ = Task.Run(
+                () => ScrubPendingNodesAsync(physicalPath, pendingScrubNodeIds, CancellationToken.None),
+                CancellationToken.None
+            );
+        }
+
         return Option.From(DeleteRepositoryWithStorageResult.Deleted());
+    }
+
+    private async Task ScrubPendingNodesAsync(
+        string physicalPath,
+        IReadOnlyList<Guid> nodeIds,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var nodeId in nodeIds)
+        {
+            var storageNodeId = StorageNodeId.From(nodeId);
+            var storageNode = await _queryProcessor
+                .RunQueryAsync(
+                    new GetStorageNodeQuery { ModelId = storageNodeId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (storageNode.IsNone)
+            {
+                continue;
+            }
+
+            var apiToken = await _queryProcessor
+                .RunQueryAsync(
+                    new GetStorageNodeApiTokenQuery { StorageNodeId = storageNodeId },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (apiToken.IsNone)
+            {
+                continue;
+            }
+
+            await _storageProvisionerClient
+                .DeleteRepositoryAsync(
+                    storageNode.Get(),
+                    apiToken.Get(),
+                    physicalPath,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
     }
 }
