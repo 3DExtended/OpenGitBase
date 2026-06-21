@@ -236,6 +236,13 @@ public class Startup
             ApplyRepositoryWatermarksQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<
+                RepositoryReplicationRoutingQuery,
+                RepositoryReplicationRoutingDto
+            >,
+            RepositoryReplicationRoutingQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<UserDeleteAccountQuery, UserDeleteAccountResult>,
             UserDeleteAccountQueryHandler
         >();

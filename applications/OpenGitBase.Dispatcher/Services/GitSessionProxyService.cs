@@ -31,14 +31,14 @@ public sealed class GitSessionProxyService
         CancellationToken cancellationToken
     )
     {
-        if (
-            string.IsNullOrWhiteSpace(accessCheck.PhysicalPath)
-            || string.IsNullOrWhiteSpace(accessCheck.StorageNodeInternalHost)
-            || accessCheck.StorageNodeInternalSshPort is null
-        )
+        if (string.IsNullOrWhiteSpace(accessCheck.PhysicalPath))
         {
             throw new InvalidOperationException("Access check is missing storage routing fields.");
         }
+
+        var target = operation == RepositoryOperation.WriteGit
+            ? GitRoutingTargetSelector.SelectWriteTarget(accessCheck)
+            : GitRoutingTargetSelector.SelectReadTarget(accessCheck);
 
         if (!File.Exists(_options.StorageSshPrivateKeyPath))
         {
@@ -51,8 +51,8 @@ public sealed class GitSessionProxyService
         var gitCommand = BuildGitCommand(operation, accessCheck.PhysicalPath);
         var keyFile = new PrivateKeyFile(_options.StorageSshPrivateKeyPath);
         var connectionInfo = new ConnectionInfo(
-            accessCheck.StorageNodeInternalHost,
-            accessCheck.StorageNodeInternalSshPort.Value,
+            target.InternalHost,
+            target.InternalSshPort,
             _options.StorageSshUser,
             new PrivateKeyAuthenticationMethod(_options.StorageSshUser, keyFile)
         )

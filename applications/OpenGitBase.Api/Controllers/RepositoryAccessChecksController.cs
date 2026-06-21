@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -256,6 +257,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                         RepositoryId = repositoryDto.Id.Value,
                         EffectiveRole = "Owner",
                     },
+                    request.Operation,
                     cancellationToken
                 )
             );
@@ -289,6 +291,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                     await ApplyStorageRoutingAsync(
                         repositoryDto,
                         organizationAccess,
+                        request.Operation,
                         cancellationToken
                     )
                 );
@@ -334,6 +337,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                         RepositoryId = repositoryDto.Id.Value,
                         EffectiveRole = effectiveRole,
                     },
+                    request.Operation,
                     cancellationToken
                 )
             );
@@ -357,7 +361,12 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
             return OkWithLog(
                 request,
-                await ApplyStorageRoutingAsync(repositoryDto, writeResponse, cancellationToken)
+                await ApplyStorageRoutingAsync(
+                    repositoryDto,
+                    writeResponse,
+                    request.Operation,
+                    cancellationToken
+                )
             );
         }
 
@@ -467,6 +476,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
     private async Task<RepositoryAccessCheckResponse> ApplyStorageRoutingAsync(
         RepositoryDto repositoryDto,
         RepositoryAccessCheckResponse response,
+        RepositoryOperation operation,
         CancellationToken cancellationToken
     )
     {
@@ -487,14 +497,17 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             };
         }
 
-        var storageNode = await _queryProcessor
+        var routing = await _queryProcessor
             .RunQueryAsync(
-                new GetStorageNodeQuery { ModelId = repositoryDto.StorageNodeId },
+                new RepositoryReplicationRoutingQuery
+                {
+                    RepositoryId = repositoryDto.Id,
+                },
                 cancellationToken
             )
             .ConfigureAwait(false);
 
-        if (storageNode.IsNone || !storageNode.Get().IsHealthy)
+        if (routing.IsNone)
         {
             return new RepositoryAccessCheckResponse
             {
@@ -502,11 +515,59 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 ResolvedUserId = response.ResolvedUserId,
                 RepositoryId = response.RepositoryId,
                 EffectiveRole = response.EffectiveRole,
-                Reason = "Assigned storage node is unavailable.",
+                Reason = "Repository replication routing is unavailable.",
             };
         }
 
-        var node = storageNode.Get();
+        var routingDto = routing.Get();
+        var primary = routingDto.Targets.FirstOrDefault(target => target.IsPrimary);
+        if (primary is null || !primary.IsHealthy)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = false,
+                ResolvedUserId = response.ResolvedUserId,
+                RepositoryId = response.RepositoryId,
+                EffectiveRole = response.EffectiveRole,
+                Reason = "Primary storage node is unavailable.",
+            };
+        }
+
+        if (operation == RepositoryOperation.WriteGit && !routingDto.WriteQuorumAvailable)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = false,
+                ResolvedUserId = response.ResolvedUserId,
+                RepositoryId = response.RepositoryId,
+                EffectiveRole = response.EffectiveRole,
+                Reason = "Write quorum unavailable: fewer than two storage nodes are healthy.",
+            };
+        }
+
+        var readTargets = routingDto
+            .Targets.Where(target => target.IsInSync)
+            .OrderByDescending(target => target.IsPrimary)
+            .ThenBy(target => target.StorageNodeId)
+            .Select(RepositoryAccessCheckRoutingMapper.MapRoutingTarget)
+            .ToList();
+
+        if (operation == RepositoryOperation.ReadGit && readTargets.Count == 0)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = false,
+                ResolvedUserId = response.ResolvedUserId,
+                RepositoryId = response.RepositoryId,
+                EffectiveRole = response.EffectiveRole,
+                Reason = "No in-sync read targets are available.",
+            };
+        }
+
+        var selectedTarget = operation == RepositoryOperation.WriteGit
+            ? RepositoryAccessCheckRoutingMapper.MapRoutingTarget(primary)
+            : readTargets[0];
+
         return new RepositoryAccessCheckResponse
         {
             Allowed = true,
@@ -514,9 +575,12 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             RepositoryId = response.RepositoryId,
             EffectiveRole = response.EffectiveRole,
             PhysicalPath = repositoryDto.PhysicalPath,
-            StorageNodeInternalHost = node.InternalHost,
-            StorageNodeInternalSshPort = node.InternalSshPort,
-            StorageNodeInternalGitHttpPort = node.InternalGitHttpPort,
+            StorageNodeInternalHost = selectedTarget.InternalHost,
+            StorageNodeInternalSshPort = selectedTarget.InternalSshPort,
+            StorageNodeInternalGitHttpPort = selectedTarget.InternalGitHttpPort,
+            ReplicationEpoch = routingDto.ReplicationEpoch,
+            Primary = RepositoryAccessCheckRoutingMapper.MapRoutingTarget(primary),
+            ReadTargets = readTargets,
         };
     }
 

@@ -49,14 +49,14 @@ public sealed class GitHttpProxyService
         CancellationToken cancellationToken
     )
     {
-        if (
-            string.IsNullOrWhiteSpace(accessCheck.PhysicalPath)
-            || string.IsNullOrWhiteSpace(accessCheck.StorageNodeInternalHost)
-            || accessCheck.StorageNodeInternalGitHttpPort is null
-        )
+        if (string.IsNullOrWhiteSpace(accessCheck.PhysicalPath))
         {
             throw new InvalidOperationException("Access check is missing git HTTP routing fields.");
         }
+
+        var target = gitRequest.Operation == RepositoryOperation.WriteGit
+            ? GitRoutingTargetSelector.SelectWriteTarget(accessCheck)
+            : GitRoutingTargetSelector.SelectReadTarget(accessCheck);
 
         var relativePath = BuildStorageRelativePath(
             accessCheck.PhysicalPath,
@@ -64,7 +64,7 @@ public sealed class GitHttpProxyService
             context.Request.QueryString
         );
         var storageUri = new Uri(
-            $"http://{accessCheck.StorageNodeInternalHost}:{accessCheck.StorageNodeInternalGitHttpPort.Value}{relativePath}"
+            $"http://{target.InternalHost}:{target.InternalGitHttpPort}{relativePath}"
         );
 
         using var request = new HttpRequestMessage(
