@@ -18,11 +18,13 @@
 		@nuxt_assets path /_nuxt/*
 		handle @nuxt_assets {
 			root * /srv
+			header Cache-Control "public, max-age=31536000, immutable"
 			file_server
 		}
 
 		handle {
 			root * /srv
+			header Cache-Control "no-store"
 			try_files {path} /200.html
 			file_server
 		}

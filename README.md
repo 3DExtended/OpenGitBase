@@ -136,6 +136,8 @@ Set `GIT_SSH_ENABLED=true` on API and dispatchers via `docker-compose.ssh.yml`.
 
 The tunnel container targets the unified HAProxy frontend (`ssh-lb:8080`). In the Cloudflare dashboard, route `opengitbase.com` (and optionally `www.opengitbase.com`) to the tunnel. Git Smart HTTP paths on `www` are redirected to the apex hostname by HAProxy.
 
+After rolling web updates, **purge the Cloudflare cache** for the zone (Caching → Configuration → Purge Everything). During deploys, missing `/_nuxt/*` chunks can briefly be cached as HTML; a purge clears poisoned asset entries.
+
 Default admin user (change in `applications/OpenGitBase.Api/appsettings.json`):
 
 - Username: `admin`

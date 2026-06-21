@@ -88,8 +88,11 @@ FLEET_ROLL_SERVICES=(
 APP_ROLL_SERVICES=(
   api-2
   api-1
-  web-2
+)
+
+WEB_ROLL_SERVICES=(
   web-1
+  web-2
 )
 
 FLEET_BUILD_SERVICES=(
@@ -200,6 +203,12 @@ roll_service() {
   wait_for_healthy "${service}"
 }
 
+roll_web_replicas() {
+  compose up -d --no-deps --remove-orphans web-1 web-2
+  wait_for_healthy web-1
+  wait_for_healthy web-2
+}
+
 lb_http_check() {
   local url="$1"
   local host_fallback_url="$2"
@@ -266,6 +275,8 @@ fi
 for service in "${ROLL_SERVICES[@]}"; do
   run_step "Roll ${service}" roll_service "${service}"
 done
+
+run_step "Roll web replicas (web-1 and web-2 together)" roll_web_replicas
 
 run_step "Ensure load balancer (ssh-lb) is up" \
   compose up -d ssh-lb
