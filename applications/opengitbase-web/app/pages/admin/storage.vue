@@ -137,6 +137,12 @@ onMounted(refreshAll)
         <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
           {{ t('admin.storage.description') }}
         </p>
+        <p class="mt-2 text-xs text-[var(--ogb-text-muted)]">
+          RF=3 replication requires three healthy storage nodes. Per-repository detail:
+          <code>GET /admin/repositories/{id}/replication</code>.
+          Fleet node summary:
+          <code>GET /admin/storage-nodes/replication-summary</code>.
+        </p>
       </div>
 
       <UButton
