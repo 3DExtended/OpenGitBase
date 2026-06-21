@@ -22,6 +22,7 @@ COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY storage-agent.sh /usr/local/bin/storage-agent.sh
 COPY storage-http-server.py /usr/local/bin/storage-http-server.py
+COPY storage_content.py /usr/local/bin/storage_content.py
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
 COPY scripts/storage-quorum-replicate.sh /usr/local/bin/storage-quorum-replicate.sh
 COPY nginx-git-http.conf /etc/opengitbase/nginx-git-http.conf

@@ -12,6 +12,17 @@ import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
+from storage_content import (
+    GitContentError,
+    get_blob,
+    get_raw_bytes,
+    is_empty_repository,
+    list_branches,
+    list_tags,
+    list_tree,
+    resolve_readme,
+)
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
@@ -160,6 +171,188 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if not raw:
             return {}
         return json.loads(raw.decode("utf-8"))
+
+    def _query_params(self) -> dict[str, list[str]]:
+        parsed = urlparse(self.path)
+        return parse_qs(parsed.query)
+
+    def _physical_path_from_query(self) -> str | None:
+        params = self._query_params()
+        values = params.get("physicalPath", [])
+        return values[0] if values else None
+
+    def _handle_content_error(self, exc: GitContentError) -> None:
+        if exc.code in {"not_found", "invalid_ref"}:
+            self._send_json(404, {"error": exc.message})
+            return
+        if exc.code == "invalid_path":
+            self._send_json(400, {"error": exc.message})
+            return
+        self._send_json(500, {"error": exc.message})
+
+    def do_GET(self) -> None:
+        if not self._check_auth():
+            self.send_error(401)
+            return
+
+        parsed = urlparse(self.path)
+        if parsed.path == "/internal/repos/content/branches":
+            self._handle_list_branches()
+            return
+        if parsed.path == "/internal/repos/content/tags":
+            self._handle_list_tags()
+            return
+        if parsed.path == "/internal/repos/content/tree":
+            self._handle_list_tree()
+            return
+        if parsed.path == "/internal/repos/content/blob":
+            self._handle_get_blob()
+            return
+        if parsed.path == "/internal/repos/content/blob/raw":
+            self._handle_get_blob_raw()
+            return
+        if parsed.path == "/internal/repos/content/readme":
+            self._handle_get_readme()
+            return
+        if parsed.path == "/internal/repos/content/empty":
+            self._handle_is_empty()
+            return
+
+        self.send_error(404)
+
+    def _handle_list_branches(self) -> None:
+        physical_path = self._physical_path_from_query()
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            branches = list_branches(physical_path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"branches": branches})
+
+    def _handle_list_tags(self) -> None:
+        physical_path = self._physical_path_from_query()
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            tags = list_tags(physical_path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"tags": tags})
+
+    def _handle_list_tree(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ref = params.get("ref", [""])[0]
+        path = params.get("path", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref:
+            self._send_json(400, {"error": "ref is required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = list_tree(physical_path, ref, path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_get_blob(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ref = params.get("ref", [""])[0]
+        path = params.get("path", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref or not path:
+            self._send_json(400, {"error": "ref and path are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = get_blob(physical_path, ref, path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_get_blob_raw(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ref = params.get("ref", [""])[0]
+        path = params.get("path", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref or not path:
+            self._send_json(400, {"error": "ref and path are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            raw, normalized_path = get_raw_bytes(physical_path, ref, path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="{Path(normalized_path).name}"',
+        )
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _handle_get_readme(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ref = params.get("ref", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref:
+            self._send_json(400, {"error": "ref is required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = resolve_readme(physical_path, ref)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        if payload is None:
+            self._send_json(404, {"error": "README not found."})
+            return
+        self._send_json(200, payload)
+
+    def _handle_is_empty(self) -> None:
+        physical_path = self._physical_path_from_query()
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        self._send_json(200, {"isEmpty": is_empty_repository(physical_path)})
 
     def do_POST(self) -> None:
         if not self._check_auth():
