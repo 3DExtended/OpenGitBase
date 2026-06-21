@@ -12,6 +12,15 @@
 			header Cache-Control "no-store"
 		}
 
+		# Hashed build assets must not fall back to the SPA shell — during rolling
+		# deploys a missing chunk would otherwise be served as text/html (200.html),
+		# breaking module loading and poisoning CDN caches.
+		@nuxt_assets path /_nuxt/*
+		handle @nuxt_assets {
+			root * /srv
+			file_server
+		}
+
 		handle {
 			root * /srv
 			try_files {path} /200.html
