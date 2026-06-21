@@ -12,7 +12,7 @@ x-api-environment: &api-environment
   Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
   Debug__Features__EmailVerification: "true"
   GIT_SSH_ENABLED: "false"
-  Git__PublicBaseUrl: "https://opengitbase.com"
+  Git__PublicBaseUrl: "https://api.opengitbase.com"
 
 x-api-common: &api-common
   <<: *api-image
