@@ -8,6 +8,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.GitAccessToken.Contracts;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
@@ -537,6 +538,86 @@ public class RepositoryAccessChecksControllerTests
         var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
         Assert.True(response.Allowed);
         Assert.Equal(nameof(RepositoryRole.Writer), response.EffectiveRole);
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenOrganizationOwnerUsesWritePat_AllowsWrite()
+    {
+        var authenticatingUserId = UserId.From(Guid.NewGuid());
+        var organizationId = OrganizationId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+
+        ConfigureTokenValidation(
+            queryProcessor,
+            authenticatingUserId,
+            GitAccessTokenScopes.Write
+        );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = UserId.From(organizationId.Value),
+                        OwnerKind = "organization",
+                        OwnerSlug = "opengitbase",
+                        Slug = "open-git-base",
+                        Name = "Open Git Base",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationDto
+                    {
+                        Id = organizationId,
+                        Name = "OpenGitBase",
+                        Slug = "opengitbase",
+                        OwnerUserId = authenticatingUserId.Value,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new StorageNodeDto
+                    {
+                        Id = storageNodeId,
+                        NodeId = "storage-1",
+                        InternalHost = "storage-1",
+                        InternalSshPort = 22,
+                        InternalGitHttpPort = 8082,
+                        IsHealthy = true,
+                    }
+                )
+            );
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(
+            ValidTokenRequest(
+                repositoryPath: "opengitbase/open-git-base",
+                operation: RepositoryOperation.WriteGit
+            ),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.True(response.Allowed);
+        Assert.Equal("Owner", response.EffectiveRole);
+
+        await queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

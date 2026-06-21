@@ -6,6 +6,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.GitAccessToken.Contracts;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
@@ -260,6 +261,40 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             );
         }
 
+        if (
+            string.Equals(
+                repositoryDto.OwnerKind,
+                "organization",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            var organizationAccess = await ResolveOrganizationRepositoryAccessAsync(
+                repositoryDto,
+                authenticatingUserId.Get(),
+                request.Operation,
+                resolvedUserId,
+                cancellationToken
+            );
+
+            if (organizationAccess is not null)
+            {
+                if (!organizationAccess.Allowed)
+                {
+                    return OkWithLog(request, organizationAccess);
+                }
+
+                return OkWithLog(
+                    request,
+                    await ApplyStorageRoutingAsync(
+                        repositoryDto,
+                        organizationAccess,
+                        cancellationToken
+                    )
+                );
+            }
+        }
+
         var repositoryMember = await _queryProcessor.RunQueryAsync(
             new GetRepositoryMemberQuery
             {
@@ -337,6 +372,96 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 Reason = "Unknown operation.",
             }
         );
+    }
+
+    private async Task<RepositoryAccessCheckResponse?> ResolveOrganizationRepositoryAccessAsync(
+        RepositoryDto repositoryDto,
+        UserId authenticatingUserId,
+        RepositoryOperation operation,
+        Guid resolvedUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationQuery
+                {
+                    ModelId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (organizationResult.IsNone)
+        {
+            return null;
+        }
+
+        var organization = organizationResult.Get();
+        var effectiveRole = ResolveOrganizationMemberRole(
+            organization,
+            authenticatingUserId,
+            await _queryProcessor
+                .RunQueryAsync(
+                    new GetOrganizationMemberQuery
+                    {
+                        OrganizationId = organization.Id,
+                        UserId = authenticatingUserId,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        );
+
+        if (effectiveRole is null)
+        {
+            return null;
+        }
+
+        if (effectiveRole >= RepositoryRole.Writer)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = true,
+                ResolvedUserId = resolvedUserId,
+                RepositoryId = repositoryDto.Id.Value,
+                EffectiveRole = "Owner",
+            };
+        }
+
+        if (operation == RepositoryOperation.ReadGit)
+        {
+            return new RepositoryAccessCheckResponse
+            {
+                Allowed = true,
+                ResolvedUserId = resolvedUserId,
+                RepositoryId = repositoryDto.Id.Value,
+                EffectiveRole = nameof(RepositoryRole.Reader),
+            };
+        }
+
+        return null;
+    }
+
+    private RepositoryRole? ResolveOrganizationMemberRole(
+        OrganizationDto organization,
+        UserId authenticatingUserId,
+        Option<OrganizationMemberDto> membership
+    )
+    {
+        if (organization.OwnerUserId == authenticatingUserId.Value)
+        {
+            return RepositoryRole.Writer;
+        }
+
+        if (membership.IsNone)
+        {
+            return null;
+        }
+
+        return membership.Get().Role == OrganizationMemberRole.Owner
+            ? RepositoryRole.Writer
+            : RepositoryRole.Reader;
     }
 
     private async Task<RepositoryAccessCheckResponse> ApplyStorageRoutingAsync(
