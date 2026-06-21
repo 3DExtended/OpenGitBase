@@ -10,6 +10,7 @@ defineEmits<{
 const { t } = useI18n()
 const auth = useAuth()
 const route = useRoute()
+const { deployVersion, deploySha } = useInstanceBranding()
 const { config: gitConfig, load: loadGitConfig } = useGitConfig()
 
 onMounted(() => {
@@ -92,6 +93,22 @@ function isActive(to: string) {
         :aria-label="t('nav.toggleSidebar')"
         @click="$emit('toggle')"
       />
+
+      <div
+        v-if="open && deployVersion"
+        class="mt-auto px-2 pb-1 pt-4"
+        data-testid="sidebar-deploy-version"
+      >
+        <p class="text-xs text-[var(--ogb-text-muted)]">
+          {{ deployVersion }}
+        </p>
+        <p
+          v-if="deploySha"
+          class="text-[10px] leading-tight text-[var(--ogb-text-muted)] opacity-70"
+        >
+          {{ deploySha }}
+        </p>
+      </div>
     </div>
   </aside>
 </template>

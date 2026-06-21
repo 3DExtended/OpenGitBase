@@ -12,8 +12,9 @@
 # Run bootstrap:
 #.  ./scripts/bootstrap-fleet.sh
 #
-# After bootstrap, use rolling updates for code changes:
-#   ./scripts/rolling-update.sh
+# Before plain `docker compose up -d --build` on production (without rolling-update.sh):
+#   DEPLOY_BUMP=1 ./scripts/docker/bump-deploy-patch.sh
+#   source ./scripts/docker-env.sh && docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 #
 # Full stack (initial bootstrap only):
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
@@ -64,6 +65,8 @@ x-web-build: &web-build
       NUXT_PUBLIC_INSTANCE_LOGO_URL: ""
       NUXT_PUBLIC_API_BASE: "/api"
       NUXT_PUBLIC_SITE_GATE_ENABLED: "true"
+      # Unraid production: auto-increment patch in .deploy-patch on each web image build
+      DEPLOY_BUMP: "1"
 
 services:
   api-1:

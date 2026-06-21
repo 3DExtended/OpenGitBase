@@ -1,3 +1,33 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..')
+
+function readDevDeployVersion(): string {
+  if (process.env.NUXT_PUBLIC_DEPLOY_VERSION) {
+    return process.env.NUXT_PUBLIC_DEPLOY_VERSION
+  }
+  try {
+    const majorMinor = readFileSync(join(repoRoot, 'VERSION'), 'utf8').trim()
+    return `v${majorMinor}.0`
+  } catch {
+    return ''
+  }
+}
+
+function readDevDeploySha(): string {
+  if (process.env.NUXT_PUBLIC_DEPLOY_SHA) {
+    return process.env.NUXT_PUBLIC_DEPLOY_SHA
+  }
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
+
 export default defineNuxtConfig({
   ssr: false,
 
@@ -20,6 +50,8 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE ?? '/api',
       msw: process.env.NUXT_PUBLIC_MSW ?? 'false',
       siteGateEnabled: process.env.NUXT_PUBLIC_SITE_GATE_ENABLED !== 'false',
+      deployVersion: process.env.NUXT_PUBLIC_DEPLOY_VERSION ?? readDevDeployVersion(),
+      deploySha: process.env.NUXT_PUBLIC_DEPLOY_SHA ?? readDevDeploySha(),
     },
   },
 

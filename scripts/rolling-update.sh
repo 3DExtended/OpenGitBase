@@ -4,8 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+# shellcheck source=docker-env.sh
+source "${SCRIPT_DIR}/docker-env.sh"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
 HAPROXY_CFG="${REPO_ROOT}/docker/haproxy/haproxy.cfg"
@@ -75,6 +75,25 @@ fi
 
 compose() {
   docker-compose "${COMPOSE_ARGS[@]}" "$@"
+}
+
+prepare_deploy_build_env() {
+  export GIT_SHA="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+  local bump_enabled=false
+  if [ -f "${OVERRIDE_FILE}" ] && grep -Eq 'DEPLOY_BUMP:[[:space:]]*["'"'"']?1["'"'"']?' "${OVERRIDE_FILE}"; then
+    bump_enabled=true
+  fi
+  if [ "${DEPLOY_BUMP:-0}" = "1" ]; then
+    bump_enabled=true
+  fi
+
+  if [ "${bump_enabled}" = true ]; then
+    export DEPLOY_BUMP=1
+    bash "${SCRIPT_DIR}/docker/bump-deploy-patch.sh"
+  elif [ -d "${REPO_ROOT}/.deploy-patch" ]; then
+    rm -rf "${REPO_ROOT}/.deploy-patch"
+  fi
 }
 
 FLEET_ROLL_SERVICES=(
@@ -255,6 +274,8 @@ run_step "Validate HAProxy configuration" \
 
 run_step "Ensure postgres is up" \
   compose up -d --remove-orphans --wait-timeout "${WAIT_TIMEOUT}" --wait postgres
+
+prepare_deploy_build_env
 
 BUILD_SERVICES=("${APP_BUILD_SERVICES[@]}")
 if [ "${ROLL_FLEET}" = true ]; then

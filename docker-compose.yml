@@ -32,11 +32,13 @@ x-api-common: &api-common
     start_period: 30s
 
 x-web-build: &web-build
-  context: ./applications/opengitbase-web
-  dockerfile: Dockerfile
+  context: .
+  dockerfile: applications/opengitbase-web/Dockerfile
   args:
     NUXT_PUBLIC_INSTANCE_NAME: OpenGitBase
     NUXT_PUBLIC_API_BASE: /api
+    DEPLOY_BUMP: ${DEPLOY_BUMP:-0}
+    GIT_SHA: ${GIT_SHA:-unknown}
 
 x-web-image: &web-image
   image: opengitbase-web
