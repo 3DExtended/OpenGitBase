@@ -184,6 +184,7 @@ public class Startup
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
         services.AddSingleton<Rf1BackfillService>();
+        services.AddSingleton<RebalanceService>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler
