@@ -48,14 +48,14 @@ function isActive(to: string) {
 
 <template>
   <aside
-    class="hidden shrink-0 border-r transition-[width] duration-200 ease-in-out md:block"
+    class="hidden shrink-0 self-start border-r transition-[width] duration-200 ease-in-out md:sticky md:top-[var(--ogb-header-height)] md:block md:h-[calc(100dvh-var(--ogb-header-height))]"
     :class="open ? 'w-[var(--ogb-sidebar-width)]' : 'w-[var(--ogb-sidebar-collapsed-width)]'"
     style="border-color: var(--ogb-border); background-color: var(--ogb-surface);"
   >
     <div class="flex h-full flex-col p-3">
       <nav
         v-if="open && navItems.length"
-        class="space-y-1"
+        class="min-h-0 flex-1 space-y-1 overflow-y-auto"
       >
         <UButton
           v-for="item in navItems"
@@ -74,7 +74,7 @@ function isActive(to: string) {
 
       <div
         v-else-if="open"
-        class="px-2 py-1"
+        class="min-h-0 flex-1 px-2 py-1"
       >
         <p class="text-xs font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
           {{ t('sidebar.placeholder') }}
@@ -96,7 +96,7 @@ function isActive(to: string) {
 
       <div
         v-if="open && deployVersion"
-        class="mt-auto px-2 pb-1 pt-4"
+        class="shrink-0 px-2 pb-1 pt-4"
         data-testid="sidebar-deploy-version"
       >
         <p class="text-xs text-[var(--ogb-text-muted)]">
