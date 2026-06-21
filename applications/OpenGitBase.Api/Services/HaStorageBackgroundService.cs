@@ -36,6 +36,7 @@ public sealed class HaStorageBackgroundService : BackgroundService
         }
 
         var failoverDue = DateTimeOffset.UtcNow;
+        var backfillDue = DateTimeOffset.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -46,6 +47,12 @@ public sealed class HaStorageBackgroundService : BackgroundService
                 {
                     await RunFailoverAsync(stoppingToken).ConfigureAwait(false);
                     failoverDue = now.AddSeconds(_options.FailoverIntervalSeconds);
+                }
+
+                if (now >= backfillDue)
+                {
+                    await RunRf1BackfillAsync(stoppingToken).ConfigureAwait(false);
+                    backfillDue = now.AddSeconds(_options.BackfillIntervalSeconds);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -92,5 +99,12 @@ public sealed class HaStorageBackgroundService : BackgroundService
                 )
                 .ConfigureAwait(false);
         }
+    }
+
+    private async Task RunRf1BackfillAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var backfill = scope.ServiceProvider.GetRequiredService<Rf1BackfillService>();
+        await backfill.RunOnceAsync(cancellationToken).ConfigureAwait(false);
     }
 }
