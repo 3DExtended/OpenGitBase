@@ -191,21 +191,7 @@ public class RepositoryAccessChecksControllerTests
                     }
                 )
             );
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new StorageNodeDto
-                    {
-                        Id = storageNodeId,
-                        NodeId = "storage-1",
-                        InternalHost = "storage-1",
-                        InternalSshPort = 22,
-                        InternalGitHttpPort = 8082,
-                        IsHealthy = true,
-                    }
-                )
-            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
 
         var controller = CreateController(queryProcessor: queryProcessor);
 
@@ -336,21 +322,7 @@ public class RepositoryAccessChecksControllerTests
                     }
                 )
             );
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new StorageNodeDto
-                    {
-                        Id = storageNodeId,
-                        NodeId = "storage-1",
-                        InternalHost = "storage-1",
-                        InternalSshPort = 22,
-                        InternalGitHttpPort = 8082,
-                        IsHealthy = true,
-                    }
-                )
-            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
 
         var controller = CreateController(queryProcessor: queryProcessor);
 
@@ -398,20 +370,7 @@ public class RepositoryAccessChecksControllerTests
                     }
                 )
             );
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new StorageNodeDto
-                    {
-                        Id = storageNodeId,
-                        NodeId = "storage-1",
-                        InternalHost = "storage-1",
-                        InternalSshPort = 22,
-                        IsHealthy = false,
-                    }
-                )
-            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId, healthy: false);
 
         var controller = CreateController(queryProcessor: queryProcessor);
 
@@ -420,7 +379,7 @@ public class RepositoryAccessChecksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
         Assert.False(response.Allowed);
-        Assert.Equal("Assigned storage node is unavailable.", response.Reason);
+        Assert.Equal("Primary storage node is unavailable.", response.Reason);
     }
 
     [Fact]
@@ -584,21 +543,7 @@ public class RepositoryAccessChecksControllerTests
                     }
                 )
             );
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new StorageNodeDto
-                    {
-                        Id = storageNodeId,
-                        NodeId = "storage-1",
-                        InternalHost = "storage-1",
-                        InternalSshPort = 22,
-                        InternalGitHttpPort = 8082,
-                        IsHealthy = true,
-                    }
-                )
-            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
 
         var controller = CreateController(queryProcessor: queryProcessor);
 
@@ -736,17 +681,62 @@ public class RepositoryAccessChecksControllerTests
                 )
             );
         queryProcessor
-            .RunQueryAsync(Arg.Any<GetStorageNodeQuery>(), Arg.Any<CancellationToken>())
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
             .Returns(
                 Option.From(
-                    new StorageNodeDto
+                    new RepositoryReplicationRoutingDto
                     {
-                        Id = storageNodeId,
-                        NodeId = "storage-1",
-                        InternalHost = "storage-1",
-                        InternalSshPort = 22,
-                        InternalGitHttpPort = 8082,
-                        IsHealthy = true,
+                        ReplicationEpoch = 1,
+                        WriteQuorumAvailable = true,
+                        Targets =
+                        [
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = storageNodeId.Value,
+                                InternalHost = "storage-1",
+                                InternalSshPort = 22,
+                                InternalGitHttpPort = 8082,
+                                Role = "Primary",
+                                IsHealthy = true,
+                                IsInSync = true,
+                                IsPrimary = true,
+                            },
+                        ],
+                    }
+                )
+            );
+    }
+
+    private static void ConfigureReplicationRouting(
+        IQueryProcessor queryProcessor,
+        StorageNodeId storageNodeId,
+        bool healthy = true,
+        bool writeQuorumAvailable = true,
+        bool inSync = true
+    )
+    {
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryReplicationRoutingDto
+                    {
+                        ReplicationEpoch = 1,
+                        WriteQuorumAvailable = writeQuorumAvailable && healthy,
+                        Targets =
+                        [
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = storageNodeId.Value,
+                                InternalHost = "storage-1",
+                                InternalSshPort = 22,
+                                InternalGitHttpPort = 8082,
+                                Role = "Primary",
+                                IsHealthy = healthy,
+                                IsInSync = inSync && healthy,
+                                IsPrimary = true,
+                            },
+                        ],
                     }
                 )
             );

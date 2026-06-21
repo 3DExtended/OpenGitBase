@@ -15,6 +15,11 @@ public class RepositoryMapsterConfigTests
     [
         (typeof(RepositoryDto), nameof(RepositoryDto.OwnerKind)),
         (typeof(RepositoryDto), nameof(RepositoryDto.OwnerSlug)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.Replicas)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.PrimaryStorageNodeId)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.ReplicationEpoch)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.PrimaryWatermark)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.ReplicationState)),
     ];
 
     [Fact]

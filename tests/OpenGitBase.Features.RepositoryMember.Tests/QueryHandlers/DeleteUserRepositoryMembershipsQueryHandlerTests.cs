@@ -16,7 +16,8 @@ public class DeleteUserRepositoryMembershipsQueryHandlerTests
     public async Task RunQueryAsync_RemovesAllMembershipsForUser()
     {
         await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMemberMapsterConfig>(
-            typeof(DeleteUserRepositoryMembershipsQueryHandler).Assembly
+            typeof(DeleteUserRepositoryMembershipsQueryHandler).Assembly,
+            typeof(global::OpenGitBase.Features.Repository.RepositoryMapsterConfig).Assembly
         );
         await scope.EnsureCreatedAsync();
 

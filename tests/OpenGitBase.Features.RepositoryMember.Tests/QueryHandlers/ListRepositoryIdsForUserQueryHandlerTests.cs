@@ -14,7 +14,8 @@ public class ListRepositoryIdsForUserQueryHandlerTests
     public async Task RunQueryAsync_ReturnsRepositoryIdsForMember()
     {
         await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMemberMapsterConfig>(
-            typeof(ListRepositoryIdsForUserQueryHandler).Assembly
+            typeof(ListRepositoryIdsForUserQueryHandler).Assembly,
+            typeof(global::OpenGitBase.Features.Repository.RepositoryMapsterConfig).Assembly
         );
         await scope.EnsureCreatedAsync();
 
