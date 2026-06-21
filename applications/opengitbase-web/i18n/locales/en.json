@@ -307,6 +307,29 @@
       "warningDescription": "This repository is using over 80% of its quota. Consider cleaning up or self-hosting.",
       "limitTitle": "Storage limit reached",
       "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage."
+    },
+    "browse": {
+      "syncing": "Syncing… content may be slightly behind the primary.",
+      "branchesTab": "Branches",
+      "tagsTab": "Tags",
+      "refLabel": "Ref",
+      "noRefs": "No refs",
+      "nameColumn": "Name",
+      "sizeColumn": "Size",
+      "emptyDirectory": "This directory is empty.",
+      "emptyTitle": "This repository is empty",
+      "emptyDescription": "Push commits to this repository to browse files here.",
+      "cloneSectionTitle": "Clone repository",
+      "forbidden": "You do not have access to browse this repository's contents.",
+      "unavailable": "Repository content is temporarily unavailable. Try again later.",
+      "pathNotFound": "This path does not exist at the selected ref.",
+      "fileNotFound": "This file does not exist at the selected ref.",
+      "download": "Download",
+      "tooLarge": "This file is too large to display inline. Download it instead.",
+      "binaryNotShown": "Binary file not shown.",
+      "svgDownloadOnly": "SVG files cannot be previewed inline. Download the file instead.",
+      "rendered": "Rendered",
+      "raw": "Raw"
     }
   },
   "profile": {

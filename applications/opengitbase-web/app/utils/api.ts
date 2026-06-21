@@ -208,6 +208,57 @@ export interface DeleteAccountResult {
   blockers?: DeleteAccountBlocker[]
 }
 
+export interface RepositoryContentRef {
+  name: string
+  commitSha: string
+}
+
+export interface RepositoryReplicationLag {
+  behind: boolean
+  message?: string | null
+}
+
+export interface RepositoryContentRefs {
+  branches: RepositoryContentRef[]
+  tags: RepositoryContentRef[]
+  defaultRef: string | null
+  isEmpty: boolean
+  replicationLag: RepositoryReplicationLag | null
+}
+
+export interface RepositoryContentEntry {
+  name: string
+  path: string
+  type: string
+  size: number | null
+}
+
+export interface RepositoryContentTree {
+  ref: string
+  path: string
+  entries: RepositoryContentEntry[]
+  replicationLag: RepositoryReplicationLag | null
+}
+
+export interface RepositoryContentBlob {
+  ref: string
+  path: string
+  size: number
+  isBinary: boolean
+  isTooLarge: boolean
+  previewKind: string
+  textContent: string | null
+  contentBase64: string | null
+  replicationLag: RepositoryReplicationLag | null
+}
+
+export interface RepositoryContentReadme {
+  ref: string
+  fileName: string
+  markdownSource: string
+  replicationLag: RepositoryReplicationLag | null
+}
+
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
     return value
@@ -304,6 +355,84 @@ function normalizeMember(raw: Record<string, unknown>): RepositoryMember {
     userId: normalizeId(raw.userId),
     username: raw.username ? String(raw.username) : undefined,
     role: Number(raw.role ?? 0),
+  }
+}
+
+function normalizeContentRef(raw: Record<string, unknown>): RepositoryContentRef {
+  return {
+    name: String(raw.name ?? ''),
+    commitSha: String(raw.commitSha ?? ''),
+  }
+}
+
+function normalizeReplicationLag(raw: unknown): RepositoryReplicationLag | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  return {
+    behind: Boolean(record.behind),
+    message: record.message ? String(record.message) : null,
+  }
+}
+
+function normalizeContentEntry(raw: Record<string, unknown>): RepositoryContentEntry {
+  return {
+    name: String(raw.name ?? ''),
+    path: String(raw.path ?? ''),
+    type: String(raw.type ?? ''),
+    size: raw.size == null ? null : Number(raw.size),
+  }
+}
+
+function normalizeContentRefs(raw: Record<string, unknown>): RepositoryContentRefs {
+  const branches = Array.isArray(raw.branches)
+    ? (raw.branches as Record<string, unknown>[]).map(normalizeContentRef)
+    : []
+  const tags = Array.isArray(raw.tags)
+    ? (raw.tags as Record<string, unknown>[]).map(normalizeContentRef)
+    : []
+  return {
+    branches,
+    tags,
+    defaultRef: raw.defaultRef ? String(raw.defaultRef) : null,
+    isEmpty: Boolean(raw.isEmpty),
+    replicationLag: normalizeReplicationLag(raw.replicationLag),
+  }
+}
+
+function normalizeContentTree(raw: Record<string, unknown>): RepositoryContentTree {
+  const entries = Array.isArray(raw.entries)
+    ? (raw.entries as Record<string, unknown>[]).map(normalizeContentEntry)
+    : []
+  return {
+    ref: String(raw.ref ?? ''),
+    path: String(raw.path ?? ''),
+    entries,
+    replicationLag: normalizeReplicationLag(raw.replicationLag),
+  }
+}
+
+function normalizeContentBlob(raw: Record<string, unknown>): RepositoryContentBlob {
+  return {
+    ref: String(raw.ref ?? ''),
+    path: String(raw.path ?? ''),
+    size: Number(raw.size ?? 0),
+    isBinary: Boolean(raw.isBinary),
+    isTooLarge: Boolean(raw.isTooLarge),
+    previewKind: String(raw.previewKind ?? 'text'),
+    textContent: raw.textContent == null ? null : String(raw.textContent),
+    contentBase64: raw.contentBase64 == null ? null : String(raw.contentBase64),
+    replicationLag: normalizeReplicationLag(raw.replicationLag),
+  }
+}
+
+function normalizeContentReadme(raw: Record<string, unknown>): RepositoryContentReadme {
+  return {
+    ref: String(raw.ref ?? ''),
+    fileName: String(raw.fileName ?? ''),
+    markdownSource: String(raw.markdownSource ?? ''),
+    replicationLag: normalizeReplicationLag(raw.replicationLag),
   }
 }
 
@@ -724,6 +853,59 @@ export function createApi(baseUrl: string) {
 
       decline: (token: string) =>
         request<null>(`/invite/${encodeURIComponent(token)}/decline`, { method: 'POST' }),
+    },
+
+    repositoryContent: {
+      getRefs: async (owner: string, slug: string) => {
+        const result = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/refs`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeContentRefs(result.data) : null,
+        }
+      },
+
+      getTree: async (owner: string, slug: string, refName: string, path = '') => {
+        const query = new URLSearchParams({ refName })
+        if (path) {
+          query.set('path', path)
+        }
+        const result = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/tree?${query.toString()}`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeContentTree(result.data) : null,
+        }
+      },
+
+      getBlob: async (owner: string, slug: string, refName: string, path: string) => {
+        const query = new URLSearchParams({ refName, path })
+        const result = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/blob?${query.toString()}`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeContentBlob(result.data) : null,
+        }
+      },
+
+      getReadme: async (owner: string, slug: string, refName: string) => {
+        const query = new URLSearchParams({ refName })
+        const result = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/readme?${query.toString()}`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeContentReadme(result.data) : null,
+        }
+      },
+
+      getRawBlobUrl: (owner: string, slug: string, refName: string, path: string) => {
+        const query = new URLSearchParams({ refName, path })
+        return `${baseUrl}/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/blob/raw?${query.toString()}`
+      },
     },
 
     admin: {

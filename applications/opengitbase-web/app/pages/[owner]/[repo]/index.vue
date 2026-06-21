@@ -1,75 +1,87 @@
 <script setup lang="ts">
-import type { Repository } from '~/utils/api'
+import type {
+  RepositoryContentReadme,
+  RepositoryContentRefs,
+  RepositoryContentTree,
+  RepositoryReplicationLag,
+} from '~/utils/api'
 
-const route = useRoute()
 const { t } = useI18n()
 const api = useApi()
-const { config: gitConfig, load: loadGitConfig } = useGitConfig()
+const { owner, repoSlug, repo, loading, notFound, loadRepo } = useRepoMetadata()
 
-const owner = computed(() => String(route.params.owner))
-const repoSlug = computed(() => String(route.params.repo))
+const contentRefs = ref<RepositoryContentRefs | null>(null)
+const tree = ref<RepositoryContentTree | null>(null)
+const readme = ref<RepositoryContentReadme | null>(null)
+const selectedRef = ref('')
+const contentLoading = ref(false)
+const contentForbidden = ref(false)
+const contentUnavailable = ref(false)
+const contentInitialized = ref(false)
 
-const repo = ref<Repository | null>(null)
-const loading = ref(true)
-const notFound = ref(false)
+const isEmpty = computed(() => contentRefs.value?.isEmpty ?? false)
 
-const httpsCloneUrl = computed(() =>
-  repo.value && gitConfig.value
-    ? `${gitConfig.value.gitBaseUrl.replace(/\/$/, '')}/${owner.value}/${repoSlug.value}.git`
-    : '',
+const replicationLag = computed<RepositoryReplicationLag | null>(() =>
+  tree.value?.replicationLag
+  ?? readme.value?.replicationLag
+  ?? contentRefs.value?.replicationLag
+  ?? null,
 )
 
-const sshCloneUrl = computed(() => {
-  if (!repo.value || !gitConfig.value?.sshEnabled) {
-    return ''
-  }
-  try {
-    const host = new URL(gitConfig.value.gitBaseUrl).hostname
-    return `git@${host}:${owner.value}/${repoSlug.value}.git`
-  }
-  catch {
-    return ''
-  }
-})
+async function loadRefs(): Promise<void> {
+  contentForbidden.value = false
+  contentUnavailable.value = false
 
-function withHttpsAuth(url: string, tokenPlaceholder = 'YOUR_TOKEN'): string {
-  try {
-    const parsed = new URL(url)
-    parsed.username = 'git'
-    parsed.password = tokenPlaceholder
-    return parsed.toString()
+  const refsResult = await api.repositoryContent.getRefs(owner.value, repoSlug.value)
+  if (refsResult.status === 403) {
+    contentForbidden.value = true
+    return
   }
-  catch {
-    return url
+  if (refsResult.status === 503) {
+    contentUnavailable.value = true
+    return
+  }
+  if (!refsResult.data) {
+    return
+  }
+
+  contentRefs.value = refsResult.data
+  if (!selectedRef.value && refsResult.data.defaultRef) {
+    selectedRef.value = refsResult.data.defaultRef
   }
 }
 
-const httpsCloneWithTokenUrl = computed(() =>
-  httpsCloneUrl.value ? withHttpsAuth(httpsCloneUrl.value) : '',
-)
-
-const pushExistingHttpsCommands = computed(() => {
-  if (!httpsCloneWithTokenUrl.value) {
-    return ''
+async function loadBrowseContent(): Promise<void> {
+  if (!selectedRef.value || contentRefs.value?.isEmpty) {
+    tree.value = null
+    readme.value = null
+    return
   }
-  return [
-    'cd path/to/your-repo',
-    `git remote add origin ${httpsCloneWithTokenUrl.value}`,
-    'git branch -M main',
-    'git push -u origin main',
-  ].join('\n')
-})
 
-const pushExistingSshCommands = computed(() => {
-  if (!sshCloneUrl.value) {
-    return ''
+  const [treeResult, readmeResult] = await Promise.all([
+    api.repositoryContent.getTree(owner.value, repoSlug.value, selectedRef.value, ''),
+    api.repositoryContent.getReadme(owner.value, repoSlug.value, selectedRef.value),
+  ])
+
+  tree.value = treeResult.data
+  readme.value = readmeResult.status === 404 ? null : readmeResult.data
+}
+
+async function loadContent(): Promise<void> {
+  contentLoading.value = true
+  await loadRefs()
+  await loadBrowseContent()
+  contentLoading.value = false
+  contentInitialized.value = true
+}
+
+watch(selectedRef, async (next, previous) => {
+  if (!contentInitialized.value || !next || next === previous) {
+    return
   }
-  return [
-    'cd path/to/your-repo',
-    `git remote add origin ${sshCloneUrl.value}`,
-    'git branch -M main',
-    'git push -u origin main',
-  ].join('\n')
+  contentLoading.value = true
+  await loadBrowseContent()
+  contentLoading.value = false
 })
 
 useHead({
@@ -77,25 +89,10 @@ useHead({
 })
 
 onMounted(async () => {
-  loading.value = true
-  await loadGitConfig()
-  const result = await api.repositories.getBySlug(owner.value, repoSlug.value)
-  if (!result.data) {
-    const fallback = await api.repositories.list()
-    const match = fallback.data?.find(r =>
-      r.slug === repoSlug.value && (r.ownerSlug === owner.value || r.ownerUserId),
-    )
-    if (match) {
-      repo.value = match
-    }
-    else {
-      notFound.value = true
-    }
+  await loadRepo()
+  if (repo.value) {
+    await loadContent()
   }
-  else {
-    repo.value = result.data
-  }
-  loading.value = false
 })
 </script>
 
@@ -149,155 +146,72 @@ onMounted(async () => {
         </UButton>
       </div>
 
-      <UCard>
-        <template #header>
-          <h2 class="font-semibold">
-            {{ t('repo.overview.cloneSectionTitle') }}
-          </h2>
-        </template>
+      <RepoSyncBanner :lag="replicationLag" />
 
-        <div class="space-y-6">
-          <section>
-            <h3 class="font-medium">
-              {{ t('repo.overview.httpsCloneTitle') }}
-            </h3>
-            <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
-              {{ t('repo.overview.httpsHint') }}
-              <NuxtLink
-                to="/settings/access-tokens"
-                class="text-[var(--ogb-accent)] hover:underline"
-              >
-                {{ t('settings.accessTokens.link') }}
-              </NuxtLink>
-            </p>
-            <code class="mt-3 block rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-              {{ httpsCloneUrl }}
-            </code>
-            <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm">
-              <li>
-                {{ t('repo.overview.cloneHttpsStep1BeforeLink') }}
-                <NuxtLink
-                  to="/settings/access-tokens"
-                  class="text-[var(--ogb-accent)] hover:underline"
-                >
-                  {{ t('repo.overview.cloneHttpsStep1Link') }}
-                </NuxtLink>
-                {{ t('repo.overview.cloneHttpsStep1AfterLink') }}
-              </li>
-              <li>
-                <p>{{ t('repo.overview.cloneHttpsStep2') }}</p>
-                <code class="mt-2 block whitespace-pre-wrap rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-                  git clone {{ httpsCloneWithTokenUrl }}
-                </code>
-                <p class="mt-2 text-[var(--ogb-text-muted)]">
-                  {{ t('repo.overview.cloneHttpsPromptHint', { username: 'git' }) }}
-                </p>
-              </li>
-            </ol>
-          </section>
-
-          <section v-if="sshCloneUrl">
-            <h3 class="font-medium">
-              {{ t('repo.overview.sshCloneTitle') }}
-            </h3>
-            <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
-              {{ t('repo.overview.sshHint') }}
-              <NuxtLink
-                to="/settings/ssh-keys"
-                class="text-[var(--ogb-accent)] hover:underline"
-              >
-                {{ t('settings.sshKeys.link') }}
-              </NuxtLink>
-            </p>
-            <code class="mt-3 block rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-              {{ sshCloneUrl }}
-            </code>
-            <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm">
-              <li>
-                {{ t('repo.overview.cloneSshStep1BeforeLink') }}
-                <NuxtLink
-                  to="/settings/ssh-keys"
-                  class="text-[var(--ogb-accent)] hover:underline"
-                >
-                  {{ t('repo.overview.cloneSshStep1Link') }}
-                </NuxtLink>
-                {{ t('repo.overview.cloneSshStep1AfterLink') }}
-              </li>
-              <li>
-                <p>{{ t('repo.overview.cloneSshStep2') }}</p>
-                <code class="mt-2 block whitespace-pre-wrap rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-                  git clone {{ sshCloneUrl }}
-                </code>
-              </li>
-            </ol>
-          </section>
-        </div>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <h2 class="font-semibold">
-            {{ t('repo.overview.pushSectionTitle') }}
-          </h2>
-        </template>
+      <UCard v-if="contentForbidden">
         <p class="text-sm text-[var(--ogb-text-muted)]">
-          {{ t('repo.overview.pushSectionIntro') }}
+          {{ t('repo.browse.forbidden') }}
         </p>
-
-        <div class="mt-6 space-y-6">
-          <section>
-            <h3 class="font-medium">
-              {{ t('repo.overview.httpsCloneTitle') }}
-            </h3>
-            <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm">
-              <li>
-                {{ t('repo.overview.pushHttpsStep1BeforeLink') }}
-                <NuxtLink
-                  to="/settings/access-tokens"
-                  class="text-[var(--ogb-accent)] hover:underline"
-                >
-                  {{ t('repo.overview.pushHttpsStep1Link') }}
-                </NuxtLink>
-                {{ t('repo.overview.pushHttpsStep1AfterLink') }}
-              </li>
-              <li>
-                <p>{{ t('repo.overview.pushHttpsStep2') }}</p>
-                <code class="mt-2 block whitespace-pre-wrap rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-                  {{ pushExistingHttpsCommands }}
-                </code>
-              </li>
-            </ol>
-          </section>
-
-          <section v-if="sshCloneUrl">
-            <h3 class="font-medium">
-              {{ t('repo.overview.sshCloneTitle') }}
-            </h3>
-            <ol class="mt-4 list-decimal space-y-4 pl-5 text-sm">
-              <li>
-                {{ t('repo.overview.pushSshStep1BeforeLink') }}
-                <NuxtLink
-                  to="/settings/ssh-keys"
-                  class="text-[var(--ogb-accent)] hover:underline"
-                >
-                  {{ t('repo.overview.pushSshStep1Link') }}
-                </NuxtLink>
-                {{ t('repo.overview.pushSshStep1AfterLink') }}
-              </li>
-              <li>
-                <p>{{ t('repo.overview.pushSshStep2') }}</p>
-                <code class="mt-2 block whitespace-pre-wrap rounded-md bg-[var(--ogb-bg)] px-3 py-2 font-mono text-sm break-all">
-                  {{ pushExistingSshCommands }}
-                </code>
-              </li>
-            </ol>
-          </section>
-
-          <p class="text-sm text-[var(--ogb-text-muted)]">
-            {{ t('repo.overview.branchHint') }}
-          </p>
-        </div>
       </UCard>
+
+      <UCard v-else-if="contentUnavailable">
+        <p class="text-sm text-[var(--ogb-text-muted)]">
+          {{ t('repo.browse.unavailable') }}
+        </p>
+      </UCard>
+
+      <template v-else>
+        <UCard v-if="isEmpty">
+          <h2 class="font-semibold">
+            {{ t('repo.browse.emptyTitle') }}
+          </h2>
+          <p class="mt-2 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('repo.browse.emptyDescription') }}
+          </p>
+        </UCard>
+
+        <template v-else-if="contentRefs">
+          <UCard>
+            <div class="space-y-4">
+              <RepoRefPicker
+                v-model="selectedRef"
+                :branches="contentRefs.branches"
+                :tags="contentRefs.tags"
+              />
+
+              <div
+                v-if="contentLoading"
+                class="text-sm text-[var(--ogb-text-muted)]"
+              >
+                {{ t('common.loading') }}
+              </div>
+
+              <RepoDirectoryTable
+                v-else-if="tree"
+                :owner="owner"
+                :repo="repoSlug"
+                :ref-name="selectedRef"
+                :entries="tree.entries"
+              />
+            </div>
+          </UCard>
+
+          <UCard v-if="readme && !contentLoading">
+            <template #header>
+              <h2 class="font-semibold">
+                {{ readme.fileName }}
+              </h2>
+            </template>
+            <RepoMarkdown :source="readme.markdownSource" />
+          </UCard>
+        </template>
+      </template>
+
+      <RepoCloneCollapsible
+        :owner="owner"
+        :repo-slug="repoSlug"
+        :default-open="isEmpty"
+      />
     </template>
   </div>
 </template>
