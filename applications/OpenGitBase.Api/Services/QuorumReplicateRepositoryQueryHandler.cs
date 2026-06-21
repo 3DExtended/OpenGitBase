@@ -9,6 +9,7 @@ public sealed class QuorumReplicateRepositoryQueryHandler
     : IQueryHandler<QuorumReplicateRepositoryQuery, QuorumReplicateRepositoryResult>
 {
     private const int MtlsGitHttpPort = 8443;
+    private const string DebugLogPath = "/Users/peteresser/Developer/projects/opengitbase/.cursor/debug-6f497e.log";
 
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
@@ -27,6 +28,20 @@ public sealed class QuorumReplicateRepositoryQueryHandler
         CancellationToken cancellationToken
     )
     {
+        #region agent log
+        WriteDebugLog(
+            "H4",
+            "QuorumReplicateRepositoryQueryHandler:entry",
+            "quorum replicate requested",
+            new
+            {
+                repositoryId = query.RepositoryId.Value,
+                storageNodeId = query.StorageNodeId.Value,
+                appliedWatermark = query.AppliedWatermark,
+            }
+        );
+        #endregion
+
         var contextResult = await _queryProcessor
             .RunQueryAsync(
                 new GetRepositoryReplicationContextQuery
@@ -40,6 +55,14 @@ public sealed class QuorumReplicateRepositoryQueryHandler
 
         if (contextResult.IsNone)
         {
+            #region agent log
+            WriteDebugLog(
+                "H4",
+                "QuorumReplicateRepositoryQueryHandler:context-missing",
+                "replication context unavailable",
+                new { repositoryId = query.RepositoryId.Value }
+            );
+            #endregion
             return Option.From(
                 QuorumReplicateRepositoryResult.Failed("Repository replication context unavailable.")
             );
@@ -57,6 +80,19 @@ public sealed class QuorumReplicateRepositoryQueryHandler
 
         if (query.AppliedWatermark != context.PrimaryWatermark + 1)
         {
+            #region agent log
+            WriteDebugLog(
+                "H4",
+                "QuorumReplicateRepositoryQueryHandler:watermark-mismatch",
+                "applied watermark mismatch",
+                new
+                {
+                    repositoryId = query.RepositoryId.Value,
+                    appliedWatermark = query.AppliedWatermark,
+                    primaryWatermark = context.PrimaryWatermark,
+                }
+            );
+            #endregion
             return Option.From(
                 QuorumReplicateRepositoryResult.Failed(
                     "Applied watermark must be exactly one greater than the primary watermark."
@@ -119,17 +155,39 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                 continue;
             }
 
-            var syncResult = await _storageProvisionerClient
-                .SyncRepositoryFromPeerAsync(
-                    replicaNode,
-                    token,
-                    context.PhysicalPath,
-                    primaryPeer.InternalHost,
-                    context.PhysicalPath,
-                    MtlsGitHttpPort,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            StorageProvisionerResult syncResult;
+            try
+            {
+                syncResult = await _storageProvisionerClient
+                    .SyncRepositoryFromPeerAsync(
+                        replicaNode,
+                        token,
+                        context.PhysicalPath,
+                        primaryPeer.InternalHost,
+                        context.PhysicalPath,
+                        MtlsGitHttpPort,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                #region agent log
+                WriteDebugLog(
+                    "H4",
+                    "QuorumReplicateRepositoryQueryHandler:sync-exception",
+                    "peer sync request failed",
+                    new
+                    {
+                        repositoryId = query.RepositoryId.Value,
+                        replicaNodeId = replicaNodeId.Value,
+                        error = ex.Message,
+                    }
+                );
+                #endregion
+                remainingReplicaPeers.Add(replicaPeer);
+                continue;
+            }
 
             if (!syncResult.Success)
             {
@@ -151,6 +209,18 @@ public sealed class QuorumReplicateRepositoryQueryHandler
 
         if (syncedNodeIds.Count < 2)
         {
+            #region agent log
+            WriteDebugLog(
+                "H4",
+                "QuorumReplicateRepositoryQueryHandler:quorum-unavailable",
+                "could not replicate to second node",
+                new
+                {
+                    repositoryId = query.RepositoryId.Value,
+                    syncedNodeCount = syncedNodeIds.Count,
+                }
+            );
+            #endregion
             return Option.From(
                 QuorumReplicateRepositoryResult.Failed(
                     "Write quorum unavailable: could not replicate to a second node."
@@ -177,8 +247,33 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             var error = commitResult.IsSome
                 ? commitResult.Get().Error
                 : "Watermark commit failed.";
+            #region agent log
+            WriteDebugLog(
+                "H4",
+                "QuorumReplicateRepositoryQueryHandler:commit-failed",
+                "watermark commit failed",
+                new
+                {
+                    repositoryId = query.RepositoryId.Value,
+                    error,
+                }
+            );
+            #endregion
             return Option.From(QuorumReplicateRepositoryResult.Failed(error!));
         }
+
+        #region agent log
+        WriteDebugLog(
+            "H4",
+            "QuorumReplicateRepositoryQueryHandler:success",
+            "watermark committed",
+            new
+            {
+                repositoryId = query.RepositoryId.Value,
+                primaryWatermark = commitResult.Get().PrimaryWatermark,
+            }
+        );
+        #endregion
 
         foreach (var remainingPeer in remainingReplicaPeers.DistinctBy(peer => peer.StorageNodeId))
         {
@@ -260,5 +355,33 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             .ConfigureAwait(false);
 
         return result.IsSome ? result.Get() : null;
+    }
+
+    private static void WriteDebugLog(
+        string hypothesisId,
+        string location,
+        string message,
+        object data
+    )
+    {
+        try
+        {
+            var payload = System.Text.Json.JsonSerializer.Serialize(
+                new
+                {
+                    sessionId = "6f497e",
+                    hypothesisId,
+                    location,
+                    message,
+                    data,
+                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                }
+            );
+            File.AppendAllText(DebugLogPath, payload + Environment.NewLine);
+        }
+        catch
+        {
+            // ignore debug logging failures
+        }
     }
 }

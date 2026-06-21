@@ -84,9 +84,13 @@ EOF
   interval=$(echo "${response}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("heartbeatIntervalSeconds",30))')
 
   if [ -n "${token}" ]; then
-    install -d -m 700 "$(dirname "${TOKEN_FILE}")"
+    install -d -m 700 -o git -g git "$(dirname "${TOKEN_FILE}")"
     printf '%s' "${token}" > "${TOKEN_FILE}"
     chmod 600 "${TOKEN_FILE}"
+    chown git:git "${TOKEN_FILE}"
+    printf '%s' "${API_URL}" > "$(dirname "${TOKEN_FILE}")/api-url"
+    printf '%s' "${NODE_ID}" > "$(dirname "${TOKEN_FILE}")/node-id"
+    chown git:git "$(dirname "${TOKEN_FILE}")/api-url" "$(dirname "${TOKEN_FILE}")/node-id"
     export STORAGE_API_TOKEN="${token}"
   elif [ -f "${TOKEN_FILE}" ]; then
     STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"

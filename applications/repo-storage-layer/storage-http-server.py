@@ -69,6 +69,12 @@ def _write_initial_watermark(physical_path: str) -> None:
     watermark_file = WATERMARK_DIR / f"{repo_id}.txt"
     if not watermark_file.is_file():
         watermark_file.write_text("0", encoding="utf-8")
+    subprocess.run(
+        ["chown", "-R", "git:git", str(WATERMARK_DIR)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def _install_replication_hook(physical_path: str) -> None:
@@ -124,6 +130,18 @@ def sync_from_peer(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    _install_replication_hook(physical_path)
+    _write_initial_watermark(physical_path)
+
+
+def _backfill_replication_hooks() -> None:
+    if not REPOS_ROOT.is_dir():
+        return
+
+    for repo_path in sorted(REPOS_ROOT.glob("*.git")):
+        if repo_path.is_dir():
+            _install_replication_hook(str(repo_path))
+            _write_initial_watermark(str(repo_path))
 
 
 class StorageHttpHandler(BaseHTTPRequestHandler):
@@ -476,6 +494,7 @@ def main() -> None:
     if not STORAGE_API_TOKEN and not Path(STORAGE_TOKEN_FILE).is_file():
         raise SystemExit("STORAGE_API_TOKEN is required")
 
+    _backfill_replication_hooks()
     server = ThreadingHTTPServer(("0.0.0.0", STORAGE_HTTP_PORT), StorageHttpHandler)
     print(f"storage-http: listening on 0.0.0.0:{STORAGE_HTTP_PORT}")
     server.serve_forever()

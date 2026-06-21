@@ -30,12 +30,22 @@ if [ "${STORAGE_STANDALONE}" = "1" ]; then
     echo "entrypoint: STORAGE_API_TOKEN is required in standalone mode" >&2
     exit 1
   fi
+  if [ -f "${TOKEN_FILE}" ]; then
+    chown git:git "${TOKEN_FILE}" 2>/dev/null || true
+  fi
+  chown -R git:git /var/lib/opengitbase 2>/dev/null || true
 else
   configure_dispatcher_authorized_keys
 
   register_node
   if [ -f "${TOKEN_FILE}" ]; then
     export STORAGE_API_TOKEN="$(cat "${TOKEN_FILE}")"
+  fi
+  chown -R git:git /var/lib/opengitbase
+  if [ -n "${STORAGE_API_URL:-}" ] && [ -f "${TOKEN_FILE}" ]; then
+    printf '%s' "${STORAGE_API_URL}" > /var/lib/opengitbase/api-url
+    printf '%s' "${NODE_ID}" > /var/lib/opengitbase/node-id
+    chown git:git /var/lib/opengitbase/api-url /var/lib/opengitbase/node-id
   fi
 fi
 

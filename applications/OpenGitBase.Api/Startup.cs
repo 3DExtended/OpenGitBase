@@ -243,7 +243,8 @@ public class Startup
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
-        services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>();
+        services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
+            client.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<
             IQueryHandler<
                 CreateRepositoryWithStorageQuery,
