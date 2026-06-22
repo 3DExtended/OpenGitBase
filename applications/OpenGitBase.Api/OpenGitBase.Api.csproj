@@ -30,6 +30,8 @@
     <ProjectReference Include="..\..\features\storage-node\OpenGitBase.Features.StorageNode\OpenGitBase.Features.StorageNode.csproj" />
     <ProjectReference Include="..\..\features\git-access-token\OpenGitBase.Features.GitAccessToken\OpenGitBase.Features.GitAccessToken.csproj" />
     <ProjectReference Include="..\..\features\git-access-token\OpenGitBase.Features.GitAccessToken.Contracts\OpenGitBase.Features.GitAccessToken.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\discussion\OpenGitBase.Features.Discussion\OpenGitBase.Features.Discussion.csproj" />
+    <ProjectReference Include="..\..\features\discussion\OpenGitBase.Features.Discussion.Contracts\OpenGitBase.Features.Discussion.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

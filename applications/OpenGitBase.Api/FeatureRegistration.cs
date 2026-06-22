@@ -13,6 +13,7 @@ public static class FeatureRegistration
             typeof(OpenGitBase.Features.Organization.OrganizationMapsterConfig).Assembly,
                     typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
         typeof(global::OpenGitBase.Features.GitAccessToken.GitAccessTokenMapsterConfig).Assembly,
+        typeof(global::OpenGitBase.Features.Discussion.DiscussionMapsterConfig).Assembly,
 // agentGenCli:feature-assemblies
         ];
 }
