@@ -44,7 +44,8 @@ const userMenuItems = computed(() => {
         icon="i-lucide-panel-left"
         color="neutral"
         variant="ghost"
-        class="hidden md:inline-flex"
+        class="inline-flex"
+        :class="{ 'md:hidden': !auth.isAuthenticated }"
         :aria-label="t('nav.toggleSidebar')"
         @click="$emit('toggleSidebar')"
       />

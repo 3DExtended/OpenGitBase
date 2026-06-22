@@ -4,13 +4,11 @@ import type { OwnerProfile } from '~/utils/api'
 const route = useRoute()
 const { t } = useI18n()
 const api = useApi()
-const auth = useAuth()
 
 const owner = computed(() => String(route.params.owner))
 const profile = ref<OwnerProfile | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
-const isOrgMember = ref(false)
 
 useHead({
   title: computed(() => profile.value?.name ?? owner.value),
@@ -25,20 +23,8 @@ onMounted(async () => {
     return
   }
   profile.value = result.data
-
-  if (profile.value.kind === 'organization' && auth.isAuthenticated) {
-    const orgsResult = await api.organizations.list()
-    isOrgMember.value = orgsResult.data?.some(
-      org => (org.slug ?? org.name).toLowerCase() === owner.value.toLowerCase(),
-    ) ?? false
-  }
-
   loading.value = false
 })
-
-const isOwnProfile = computed(() =>
-  auth.isAuthenticated && auth.user?.username.toLowerCase() === owner.value.toLowerCase(),
-)
 </script>
 
 <template>
@@ -70,28 +56,6 @@ const isOwnProfile = computed(() =>
       >
         {{ profile.bio }}
       </p>
-
-      <div
-        v-if="isOwnProfile || isOrgMember"
-        class="flex flex-wrap gap-2"
-      >
-        <UButton
-          v-if="isOwnProfile"
-          to="/settings"
-          variant="soft"
-          size="sm"
-        >
-          {{ t('settings.title') }}
-        </UButton>
-        <UButton
-          v-if="profile.kind === 'organization' && isOrgMember"
-          :to="`/${owner}/members`"
-          variant="soft"
-          size="sm"
-        >
-          {{ t('org.members.title') }}
-        </UButton>
-      </div>
 
       <section>
         <h2 class="mb-4 text-lg font-semibold">

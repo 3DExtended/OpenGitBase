@@ -14,9 +14,14 @@
     "toggleTheme": "Toggle theme"
   },
   "sidebar": {
-    "placeholder": "Navigation",
-    "comingSoon": "Repository and settings navigation will appear here.",
-    "signInPrompt": "Sign in to access your repositories and settings."
+    "create": "Create",
+    "viewAll": "View all",
+    "repo": {
+      "code": "Code"
+    },
+    "owner": {
+      "overview": "Overview"
+    }
   },
   "siteGate": {
     "title": "Coming soon",

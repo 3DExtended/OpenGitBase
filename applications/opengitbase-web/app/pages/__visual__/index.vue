@@ -45,10 +45,15 @@ function toggleTheme() {
         App Sidebar
       </h2>
       <div
-        class="flex h-64 border"
+        class="flex h-[28rem] border"
         style="border-color: var(--ogb-border);"
       >
-        <AppSidebar :open="true" />
+        <aside
+          class="w-[var(--ogb-sidebar-width)] shrink-0 border-r"
+          style="border-color: var(--ogb-border); background-color: var(--ogb-surface);"
+        >
+          <AppSidebarPanel :expanded="true" />
+        </aside>
         <div class="flex flex-1 items-center justify-center text-sm text-[var(--ogb-text-muted)]">
           Main content area
         </div>

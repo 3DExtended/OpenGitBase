@@ -161,23 +161,6 @@ onMounted(async () => {
         </UBadge>
       </div>
 
-      <div class="flex flex-wrap gap-2">
-        <UButton
-          :to="`/${owner}/${repoSlug}/settings`"
-          variant="soft"
-          size="sm"
-        >
-          {{ t('repo.settings.title') }}
-        </UButton>
-        <UButton
-          :to="`/${owner}/${repoSlug}/members`"
-          variant="soft"
-          size="sm"
-        >
-          {{ t('repo.members.title') }}
-        </UButton>
-      </div>
-
       <RepoSyncBanner :lag="replicationLag" />
 
       <UCard v-if="contentForbidden">
