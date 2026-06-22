@@ -109,6 +109,28 @@ class StorageContentTests(unittest.TestCase):
         usage = get_disk_usage(self.repo_path)
         self.assertGreater(usage, 0)
 
+    def test_get_disk_usage_empty_repo(self) -> None:
+        empty_repo = os.path.join(self.temp_dir, "empty.git")
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", empty_repo],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        usage = get_disk_usage(empty_repo)
+        self.assertGreaterEqual(usage, 0)
+
+    def test_get_disk_usage_matches_du_sk(self) -> None:
+        usage = get_disk_usage(self.repo_path)
+        du_result = subprocess.run(
+            ["du", "-sk", self.repo_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected_kb = int(du_result.stdout.split()[0])
+        self.assertGreaterEqual(usage, expected_kb * 1024)
+
     def test_empty_repository(self) -> None:
         empty_repo = os.path.join(self.temp_dir, "empty.git")
         subprocess.run(

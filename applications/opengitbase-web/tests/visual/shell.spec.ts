@@ -177,6 +177,14 @@ test.describe('Repository screens', () => {
 })
 
 test.describe('Storage meter', () => {
+  test('shows fractional percent for low usage', async ({ page }) => {
+    await waitForApp(page)
+    const meter = page.getByTestId('visual-storage-meter-low')
+    await expect(meter).toContainText('2.6 MB / 1.00 GB')
+    await expect(meter).toContainText('0.3%')
+    await expect(meter.getByText('0%')).toHaveCount(0)
+  })
+
   test('storage warning state', async ({ page }) => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-storage-meter-warning')).toHaveScreenshot('storage-warning.png')

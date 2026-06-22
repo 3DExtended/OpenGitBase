@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import type { RepositoryUsage } from '~/utils/api'
+import {
+  formatStorageBytes,
+  formatUsagePercent,
+  usagePercent,
+} from '~/utils/storageUsage'
 
 const props = defineProps<{
   usage: RepositoryUsage | null
@@ -8,24 +13,25 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-const percentUsed = computed(() => {
-  if (!props.usage || props.usage.bytesLimit <= 0) {
+const usagePercentValue = computed(() => {
+  if (!props.usage) {
     return 0
   }
-  return Math.min(100, Math.round((props.usage.bytesUsed / props.usage.bytesLimit) * 100))
+  return usagePercent(props.usage.bytesUsed, props.usage.bytesLimit)
 })
 
-const warningThreshold = computed(() => percentUsed.value >= 80)
-const atLimit = computed(() => percentUsed.value >= 100)
+const percentLabel = computed(() => {
+  if (!props.usage) {
+    return '0'
+  }
+  return formatUsagePercent(usagePercentValue.value, props.usage.bytesUsed)
+})
+
+const warningThreshold = computed(() => usagePercentValue.value >= 80)
+const atLimit = computed(() => usagePercentValue.value >= 100)
 
 function formatBytes(bytes: number): string {
-  if (bytes >= 1_073_741_824) {
-    return `${(bytes / 1_073_741_824).toFixed(2)} GB`
-  }
-  if (bytes >= 1_048_576) {
-    return `${(bytes / 1_048_576).toFixed(1)} MB`
-  }
-  return `${(bytes / 1024).toFixed(0)} KB`
+  return formatStorageBytes(bytes)
 }
 </script>
 
@@ -50,11 +56,11 @@ function formatBytes(bytes: number): string {
     >
       <div class="flex items-center justify-between text-sm">
         <span>{{ formatBytes(usage.bytesUsed) }} / {{ formatBytes(usage.bytesLimit) }}</span>
-        <span class="text-[var(--ogb-text-muted)]">{{ percentUsed }}%</span>
+        <span class="text-[var(--ogb-text-muted)]">{{ percentLabel }}%</span>
       </div>
 
       <UProgress
-        :model-value="percentUsed"
+        :model-value="usagePercentValue"
         :color="atLimit ? 'error' : warningThreshold ? 'warning' : 'primary'"
       />
 

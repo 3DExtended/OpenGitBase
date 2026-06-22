@@ -131,6 +131,18 @@ function toggleTheme() {
 
     <section
       class="max-w-md"
+      data-testid="visual-storage-meter-low"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Storage meter (low usage)
+      </h2>
+      <StorageUsageMeter
+        :usage="{ bytesUsed: 2726298, bytesLimit: 1073741824, fileSizeLimit: 52428800 }"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-md"
       data-testid="visual-storage-meter-normal"
     >
       <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">

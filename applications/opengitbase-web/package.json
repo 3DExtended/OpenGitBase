@@ -9,6 +9,8 @@
     "preview": "nuxt preview",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "sync:api": "node ../../scripts/sync-openapi.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots",
@@ -36,6 +38,7 @@
     "eslint": "^9.0.0",
     "msw": "^2.8.0",
     "typescript": "^5.8.0",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.2.0"
   },
   "packageManager": "pnpm@10.12.1",
