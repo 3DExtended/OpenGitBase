@@ -101,10 +101,10 @@ Then repeat the first-time startup steps.
 
 | Service | URL |
 |---------|-----|
-| Unified HTTP (web, API, Git) | http://localhost:8089 |
-| Web UI (alias) | http://localhost:3000 |
+| Unified HTTP (web, API, Git) | <http://localhost:8089> |
+| Web UI (alias) | <http://localhost:3000> |
 | Git over HTTPS (via HAProxy) | `http://localhost:8089/{owner}/{repo}.git` |
-| Git over HTTPS (dispatcher direct, debug) | http://localhost:8822 |
+| Git over HTTPS (dispatcher direct, debug) | <http://localhost:8822> |
 | SSH git (optional `--profile ssh`) | `ssh://git@localhost:2211/owner/repo` |
 
 ### Git over HTTPS (local)
@@ -171,11 +171,3 @@ dotnet test OpenGitBase.sln
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). All commits in PRs must include DCO
 sign-off (`git commit -s`).
-watermark-test 1782070995
-watermark-test-2 1782071267
-watermark-test-3 1782071435
-watermark-test-4 1782071549
-final-test 1782073209
-post-haproxy-fix 1782073378
-verify 1782074016
-verify2 1782074027
