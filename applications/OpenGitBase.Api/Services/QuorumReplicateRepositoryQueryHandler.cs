@@ -119,17 +119,26 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                 continue;
             }
 
-            var syncResult = await _storageProvisionerClient
-                .SyncRepositoryFromPeerAsync(
-                    replicaNode,
-                    token,
-                    context.PhysicalPath,
-                    primaryPeer.InternalHost,
-                    context.PhysicalPath,
-                    MtlsGitHttpPort,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            StorageProvisionerResult syncResult;
+            try
+            {
+                syncResult = await _storageProvisionerClient
+                    .SyncRepositoryFromPeerAsync(
+                        replicaNode,
+                        token,
+                        context.PhysicalPath,
+                        primaryPeer.InternalHost,
+                        context.PhysicalPath,
+                        MtlsGitHttpPort,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                remainingReplicaPeers.Add(replicaPeer);
+                continue;
+            }
 
             if (!syncResult.Success)
             {
