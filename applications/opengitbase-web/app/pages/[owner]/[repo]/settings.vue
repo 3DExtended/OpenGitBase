@@ -152,6 +152,25 @@ async function deleteRepo() {
 
       <UCard>
         <template #header>
+          <h2 class="font-semibold">
+            {{ t('repo.discussions.settings.title') }}
+          </h2>
+        </template>
+        <p class="text-sm text-[var(--ogb-text-muted)]">
+          {{ t('repo.discussions.settings.linkDescription') }}
+        </p>
+        <UButton
+          :to="`/${owner}/${repoSlug}/settings/discussions`"
+          variant="soft"
+          class="mt-4"
+          icon="i-lucide-shield-ban"
+        >
+          {{ t('repo.discussions.settings.manageLink') }}
+        </UButton>
+      </UCard>
+
+      <UCard>
+        <template #header>
           <h2 class="font-semibold text-error">
             {{ t('repo.settings.dangerZone') }}
           </h2>

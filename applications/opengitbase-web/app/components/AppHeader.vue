@@ -91,6 +91,7 @@ const userMenuItems = computed(() => {
         />
 
         <template v-if="auth.isAuthenticated">
+          <NotificationBell />
           <UDropdownMenu :items="userMenuItems">
             <UButton
               color="neutral"

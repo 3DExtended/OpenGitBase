@@ -313,6 +313,61 @@
       "limitTitle": "Storage limit reached",
       "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage."
     },
+    "discussions": {
+      "heading": "Discussions",
+      "title": "Discussions",
+      "detailTitle": "Discussion",
+      "createButton": "New discussion",
+      "createTitle": "Start a discussion",
+      "backToList": "All discussions",
+      "empty": "No discussions yet. Start the first conversation.",
+      "signInToView": "Sign in to view discussions on this repository.",
+      "notFound": "Discussion not found.",
+      "resolve": "Resolve",
+      "dismiss": "Dismiss",
+      "assignee": "Assignee",
+      "opened": "Opened",
+      "updated": "Updated",
+      "commentsTitle": "Comments",
+      "noComments": "No comments yet.",
+      "commentDeleted": "This comment was deleted.",
+      "edited": "edited",
+      "anchorOutdated": "outdated",
+      "reopenHint": "Commenting will reopen this discussion.",
+      "postComment": "Post comment",
+      "commentPlaceholder": "Write a comment in Markdown…",
+      "fields": {
+        "title": "Title",
+        "body": "Description (optional)",
+        "tags": "Tags",
+        "comment": "Comment"
+      },
+      "filters": {
+        "allStatuses": "All statuses",
+        "allTags": "All tags"
+      },
+      "status": {
+        "open": "Open",
+        "engaged": "Engaged",
+        "resolved": "Resolved",
+        "dismissed": "Dismissed"
+      },
+      "settings": {
+        "title": "Discussion settings",
+        "forbidden": "Only repository admins can manage blocked users.",
+        "blockTitle": "Block user",
+        "blockDescription": "Blocked users can still read discussions but cannot create or comment.",
+        "userIdLabel": "User ID",
+        "userIdPlaceholder": "User GUID",
+        "reasonLabel": "Reason (optional)",
+        "blockButton": "Block user",
+        "blockedListTitle": "Blocked users",
+        "blockedEmpty": "No blocked users.",
+        "unblockButton": "Unblock",
+        "linkDescription": "Block users from creating discussions or commenting.",
+        "manageLink": "Manage blocked users"
+      }
+    },
     "browse": {
       "syncing": "Syncing… content may be slightly behind the primary.",
       "branchesTab": "Branches",
@@ -336,6 +391,10 @@
       "rendered": "Rendered",
       "raw": "Raw"
     }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet."
   },
   "profile": {
     "user": "User",

@@ -76,6 +76,12 @@ const repoNavItems = computed(() => {
       active: isRepoCodeRoute(route.path, owner, repo),
     },
     {
+      label: t('repo.discussions.heading'),
+      to: `/${owner}/${repo}/discussions`,
+      icon: 'i-lucide-messages-square',
+      active: matchesSidebarRoute(route.path, `/${owner}/${repo}/discussions`),
+    },
+    {
       label: t('repo.settings.title'),
       to: `/${owner}/${repo}/settings`,
       icon: 'i-lucide-settings',

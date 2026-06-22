@@ -259,6 +259,100 @@ export interface RepositoryContentReadme {
   replicationLag: RepositoryReplicationLag | null
 }
 
+export type DiscussionStatus = 'Open' | 'Engaged' | 'Resolved' | 'Dismissed'
+
+export interface RepositoryTag {
+  id: string
+  repositoryId: string
+  name: string
+  color?: string | null
+  createdAt: string
+}
+
+export interface Discussion {
+  id: string
+  repositoryId: string
+  number: number
+  title: string
+  body?: string | null
+  status: DiscussionStatus
+  hasEverBeenEngaged: boolean
+  creatorUserId: string
+  assigneeUserId?: string | null
+  createdAt: string
+  updatedAt: string
+  tags: RepositoryTag[]
+}
+
+export interface AnchorResolution {
+  kind: string
+  filePath?: string | null
+  line?: number | null
+}
+
+export interface CommentAnchor {
+  ref: string
+  commitSha: string
+  filePath: string
+  line: number
+  endLine?: number | null
+  resolution?: AnchorResolution | null
+}
+
+export interface DiscussionComment {
+  id: string
+  discussionId: string
+  authorUserId: string
+  bodyMarkdown: string
+  createdAt: string
+  updatedAt: string
+  editedAt?: string | null
+  deletedAt?: string | null
+  deletedByUserId?: string | null
+  isDeleted: boolean
+  anchor?: CommentAnchor | null
+}
+
+export type NotificationEventType =
+  | 'NewComment'
+  | 'Mention'
+  | 'AssigneeChanged'
+  | 'Resolved'
+  | 'Dismissed'
+  | 'Reopened'
+
+export interface Notification {
+  id: string
+  userId: string
+  discussionId: string
+  repositoryId: string
+  discussionNumber: number
+  ownerSlug: string
+  repositorySlug: string
+  eventType: NotificationEventType
+  message: string
+  actorUserId?: string | null
+  createdAt: string
+  readAt?: string | null
+  isRead: boolean
+}
+
+export interface BlockedUser {
+  userId: string
+  username?: string | null
+  blockedByUserId: string
+  blockedAt: string
+  reason?: string | null
+}
+
+export interface CommentAnchorInput {
+  ref: string
+  commitSha: string
+  filePath: string
+  line: number
+  endLine?: number | null
+}
+
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
     return value
@@ -434,6 +528,140 @@ function normalizeContentReadme(raw: Record<string, unknown>): RepositoryContent
     markdownSource: String(raw.markdownSource ?? ''),
     replicationLag: normalizeReplicationLag(raw.replicationLag),
   }
+}
+
+const DISCUSSION_STATUS_MAP: Record<number, DiscussionStatus> = {
+  0: 'Open',
+  1: 'Engaged',
+  2: 'Resolved',
+  3: 'Dismissed',
+}
+
+function normalizeDiscussionStatus(raw: unknown): DiscussionStatus {
+  if (typeof raw === 'string' && ['Open', 'Engaged', 'Resolved', 'Dismissed'].includes(raw)) {
+    return raw as DiscussionStatus
+  }
+  return DISCUSSION_STATUS_MAP[Number(raw)] ?? 'Open'
+}
+
+function normalizeRepositoryTag(raw: Record<string, unknown>): RepositoryTag {
+  return {
+    id: normalizeId(raw.id),
+    repositoryId: normalizeId(raw.repositoryId),
+    name: String(raw.name ?? ''),
+    color: raw.color ? String(raw.color) : null,
+    createdAt: String(raw.createdAt ?? ''),
+  }
+}
+
+function normalizeDiscussion(raw: Record<string, unknown>): Discussion {
+  const tags = Array.isArray(raw.tags)
+    ? (raw.tags as Record<string, unknown>[]).map(normalizeRepositoryTag)
+    : []
+  return {
+    id: normalizeId(raw.id),
+    repositoryId: normalizeId(raw.repositoryId),
+    number: Number(raw.number ?? 0),
+    title: String(raw.title ?? ''),
+    body: raw.body == null ? null : String(raw.body),
+    status: normalizeDiscussionStatus(raw.status),
+    hasEverBeenEngaged: Boolean(raw.hasEverBeenEngaged),
+    creatorUserId: normalizeId(raw.creatorUserId),
+    assigneeUserId: raw.assigneeUserId ? normalizeId(raw.assigneeUserId) : null,
+    createdAt: String(raw.createdAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? ''),
+    tags,
+  }
+}
+
+function normalizeAnchorResolution(raw: unknown): AnchorResolution | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  return {
+    kind: String(record.kind ?? 'located'),
+    filePath: record.filePath ? String(record.filePath) : null,
+    line: record.line == null ? null : Number(record.line),
+  }
+}
+
+function normalizeCommentAnchor(raw: Record<string, unknown>): CommentAnchor {
+  return {
+    ref: String(raw.ref ?? ''),
+    commitSha: String(raw.commitSha ?? ''),
+    filePath: String(raw.filePath ?? ''),
+    line: Number(raw.line ?? 0),
+    endLine: raw.endLine == null ? null : Number(raw.endLine),
+    resolution: normalizeAnchorResolution(raw.resolution),
+  }
+}
+
+function normalizeDiscussionComment(raw: Record<string, unknown>): DiscussionComment {
+  return {
+    id: normalizeId(raw.id),
+    discussionId: normalizeId(raw.discussionId),
+    authorUserId: normalizeId(raw.authorUserId),
+    bodyMarkdown: String(raw.bodyMarkdown ?? ''),
+    createdAt: String(raw.createdAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? ''),
+    editedAt: raw.editedAt ? String(raw.editedAt) : null,
+    deletedAt: raw.deletedAt ? String(raw.deletedAt) : null,
+    deletedByUserId: raw.deletedByUserId ? normalizeId(raw.deletedByUserId) : null,
+    isDeleted: Boolean(raw.isDeleted),
+    anchor: raw.anchor && typeof raw.anchor === 'object'
+      ? normalizeCommentAnchor(raw.anchor as Record<string, unknown>)
+      : null,
+  }
+}
+
+const NOTIFICATION_EVENT_MAP: Record<number, NotificationEventType> = {
+  0: 'NewComment',
+  1: 'Mention',
+  2: 'AssigneeChanged',
+  3: 'Resolved',
+  4: 'Dismissed',
+  5: 'Reopened',
+}
+
+function normalizeNotificationEventType(raw: unknown): NotificationEventType {
+  if (typeof raw === 'string') {
+    return raw as NotificationEventType
+  }
+  return NOTIFICATION_EVENT_MAP[Number(raw)] ?? 'NewComment'
+}
+
+function normalizeNotification(raw: Record<string, unknown>): Notification {
+  const readAt = raw.readAt ? String(raw.readAt) : null
+  return {
+    id: normalizeId(raw.id),
+    userId: normalizeId(raw.userId),
+    discussionId: normalizeId(raw.discussionId),
+    repositoryId: normalizeId(raw.repositoryId),
+    discussionNumber: Number(raw.discussionNumber ?? 0),
+    ownerSlug: String(raw.ownerSlug ?? ''),
+    repositorySlug: String(raw.repositorySlug ?? ''),
+    eventType: normalizeNotificationEventType(raw.eventType),
+    message: String(raw.message ?? ''),
+    actorUserId: raw.actorUserId ? normalizeId(raw.actorUserId) : null,
+    createdAt: String(raw.createdAt ?? ''),
+    readAt,
+    isRead: Boolean(raw.isRead ?? readAt),
+  }
+}
+
+function normalizeBlockedUser(raw: Record<string, unknown>): BlockedUser {
+  return {
+    userId: normalizeId(raw.userId),
+    username: raw.username ? String(raw.username) : null,
+    blockedByUserId: normalizeId(raw.blockedByUserId),
+    blockedAt: String(raw.blockedAt ?? ''),
+    reason: raw.reason ? String(raw.reason) : null,
+  }
+}
+
+function discussionSlugPath(owner: string, slug: string): string {
+  return `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -905,6 +1133,206 @@ export function createApi(baseUrl: string) {
       getRawBlobUrl: (owner: string, slug: string, refName: string, path: string) => {
         const query = new URLSearchParams({ refName, path })
         return `${baseUrl}/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/blob/raw?${query.toString()}`
+      },
+    },
+
+    discussions: {
+      list: async (
+        owner: string,
+        slug: string,
+        params?: { status?: DiscussionStatus, assigneeUserId?: string, tagId?: string },
+      ) => {
+        const query = new URLSearchParams()
+        if (params?.status) {
+          query.set('status', params.status)
+        }
+        if (params?.assigneeUserId) {
+          query.set('assigneeUserId', params.assigneeUserId)
+        }
+        if (params?.tagId) {
+          query.set('tagId', params.tagId)
+        }
+        const suffix = query.size ? `?${query.toString()}` : ''
+        const result = await request<Record<string, unknown>[]>(
+          `${discussionSlugPath(owner, slug)}/discussions${suffix}`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeDiscussion) ?? null,
+        }
+      },
+
+      get: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussion(result.data) : null,
+        }
+      },
+
+      create: async (
+        owner: string,
+        slug: string,
+        body: {
+          title: string
+          body?: string | null
+          assigneeUserId?: string | null
+          tagIds?: string[]
+          anchor?: CommentAnchorInput | null
+        },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussion(result.data) : null,
+        }
+      },
+
+      update: async (
+        owner: string,
+        slug: string,
+        number: number,
+        body: {
+          title?: string | null
+          assigneeUserId?: string | null
+          clearAssignee?: boolean
+          tagIds?: string[] | null
+        },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}`,
+          { method: 'PATCH', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussion(result.data) : null,
+        }
+      },
+
+      resolve: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/resolve`,
+          { method: 'POST' },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussion(result.data) : null,
+        }
+      },
+
+      dismiss: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/dismiss`,
+          { method: 'POST' },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussion(result.data) : null,
+        }
+      },
+
+      listComments: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/comments`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeDiscussionComment) ?? null,
+        }
+      },
+
+      createComment: async (
+        owner: string,
+        slug: string,
+        number: number,
+        body: { bodyMarkdown: string, anchor?: CommentAnchorInput | null },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/comments`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussionComment(result.data) : null,
+        }
+      },
+
+      tags: {
+        list: async (owner: string, slug: string) => {
+          const result = await request<Record<string, unknown>[]>(
+            `${discussionSlugPath(owner, slug)}/tags`,
+          )
+          return {
+            ...result,
+            data: result.data?.map(normalizeRepositoryTag) ?? null,
+          }
+        },
+
+        create: async (owner: string, slug: string, body: { name: string, color?: string | null }) => {
+          const result = await request<Record<string, unknown>>(
+            `${discussionSlugPath(owner, slug)}/tags`,
+            { method: 'POST', body: JSON.stringify(body) },
+          )
+          return {
+            ...result,
+            data: result.data ? normalizeRepositoryTag(result.data) : null,
+          }
+        },
+
+        delete: (owner: string, slug: string, tagId: string) =>
+          request<null>(`${discussionSlugPath(owner, slug)}/tags/${tagId}`, { method: 'DELETE' }),
+      },
+
+      blockedUsers: {
+        list: async (owner: string, slug: string) => {
+          const result = await request<Record<string, unknown>[]>(
+            `${discussionSlugPath(owner, slug)}/blocked-users`,
+          )
+          return {
+            ...result,
+            data: result.data?.map(normalizeBlockedUser) ?? null,
+          }
+        },
+
+        block: async (
+          owner: string,
+          slug: string,
+          body: { userId: string, reason?: string | null },
+        ) => {
+          const result = await request<Record<string, unknown>>(
+            `${discussionSlugPath(owner, slug)}/blocked-users`,
+            { method: 'POST', body: JSON.stringify(body) },
+          )
+          return {
+            ...result,
+            data: result.data ? normalizeBlockedUser(result.data) : null,
+          }
+        },
+
+        unblock: (owner: string, slug: string, userId: string) =>
+          request<null>(
+            `${discussionSlugPath(owner, slug)}/blocked-users/${userId}`,
+            { method: 'DELETE' },
+          ),
+      },
+
+      notifications: {
+        list: async (params?: { unreadOnly?: boolean }) => {
+          const query = params?.unreadOnly ? '?unreadOnly=true' : ''
+          const result = await request<Record<string, unknown>[]>(`/notifications${query}`)
+          return {
+            ...result,
+            data: result.data?.map(normalizeNotification) ?? null,
+          }
+        },
+
+        markRead: (notificationId: string) =>
+          request<null>(`/notifications/${notificationId}/read`, { method: 'POST' }),
       },
     },
 
