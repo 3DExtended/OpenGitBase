@@ -85,7 +85,31 @@ public class WebReadReplicaSelectorTests
         var selection = _selector.Select(routing);
 
         Assert.NotNull(selection);
+        Assert.Equal(replicaId, selection.Target.StorageNodeId);
         Assert.True(selection.ReplicationLag?.Behind);
+    }
+
+    [Fact]
+    public void Select_WhenInSyncAndLaggingNonPrimaryExist_PrefersInSyncReplica()
+    {
+        var laggingReplicaId = Guid.NewGuid();
+        var inSyncReplicaId = Guid.NewGuid();
+        var routing = new RepositoryReplicationRoutingDto
+        {
+            WriteQuorumAvailable = true,
+            Targets =
+            [
+                CreateTarget(Guid.NewGuid(), isPrimary: true, isHealthy: true),
+                CreateTarget(laggingReplicaId, isPrimary: false, isHealthy: true, isInSync: false),
+                CreateTarget(inSyncReplicaId, isPrimary: false, isHealthy: true, isInSync: true),
+            ],
+        };
+
+        var selection = _selector.Select(routing);
+
+        Assert.NotNull(selection);
+        Assert.Equal(inSyncReplicaId, selection.Target.StorageNodeId);
+        Assert.False(selection.ReplicationLag?.Behind);
     }
 
     private static RepositoryRoutingTargetDto CreateTarget(

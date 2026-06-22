@@ -8,29 +8,34 @@ public sealed class WebReadReplicaSelector
     public WebReadReplicaSelection? Select(RepositoryReplicationRoutingDto routing)
     {
         var healthyTargets = routing.Targets.Where(target => target.IsHealthy).ToList();
-        var nonPrimary = healthyTargets.Where(target => !target.IsPrimary).ToList();
-        if (nonPrimary.Count > 0)
+        var healthyNonPrimary = healthyTargets.Where(target => !target.IsPrimary).ToList();
+
+        var inSyncNonPrimary = healthyNonPrimary.Where(target => target.IsInSync).ToList();
+        if (inSyncNonPrimary.Count > 0)
         {
-            var selected = nonPrimary[0];
-            return new WebReadReplicaSelection
-            {
-                Target = selected,
-                ReplicationLag = BuildLag(selected),
-            };
+            return SelectTarget(inSyncNonPrimary[0]);
         }
 
-        if (healthyTargets.Count == 1 && healthyTargets[0].IsPrimary)
+        if (healthyNonPrimary.Count > 0)
         {
-            var onlyPrimary = healthyTargets[0];
-            return new WebReadReplicaSelection
-            {
-                Target = onlyPrimary,
-                ReplicationLag = new RepositoryReplicationLagDto { Behind = false },
-            };
+            return SelectTarget(healthyNonPrimary[0]);
+        }
+
+        var primary = healthyTargets.FirstOrDefault(target => target.IsPrimary);
+        if (primary is not null)
+        {
+            return SelectTarget(primary);
         }
 
         return null;
     }
+
+    private static WebReadReplicaSelection SelectTarget(RepositoryRoutingTargetDto target) =>
+        new()
+        {
+            Target = target,
+            ReplicationLag = BuildLag(target),
+        };
 
     private static RepositoryReplicationLagDto? BuildLag(RepositoryRoutingTargetDto target)
     {
