@@ -40,6 +40,29 @@ public class DiscussionAuthorizationServiceTests
     }
 
     [Fact]
+    public async Task AuthorizeParticipateAsync_AuthenticatedOnPublic_ReturnsAllowed()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: false);
+        var contentAuth = CreateContentAuth(repository);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<IsRepositoryUserBlockedQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(false));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryMemberDto>.None);
+
+        var service = CreateService(contentAuth, userId, queryProcessor);
+
+        var result = await service.AuthorizeParticipateAsync("owner", "repo", CancellationToken.None);
+
+        Assert.Equal(DiscussionParticipationResultKind.Allowed, result.Kind);
+        Assert.Equal(RepositoryRole.Reader, result.Role);
+    }
+
+    [Fact]
     public async Task AuthorizeParticipateAsync_BlockedUser_ReturnsBlocked()
     {
         var ownerId = UserId.From(Guid.NewGuid());

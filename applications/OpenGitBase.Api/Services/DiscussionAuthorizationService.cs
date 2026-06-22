@@ -63,6 +63,11 @@ public sealed class DiscussionAuthorizationService
         var role = await GetEffectiveRoleAsync(read.Repository, userId, cancellationToken)
             .ConfigureAwait(false);
 
+        if (role < RepositoryRole.Reader && !read.Repository.IsPrivate)
+        {
+            role = RepositoryRole.Reader;
+        }
+
         if (role < RepositoryRole.Reader)
         {
             return DiscussionParticipationResult.Forbidden(read.Repository);
