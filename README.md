@@ -120,7 +120,10 @@ Run the end-to-end script against a running stack:
 
 ```bash
 ./scripts/e2e-https-git-test.sh
+./scripts/test-discussions-e2e.sh
 ```
+
+The discussions script bootstraps its own users and repositories; it only requires a healthy Compose API (`curl -fsS http://localhost:8089/health`).
 
 ### SSH git (optional)
 
