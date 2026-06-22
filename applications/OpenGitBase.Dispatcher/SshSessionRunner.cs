@@ -121,7 +121,8 @@ internal static class SshSessionRunner
         });
 
         services.AddHttpClient<RepositoryAccessCheckClient>();
-        services.AddHttpClient<GitHttpProxyService>();
+        services.AddHttpClient<GitHttpProxyService>(client =>
+            client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<GitSmartHttpPathParser>();
         services.AddSingleton<GitSmartHttpHandler>();
         services.AddSingleton<GitSessionProxyService>(sp =>
