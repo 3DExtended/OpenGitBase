@@ -17,3 +17,7 @@ node_modules
 .idea
 *.sws
 *.swo
+
+# Playwright
+playwright-report/
+test-results/
