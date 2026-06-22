@@ -21,18 +21,21 @@ public class RepositoryController : ControllerBase
     private readonly IUserContext _userContext;
     private readonly IOrganizationAccessService _organizationAccess;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
+    private readonly IRepositoryDiskUsageProvider _repositoryDiskUsageProvider;
 
     public RepositoryController(
         IQueryProcessor queryProcessor,
         IUserContext userContext,
         IOrganizationAccessService organizationAccess,
-        RepositoryStorageQuotaOptions quotaOptions
+        RepositoryStorageQuotaOptions quotaOptions,
+        IRepositoryDiskUsageProvider repositoryDiskUsageProvider
     )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
         _organizationAccess = organizationAccess;
         _quotaOptions = quotaOptions;
+        _repositoryDiskUsageProvider = repositoryDiskUsageProvider;
     }
 
     [HttpPost("{slug}")]
@@ -177,11 +180,40 @@ public class RepositoryController : ControllerBase
     [HttpGet("{id:guid}/usage")]
     public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _queryProcessor.RunQueryAsync(
-            new GetRepositoryUsageQuery { RepositoryId = RepositoryId.From(id) },
+        var repositoryId = RepositoryId.From(id);
+        var repositoryResult = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryQuery { ModelId = repositoryId },
             cancellationToken
         );
-        return ToActionResult(result);
+        if (repositoryResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryUsageQuery { RepositoryId = repositoryId },
+            cancellationToken
+        );
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        var usage = result.Get();
+        var liveBytes = await _repositoryDiskUsageProvider
+            .GetDiskUsageBytesAsync(repositoryResult.Get(), cancellationToken)
+            .ConfigureAwait(false);
+        if (liveBytes.HasValue)
+        {
+            usage = new RepositoryUsageDto
+            {
+                BytesUsed = liveBytes.Value,
+                BytesLimit = usage.BytesLimit,
+                FileSizeLimit = usage.FileSizeLimit,
+            };
+        }
+
+        return Ok(usage);
     }
 
     [HttpGet("{id:guid}")]

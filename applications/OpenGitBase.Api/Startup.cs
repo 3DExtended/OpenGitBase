@@ -129,6 +129,7 @@ public class Startup
         services.AddScoped<RepositoryContentAuthorizationService>();
         services.AddSingleton<WebReadReplicaSelector>();
         services.AddScoped<RepositoryContentService>();
+        services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddSingleton<ISystemClock, SystemClock>();

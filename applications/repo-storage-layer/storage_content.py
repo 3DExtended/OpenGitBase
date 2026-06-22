@@ -46,6 +46,26 @@ def _run_git(git_dir: str, *args: str) -> str:
     return result.stdout
 
 
+def get_disk_usage(git_dir: str) -> int:
+    attempts = (["du", "-sb", git_dir], ["du", "-sk", git_dir])
+    for args in attempts:
+        result = subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            continue
+        value = int(result.stdout.split()[0])
+        return value if args[1] == "-sb" else value * 1024
+
+    raise GitContentError(
+        "disk_usage_error",
+        "Failed to read repository disk usage.",
+    )
+
+
 def _normalize_repo_path(path: str) -> str:
     cleaned = path.strip().strip("/")
     if cleaned in ("", "."):

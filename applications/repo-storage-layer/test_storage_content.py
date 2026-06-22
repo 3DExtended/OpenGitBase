@@ -12,6 +12,7 @@ from pathlib import Path
 from storage_content import (
     INLINE_MAX_BYTES,
     get_blob,
+    get_disk_usage,
     get_raw_bytes,
     is_empty_repository,
     list_branches,
@@ -103,6 +104,10 @@ class StorageContentTests(unittest.TestCase):
         blob = get_blob(self.repo_path, "main", "large.bin")
         self.assertTrue(blob["isTooLarge"])
         self.assertNotIn("textContent", blob)
+
+    def test_get_disk_usage(self) -> None:
+        usage = get_disk_usage(self.repo_path)
+        self.assertGreater(usage, 0)
 
     def test_empty_repository(self) -> None:
         empty_repo = os.path.join(self.temp_dir, "empty.git")

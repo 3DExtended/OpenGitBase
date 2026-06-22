@@ -46,4 +46,11 @@ public interface IStorageContentClient
         string path,
         CancellationToken cancellationToken
     );
+
+    Task<StorageContentUsagePayload?> GetDiskUsageAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        CancellationToken cancellationToken
+    );
 }

@@ -80,6 +80,19 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<StorageContentUsagePayload?> GetDiskUsageAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/usage?physicalPath={Uri.EscapeDataString(physicalPath)}";
+        return await GetJsonAsync<StorageContentUsagePayload>(uri, apiToken, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task<StorageContentRefsPayload?> GetCombinedRefsAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

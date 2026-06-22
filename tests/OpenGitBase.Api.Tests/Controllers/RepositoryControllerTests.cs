@@ -377,6 +377,20 @@ public class RepositoryControllerTests
         var repositoryId = Guid.NewGuid();
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = RepositoryId.From(repositoryId),
+                        Name = "Repo",
+                        Slug = "repo",
+                        OwnerUserId = userId,
+                        PhysicalPath = "/srv/git/test.git",
+                    }
+                )
+            );
+        queryProcessor
             .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
             .Returns(
                 Option.From(
@@ -389,7 +403,12 @@ public class RepositoryControllerTests
                 )
             );
 
-        var controller = CreateController(queryProcessor, userId);
+        var repositoryDiskUsageProvider = Substitute.For<IRepositoryDiskUsageProvider>();
+        repositoryDiskUsageProvider
+            .GetDiskUsageBytesAsync(Arg.Any<RepositoryDto>(), Arg.Any<CancellationToken>())
+            .Returns((long?)null);
+
+        var controller = CreateController(queryProcessor, userId, repositoryDiskUsageProvider: repositoryDiskUsageProvider);
 
         var result = await controller.GetUsage(repositoryId, CancellationToken.None);
 
@@ -399,13 +418,60 @@ public class RepositoryControllerTests
     }
 
     [Fact]
+    public async Task GetUsage_WhenStorageReportsLiveUsage_ReturnsLiveBytes()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = Guid.NewGuid();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = RepositoryId.From(repositoryId),
+                        Name = "Repo",
+                        Slug = "repo",
+                        OwnerUserId = userId,
+                        PhysicalPath = "/srv/git/test.git",
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryUsageDto
+                    {
+                        BytesUsed = 0,
+                        BytesLimit = 1_000_000,
+                        FileSizeLimit = 100_000,
+                    }
+                )
+            );
+
+        var repositoryDiskUsageProvider = Substitute.For<IRepositoryDiskUsageProvider>();
+        repositoryDiskUsageProvider
+            .GetDiskUsageBytesAsync(Arg.Any<RepositoryDto>(), Arg.Any<CancellationToken>())
+            .Returns(26_397L);
+
+        var controller = CreateController(queryProcessor, userId, repositoryDiskUsageProvider: repositoryDiskUsageProvider);
+
+        var result = await controller.GetUsage(repositoryId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsType<RepositoryUsageDto>(ok.Value);
+        Assert.Equal(26_397, returned.BytesUsed);
+    }
+
+    [Fact]
     public async Task GetUsage_WhenMissing_ReturnsNotFound()
     {
         var userId = UserId.From(Guid.NewGuid());
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
-            .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option<RepositoryUsageDto>.None);
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryDto>.None);
 
         var controller = CreateController(queryProcessor, userId);
 
@@ -728,7 +794,8 @@ public class RepositoryControllerTests
         IQueryProcessor queryProcessor,
         UserId userId,
         string username = "testuser",
-        IOrganizationAccessService? organizationAccess = null
+        IOrganizationAccessService? organizationAccess = null,
+        IRepositoryDiskUsageProvider? repositoryDiskUsageProvider = null
     )
     {
         var userContext = Substitute.For<IUserContext>();
@@ -740,7 +807,8 @@ public class RepositoryControllerTests
             queryProcessor,
             userContext,
             organizationAccess ?? Substitute.For<IOrganizationAccessService>(),
-            new RepositoryStorageQuotaOptions()
+            new RepositoryStorageQuotaOptions(),
+            repositoryDiskUsageProvider ?? Substitute.For<IRepositoryDiskUsageProvider>()
         );
     }
 

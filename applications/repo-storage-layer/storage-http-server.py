@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 from storage_content import (
     GitContentError,
     get_blob,
+    get_disk_usage,
     get_raw_bytes,
     is_empty_repository,
     list_branches,
@@ -235,8 +236,26 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if parsed.path == "/internal/repos/content/empty":
             self._handle_is_empty()
             return
+        if parsed.path == "/internal/repos/usage":
+            self._handle_disk_usage()
+            return
 
         self.send_error(404)
+
+    def _handle_disk_usage(self) -> None:
+        physical_path = self._physical_path_from_query()
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            bytes_used = get_disk_usage(physical_path)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"bytesUsed": bytes_used})
 
     def _handle_list_branches(self) -> None:
         physical_path = self._physical_path_from_query()

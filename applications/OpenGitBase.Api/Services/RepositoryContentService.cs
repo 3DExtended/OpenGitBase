@@ -1,11 +1,11 @@
-﻿﻿using OpenGitBase.Api.Models;
+﻿using OpenGitBase.Api.Models;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
 
 namespace OpenGitBase.Api.Services;
 
-public sealed class RepositoryContentService
+public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
 {
     private readonly RepositoryContentAuthorizationService _authorization;
     private readonly IQueryProcessor _queryProcessor;
@@ -303,6 +303,30 @@ public sealed class RepositoryContentService
             .ConfigureAwait(false);
 
         return (access, response);
+    }
+
+    public async Task<long?> GetDiskUsageBytesAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var context = await LoadStorageContextAsync(repository, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return null;
+        }
+
+        var payload = await _storageContentClient
+            .GetDiskUsageAsync(
+                context.Target,
+                context.ApiToken,
+                context.PhysicalPath,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return payload?.BytesUsed;
     }
 
     public async Task<(RepositoryContentAccessResult Access, StorageRawResult? Data)> GetRawAsync(
