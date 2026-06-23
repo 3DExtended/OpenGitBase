@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { RepositoryContentBlob } from '~/utils/api'
+import type { CommentAnchorInput } from '~/utils/api'
 import { fileNameFromPath, formatEntrySize, isMarkdownPath } from '~/utils/repoBrowse'
 
 const props = defineProps<{
   blob: RepositoryContentBlob
   rawUrl: string
+  linePickEnabled?: boolean
+}>()
+
+const emit = defineEmits<{
+  lineAnchor: [anchor: CommentAnchorInput]
 }>()
 
 const { t } = useI18n()
@@ -12,6 +18,7 @@ const { t } = useI18n()
 const fileName = computed(() => fileNameFromPath(props.blob.path))
 const isMarkdown = computed(() => isMarkdownPath(props.blob.path))
 const markdownMode = ref<'rendered' | 'raw'>('rendered')
+const linePickActive = ref(false)
 
 const imageSrc = computed(() => {
   if (props.blob.previewKind !== 'image' || props.blob.isTooLarge) {
@@ -50,6 +57,23 @@ const showSvgMessage = computed(() =>
 
 const showBinary = computed(() => props.blob.isBinary)
 const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinary)
+const showLinePick = computed(() =>
+  linePickActive.value
+  && props.linePickEnabled
+  && showText.value
+  && props.blob.textContent,
+)
+
+function onRangeSelected(payload: { line: number, endLine: number | null }): void {
+  linePickActive.value = false
+  emit('lineAnchor', {
+    ref: props.blob.ref,
+    commitSha: '',
+    filePath: props.blob.path,
+    line: payload.line,
+    endLine: payload.endLine,
+  })
+}
 </script>
 
 <template>
@@ -89,6 +113,23 @@ const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinar
             {{ t('repo.browse.raw') }}
           </button>
         </div>
+        <UButton
+          v-if="linePickEnabled && !linePickActive"
+          variant="outline"
+          size="sm"
+          icon="i-lucide-message-square-plus"
+          @click="linePickActive = true"
+        >
+          {{ t('repo.discussions.discussCode') }}
+        </UButton>
+        <UButton
+          v-else-if="linePickEnabled && linePickActive"
+          variant="ghost"
+          size="sm"
+          @click="linePickActive = false"
+        >
+          {{ t('common.cancel') }}
+        </UButton>
         <UButton
           :to="rawUrl"
           target="_blank"
@@ -136,6 +177,13 @@ const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinar
     <RepoMarkdown
       v-else-if="showMarkdown"
       :source="blob.textContent!"
+    />
+
+    <RepoLineSelectableCode
+      v-else-if="showLinePick"
+      :source="blob.textContent!"
+      :path="blob.path"
+      @range-selected="onRangeSelected"
     />
 
     <RepoHighlightedCode

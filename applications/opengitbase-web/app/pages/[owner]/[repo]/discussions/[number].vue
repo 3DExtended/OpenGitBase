@@ -1,185 +1,40 @@
 <script setup lang="ts">
-import type {
-  Discussion,
-  DiscussionComment,
-  DiscussionStatus,
-  RepositoryMember,
-} from '~/utils/api'
+import DiscussionDetailHybrid from '~/components/prototype/discussions/DiscussionDetailHybrid.vue'
 
-const route = useRoute()
-const auth = useAuth()
-const { t } = useI18n()
-const api = useApi()
-const { owner, repoSlug, repo, loading, notFound, loadRepo } = useRepoMetadata()
+const ctx = useDiscussionDetailPage()
+const prototypeEnabled = useDiscussionPrototypeEnabled()
 
-const discussionNumber = computed(() => Number(route.params.number))
-
-const discussion = ref<Discussion | null>(null)
-const comments = ref<DiscussionComment[]>([])
-const members = ref<RepositoryMember[]>([])
-const pageLoading = ref(false)
-const forbidden = ref(false)
-
-const commentBody = ref('')
-const posting = ref(false)
-const postError = ref<string | null>(null)
-const resolving = ref(false)
-const dismissing = ref(false)
-
-const currentMemberRole = computed(() => {
-  if (!auth.user) {
-    return 0
-  }
-  const member = members.value.find(m => m.username === auth.user?.username)
-  return member?.role ?? 0
-})
-
-const isWriterPlus = computed(() => currentMemberRole.value >= 2)
-const isClosed = computed(() =>
-  discussion.value?.status === 'Resolved' || discussion.value?.status === 'Dismissed',
-)
-
-useHead({
-  title: computed(() =>
-    discussion.value
-      ? `#${discussion.value.number} ${discussion.value.title}`
-      : t('repo.discussions.detailTitle'),
-  ),
-})
-
-function statusColor(status: DiscussionStatus): 'success' | 'warning' | 'neutral' | 'info' {
-  switch (status) {
-    case 'Open':
-      return 'success'
-    case 'Engaged':
-      return 'info'
-    case 'Resolved':
-      return 'neutral'
-    case 'Dismissed':
-      return 'warning'
-  }
-}
-
-function statusLabel(status: DiscussionStatus): string {
-  return t(`repo.discussions.status.${status.toLowerCase()}`)
-}
-
-function memberLabel(userId: string): string {
-  const member = members.value.find(m => m.userId === userId)
-  return member?.username ?? userId
-}
-
-async function loadDiscussion(): Promise<void> {
-  pageLoading.value = true
-  forbidden.value = false
-
-  const result = await api.discussions.get(owner.value, repoSlug.value, discussionNumber.value)
-  if (result.status === 403) {
-    forbidden.value = true
-    pageLoading.value = false
-    return
-  }
-  if (result.status === 404) {
-    discussion.value = null
-    pageLoading.value = false
-    return
-  }
-  discussion.value = result.data
-
-  const commentsResult = await api.discussions.listComments(
-    owner.value,
-    repoSlug.value,
-    discussionNumber.value,
-  )
-  comments.value = commentsResult.data ?? []
-  pageLoading.value = false
-}
-
-async function loadMembers(): Promise<void> {
-  if (!repo.value?.id) {
-    return
-  }
-  const result = await api.repositoryMembers.list(repo.value.id)
-  members.value = result.data ?? []
-}
-
-async function postComment(): Promise<void> {
-  if (!auth.isAuthenticated) {
-    await navigateTo('/sign-in')
-    return
-  }
-  posting.value = true
-  postError.value = null
-  try {
-    const result = await api.discussions.createComment(
-      owner.value,
-      repoSlug.value,
-      discussionNumber.value,
-      { bodyMarkdown: commentBody.value.trim() },
-    )
-    if (result.error) {
-      postError.value = result.error
-      return
-    }
-    commentBody.value = ''
-    await loadDiscussion()
-  }
-  finally {
-    posting.value = false
-  }
-}
-
-async function resolveDiscussion(): Promise<void> {
-  resolving.value = true
-  try {
-    await api.discussions.resolve(owner.value, repoSlug.value, discussionNumber.value)
-    await loadDiscussion()
-  }
-  finally {
-    resolving.value = false
-  }
-}
-
-async function dismissDiscussion(): Promise<void> {
-  dismissing.value = true
-  try {
-    await api.discussions.dismiss(owner.value, repoSlug.value, discussionNumber.value)
-    await loadDiscussion()
-  }
-  finally {
-    dismissing.value = false
-  }
-}
-
-onMounted(async () => {
-  await loadRepo()
-  if (!notFound.value) {
-    await Promise.all([loadDiscussion(), loadMembers()])
-  }
-})
+provide('discussionDetailCtx', ctx)
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl space-y-6">
+  <template v-if="prototypeEnabled">
+    <DiscussionDetailHybrid />
+  </template>
+
+  <div
+    v-else
+    class="mx-auto max-w-3xl space-y-6"
+  >
     <UButton
-      :to="`/${owner}/${repoSlug}/discussions`"
+      :to="`/${ctx.owner}/${ctx.repoSlug}/discussions`"
       variant="ghost"
       icon="i-lucide-arrow-left"
       size="sm"
     >
-      {{ t('repo.discussions.backToList') }}
+      {{ ctx.t('repo.discussions.backToList') }}
     </UButton>
 
     <div
-      v-if="loading || pageLoading"
+      v-if="ctx.loading || ctx.pageLoading"
       class="text-sm text-[var(--ogb-text-muted)]"
     >
-      {{ t('common.loading') }}
+      {{ ctx.t('common.loading') }}
     </div>
 
-    <UCard v-else-if="notFound || forbidden || !discussion">
+    <UCard v-else-if="ctx.notFound || ctx.forbidden || !ctx.discussion">
       <p class="text-sm text-[var(--ogb-text-muted)]">
-        {{ forbidden ? t('repo.browse.forbidden') : t('repo.discussions.notFound') }}
+        {{ ctx.forbidden ? ctx.t('repo.browse.forbidden') : ctx.t('repo.discussions.notFound') }}
       </p>
     </UCard>
 
@@ -188,20 +43,20 @@ onMounted(async () => {
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="min-w-0 space-y-2">
             <p class="font-mono text-sm text-[var(--ogb-text-muted)]">
-              #{{ discussion.number }}
+              #{{ ctx.discussion.number }}
             </p>
             <h1 class="text-2xl font-semibold">
-              {{ discussion.title }}
+              {{ ctx.discussion.title }}
             </h1>
             <div class="flex flex-wrap items-center gap-2">
               <UBadge
-                :color="statusColor(discussion.status)"
+                :color="ctx.statusColor(ctx.discussion.status)"
                 variant="subtle"
               >
-                {{ statusLabel(discussion.status) }}
+                {{ ctx.statusLabel(ctx.discussion.status) }}
               </UBadge>
               <UBadge
-                v-for="tag in discussion.tags"
+                v-for="tag in ctx.discussion.tags"
                 :key="tag.id"
                 color="neutral"
                 variant="subtle"
@@ -212,7 +67,7 @@ onMounted(async () => {
             </div>
           </div>
           <div
-            v-if="isWriterPlus && !isClosed"
+            v-if="ctx.isWriterPlus && !ctx.isClosed"
             class="flex flex-wrap gap-2"
           >
             <UButton
@@ -220,56 +75,56 @@ onMounted(async () => {
               variant="soft"
               size="sm"
               icon="i-lucide-check-circle"
-              :loading="resolving"
-              @click="resolveDiscussion"
+              :loading="ctx.resolving"
+              @click="ctx.resolveDiscussion"
             >
-              {{ t('repo.discussions.resolve') }}
+              {{ ctx.t('repo.discussions.resolve') }}
             </UButton>
             <UButton
               color="warning"
               variant="soft"
               size="sm"
               icon="i-lucide-x-circle"
-              :loading="dismissing"
-              @click="dismissDiscussion"
+              :loading="ctx.dismissing"
+              @click="ctx.dismissDiscussion"
             >
-              {{ t('repo.discussions.dismiss') }}
+              {{ ctx.t('repo.discussions.dismiss') }}
             </UButton>
           </div>
         </div>
 
         <p
-          v-if="discussion.assigneeUserId"
+          v-if="ctx.discussion.assigneeUserId"
           class="text-sm text-[var(--ogb-text-muted)]"
         >
-          {{ t('repo.discussions.assignee') }}: {{ memberLabel(discussion.assigneeUserId) }}
+          {{ ctx.t('repo.discussions.assignee') }}: {{ ctx.memberLabel(ctx.discussion.assigneeUserId) }}
         </p>
 
         <p class="text-xs text-[var(--ogb-text-muted)]">
-          {{ t('repo.discussions.opened') }}
-          {{ new Date(discussion.createdAt).toLocaleString() }}
+          {{ ctx.t('repo.discussions.opened') }}
+          {{ new Date(ctx.discussion.createdAt).toLocaleString() }}
           ·
-          {{ t('repo.discussions.updated') }}
-          {{ new Date(discussion.updatedAt).toLocaleString() }}
+          {{ ctx.t('repo.discussions.updated') }}
+          {{ new Date(ctx.discussion.updatedAt).toLocaleString() }}
         </p>
 
-        <UCard v-if="discussion.body">
-          <RepoMarkdown :source="discussion.body" />
+        <UCard v-if="ctx.discussion.body">
+          <RepoMarkdown :source="ctx.discussion.body" />
         </UCard>
       </div>
 
       <UCard>
         <template #header>
           <h2 class="font-semibold">
-            {{ t('repo.discussions.commentsTitle') }}
+            {{ ctx.t('repo.discussions.commentsTitle') }}
           </h2>
         </template>
 
         <p
-          v-if="!comments.length"
+          v-if="!ctx.comments.length"
           class="text-sm text-[var(--ogb-text-muted)]"
         >
-          {{ t('repo.discussions.noComments') }}
+          {{ ctx.t('repo.discussions.noComments') }}
         </p>
 
         <ul
@@ -278,24 +133,25 @@ onMounted(async () => {
           style="border-color: var(--ogb-border);"
         >
           <li
-            v-for="comment in comments"
+            v-for="comment in ctx.comments"
+            :id="`comment-${comment.id}`"
             :key="comment.id"
-            class="py-4 first:pt-0 last:pb-0"
+            class="py-4 first:pt-0 last:pb-0 scroll-mt-24"
           >
             <div class="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--ogb-text-muted)]">
               <span class="font-medium text-[var(--ogb-text)]">
-                {{ memberLabel(comment.authorUserId) }}
+                {{ ctx.memberLabel(comment.authorUserId) }}
               </span>
               <span>
                 {{ new Date(comment.createdAt).toLocaleString() }}
-                <span v-if="comment.editedAt"> · {{ t('repo.discussions.edited') }}</span>
+                <span v-if="comment.editedAt"> · {{ ctx.t('repo.discussions.edited') }}</span>
               </span>
             </div>
             <p
               v-if="comment.isDeleted"
               class="text-sm italic text-[var(--ogb-text-muted)]"
             >
-              {{ t('repo.discussions.commentDeleted') }}
+              {{ ctx.t('repo.discussions.commentDeleted') }}
             </p>
             <template v-else>
               <p
@@ -304,7 +160,7 @@ onMounted(async () => {
               >
                 {{ comment.anchor.filePath }}:{{ comment.anchor.line }}
                 <span v-if="comment.anchor.resolution?.kind !== 'located'">
-                  ({{ t('repo.discussions.anchorOutdated') }})
+                  ({{ ctx.t('repo.discussions.anchorOutdated') }})
                 </span>
               </p>
               <RepoMarkdown :source="comment.bodyMarkdown" />
@@ -315,33 +171,33 @@ onMounted(async () => {
         <form
           class="space-y-3 border-t pt-4"
           style="border-color: var(--ogb-border);"
-          @submit.prevent="postComment"
+          @submit.prevent="ctx.postComment"
         >
           <p
-            v-if="isClosed"
+            v-if="ctx.isClosed"
             class="text-sm text-[var(--ogb-text-muted)]"
           >
-            {{ t('repo.discussions.reopenHint') }}
+            {{ ctx.t('repo.discussions.reopenHint') }}
           </p>
-          <UFormField :label="t('repo.discussions.fields.comment')">
+          <UFormField :label="ctx.t('repo.discussions.fields.comment')">
             <UTextarea
-              v-model="commentBody"
+              v-model="ctx.commentBody"
               :rows="4"
-              :placeholder="t('repo.discussions.commentPlaceholder')"
+              :placeholder="ctx.t('repo.discussions.commentPlaceholder')"
             />
           </UFormField>
           <UAlert
-            v-if="postError"
+            v-if="ctx.postError"
             color="error"
             variant="subtle"
-            :description="postError"
+            :description="ctx.postError"
           />
           <UButton
             type="submit"
-            :loading="posting"
-            :disabled="!commentBody.trim()"
+            :loading="ctx.posting"
+            :disabled="!ctx.commentBody.trim()"
           >
-            {{ auth.isAuthenticated ? t('repo.discussions.postComment') : t('nav.signIn') }}
+            {{ ctx.auth.isAuthenticated ? ctx.t('repo.discussions.postComment') : ctx.t('nav.signIn') }}
           </UButton>
         </form>
       </UCard>

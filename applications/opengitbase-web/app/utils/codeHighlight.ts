@@ -1,7 +1,16 @@
-import { codeToHtml } from 'shiki'
+import {
+  createHighlighter,
+  type BundledLanguage,
+  type Highlighter,
+} from 'shiki'
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { languageFromPath } from '~/utils/codeLanguage'
 
 type HighlightTheme = 'github-light' | 'github-dark'
+
+const jsEngine = createJavaScriptRegexEngine({ target: 'ES2018' })
+
+let highlighterPromise: Promise<Highlighter> | null = null
 
 function themeForColorMode(colorMode: string): HighlightTheme {
   return colorMode === 'dark' ? 'github-dark' : 'github-light'
@@ -17,7 +26,39 @@ function escapeHtml(source: string): string {
 }
 
 function plainCodeHtml(source: string): string {
-  return `<pre class="shiki"><code>${escapeHtml(source)}</code></pre>`
+  const body = source
+    .split('\n')
+    .map(line => `<span class="line"><span>${escapeHtml(line)}</span></span>`)
+    .join('\n')
+  return `<pre class="shiki"><code>${body}</code></pre>`
+}
+
+async function getHighlighter(): Promise<Highlighter> {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighter({
+      themes: ['github-light', 'github-dark'],
+      langs: ['text', 'typescript', 'javascript', 'tsx', 'jsx', 'json'],
+      engine: jsEngine,
+    })
+  }
+  return highlighterPromise
+}
+
+async function resolveLanguage(highlighter: Highlighter, lang: string): Promise<BundledLanguage> {
+  const loaded = highlighter.getLoadedLanguages()
+  if (loaded.includes(lang as BundledLanguage)) {
+    return lang as BundledLanguage
+  }
+  try {
+    await highlighter.loadLanguage(lang as BundledLanguage)
+    return lang as BundledLanguage
+  }
+  catch {
+    if (!loaded.includes('text')) {
+      await highlighter.loadLanguage('text')
+    }
+    return 'text'
+  }
 }
 
 export async function highlightSourceCode(
@@ -29,14 +70,11 @@ export async function highlightSourceCode(
   const theme = themeForColorMode(colorMode)
 
   try {
-    return await codeToHtml(source, { lang, theme })
+    const highlighter = await getHighlighter()
+    const langToUse = await resolveLanguage(highlighter, lang)
+    return highlighter.codeToHtml(source, { lang: langToUse, theme })
   }
   catch {
-    try {
-      return await codeToHtml(source, { lang: 'text', theme })
-    }
-    catch {
-      return plainCodeHtml(source)
-    }
+    return plainCodeHtml(source)
   }
 }

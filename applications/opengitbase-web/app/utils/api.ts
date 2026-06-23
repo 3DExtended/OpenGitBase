@@ -327,6 +327,7 @@ export interface Notification {
   discussionId: string
   repositoryId: string
   discussionNumber: number
+  commentId?: string | null
   ownerSlug: string
   repositorySlug: string
   eventType: NotificationEventType
@@ -639,8 +640,9 @@ function normalizeNotification(raw: Record<string, unknown>): Notification {
     discussionId: normalizeId(raw.discussionId),
     repositoryId: normalizeId(raw.repositoryId),
     discussionNumber: Number(raw.discussionNumber ?? 0),
-    ownerSlug: String(raw.ownerSlug ?? ''),
-    repositorySlug: String(raw.repositorySlug ?? ''),
+    commentId: raw.commentId ? normalizeId(raw.commentId) : null,
+    ownerSlug: String(raw.ownerSlug ?? raw.owner ?? ''),
+    repositorySlug: String(raw.repositorySlug ?? raw.slug ?? ''),
     eventType: normalizeNotificationEventType(raw.eventType),
     message: String(raw.message ?? ''),
     actorUserId: raw.actorUserId ? normalizeId(raw.actorUserId) : null,

@@ -492,6 +492,9 @@ public class ListNotificationsQueryHandler
                     DiscussionId = DiscussionId.From(notification.DiscussionId),
                     RepositoryId = notification.Discussion.RepositoryId,
                     DiscussionNumber = notification.Discussion.Number,
+                    CommentId = notification.CommentId is null
+                        ? null
+                        : DiscussionCommentId.From(notification.CommentId.Value),
                     OwnerSlug = repository.OwnerSlug ?? string.Empty,
                     RepositorySlug = repository.Slug,
                     EventType = (NotificationEventType)notification.EventType,
@@ -630,6 +633,7 @@ public class CreateDiscussionNotificationQueryHandler : IQueryHandler<CreateDisc
                     Id = Guid.NewGuid(),
                     UserId = userId,
                     DiscussionId = discussion.Id,
+                    CommentId = query.CommentId?.Value,
                     EventType = (int)query.EventType,
                     Message = query.Message,
                     ActorUserId = query.ActorUserId.Value == Guid.Empty
@@ -651,6 +655,9 @@ public class CreateDiscussionNotificationQueryHandler : IQueryHandler<CreateDisc
             )
             {
                 var email = _emailProtectionService.DecryptEmail(credentials.EmailCiphertext);
+                var discussionPath = query.CommentId is null
+                    ? $"/{ownerSlug}/{repository.Slug}/discussions/{discussion.Number}"
+                    : $"/{ownerSlug}/{repository.Slug}/discussions/{discussion.Number}#comment-{query.CommentId.Value}";
                 await _queryProcessor
                     .RunQueryAsync(
                         new EmailSendQuery
@@ -662,7 +669,7 @@ public class CreateDiscussionNotificationQueryHandler : IQueryHandler<CreateDisc
                             },
                             Subject = $"{subjectPrefix} {query.Message}",
                             HtmlBody =
-                                $"<p>{System.Net.WebUtility.HtmlEncode(query.Message)}</p><p><a href=\"/{ownerSlug}/{repository.Slug}/discussions/{discussion.Number}\">View discussion</a></p>",
+                                $"<p>{System.Net.WebUtility.HtmlEncode(query.Message)}</p><p><a href=\"{discussionPath}\">View discussion</a></p>",
                         },
                         cancellationToken
                     )

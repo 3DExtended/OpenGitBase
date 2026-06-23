@@ -135,6 +135,7 @@ public partial class CreateDiscussionCommentQueryHandler
                 new CreateDiscussionNotificationQuery
                 {
                     DiscussionId = DiscussionId.From(discussion.Id),
+                    CommentId = DiscussionCommentId.From(comment.Id),
                     EventType = NotificationEventType.NewComment,
                     ActorUserId = query.AuthorUserId,
                     Message = "New comment",
@@ -161,6 +162,7 @@ public partial class CreateDiscussionCommentQueryHandler
                     new CreateDiscussionNotificationQuery
                     {
                         DiscussionId = DiscussionId.From(discussion.Id),
+                        CommentId = DiscussionCommentId.From(comment.Id),
                         EventType = NotificationEventType.Mention,
                         ActorUserId = query.AuthorUserId,
                         Message = "You were mentioned",

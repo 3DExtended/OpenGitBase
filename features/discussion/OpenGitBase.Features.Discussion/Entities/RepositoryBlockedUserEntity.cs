@@ -28,6 +28,7 @@ public class UserNotificationEntity : IIdentifiableEntity<Guid>
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public Guid DiscussionId { get; set; }
+    public Guid? CommentId { get; set; }
     public int EventType { get; set; }
     public string Message { get; set; } = string.Empty;
     public Guid? ActorUserId { get; set; }

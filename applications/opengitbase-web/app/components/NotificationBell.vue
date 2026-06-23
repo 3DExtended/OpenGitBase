@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Notification } from '~/utils/api'
+import { discussionDetailRoute } from '~/utils/discussionPaths'
 
 const { t } = useI18n()
 const api = useApi()
@@ -28,8 +29,18 @@ async function markRead(notification: Notification): Promise<void> {
   notification.isRead = true
 }
 
-function notificationLink(notification: Notification): string {
-  return `/${notification.ownerSlug}/${notification.repositorySlug}/discussions/${notification.discussionNumber}`
+async function openNotification(notification: Notification): Promise<void> {
+  open.value = false
+  void markRead(notification)
+  const target = discussionDetailRoute(
+    notification.ownerSlug,
+    notification.repositorySlug,
+    notification.discussionNumber,
+    notification.commentId ? { commentId: notification.commentId } : undefined,
+  )
+  if (target) {
+    await navigateTo(target)
+  }
 }
 
 watch(open, (isOpen) => {
@@ -92,11 +103,11 @@ onMounted(() => {
             v-for="notification in notifications"
             :key="notification.id"
           >
-            <NuxtLink
-              :to="notificationLink(notification)"
-              class="block rounded-md px-2 py-2 text-sm transition-colors hover:bg-[var(--ogb-bg)]"
+            <button
+              type="button"
+              class="block w-full rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-[var(--ogb-bg)]"
               :class="{ 'bg-[var(--ogb-bg)]': !notification.isRead }"
-              @click="markRead(notification); open = false"
+              @click="openNotification(notification)"
             >
               <p class="line-clamp-2">
                 {{ notification.message }}
@@ -105,7 +116,7 @@ onMounted(() => {
                 {{ notification.ownerSlug }}/{{ notification.repositorySlug }} #{{ notification.discussionNumber }}
                 · {{ new Date(notification.createdAt).toLocaleString() }}
               </p>
-            </NuxtLink>
+            </button>
           </li>
         </ul>
       </div>

@@ -9,6 +9,7 @@ public class NotificationDto : ModelBase<NotificationId, Guid>
     public DiscussionId DiscussionId { get; set; } = DiscussionId.From(Guid.Empty);
     public Guid RepositoryId { get; set; }
     public int DiscussionNumber { get; set; }
+    public DiscussionCommentId? CommentId { get; set; }
     public string OwnerSlug { get; set; } = string.Empty;
     public string RepositorySlug { get; set; } = string.Empty;
     public NotificationEventType EventType { get; set; }

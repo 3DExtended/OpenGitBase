@@ -6,6 +6,7 @@ namespace OpenGitBase.Features.Discussion.Contracts;
 public class CreateDiscussionNotificationQuery : IQuery<Unit, CreateDiscussionNotificationQuery>
 {
     public DiscussionId DiscussionId { get; set; } = DiscussionId.From(Guid.Empty);
+    public DiscussionCommentId? CommentId { get; set; }
     public NotificationEventType EventType { get; set; }
     public UserId ActorUserId { get; set; } = UserId.From(Guid.Empty);
     public string Message { get; set; } = string.Empty;

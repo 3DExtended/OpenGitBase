@@ -3,6 +3,8 @@ import type {
   RepositoryContentBlob,
   RepositoryContentRefs,
   RepositoryReplicationLag,
+  Discussion,
+  CommentAnchorInput,
 } from '~/utils/api'
 import {
   decodeRefParam,
@@ -13,16 +15,20 @@ import {
 } from '~/utils/repoBrowse'
 
 const route = useRoute()
+const auth = useAuth()
 const { t } = useI18n()
 const api = useApi()
 const { owner, repoSlug, repo, loading, notFound, loadRepo } = useRepoMetadata()
 
 const contentRefs = ref<RepositoryContentRefs | null>(null)
 const blob = ref<RepositoryContentBlob | null>(null)
+const discussions = ref<Discussion[]>([])
 const contentLoading = ref(false)
 const contentForbidden = ref(false)
 const contentUnavailable = ref(false)
 const blobNotFound = ref(false)
+const pendingLineAnchor = ref<CommentAnchorInput | null>(null)
+const showLineActions = ref(false)
 
 const refName = computed(() => decodeRefParam(String(route.params.ref)))
 const currentPath = computed(() => parsePathParam(route.params.path))
@@ -36,6 +42,55 @@ const rawUrl = computed(() =>
 const replicationLag = computed<RepositoryReplicationLag | null>(() =>
   blob.value?.replicationLag ?? contentRefs.value?.replicationLag ?? null,
 )
+
+const linePickEnabled = computed(() =>
+  auth.isAuthenticated
+  && !!blob.value
+  && !blob.value.isBinary
+  && !blob.value.isTooLarge
+  && blob.value.previewKind === 'text',
+)
+
+function commitShaForRef(name: string): string {
+  if (!contentRefs.value) {
+    return ''
+  }
+  const branch = contentRefs.value.branches.find(b => b.name === name)
+  if (branch) {
+    return branch.commitSha
+  }
+  const tag = contentRefs.value.tags.find(item => item.name === name)
+  return tag?.commitSha ?? ''
+}
+
+async function loadDiscussions(): Promise<void> {
+  const result = await api.discussions.list(owner.value, repoSlug.value)
+  discussions.value = result.data ?? []
+}
+
+function onLineAnchor(draft: CommentAnchorInput): void {
+  pendingLineAnchor.value = {
+    ...draft,
+    ref: refName.value,
+    commitSha: commitShaForRef(refName.value),
+  }
+  showLineActions.value = true
+}
+
+function clearLineAnchor(): void {
+  pendingLineAnchor.value = null
+  showLineActions.value = false
+}
+
+const selectedRangeLabel = computed(() => {
+  const anchor = pendingLineAnchor.value
+  if (!anchor) {
+    return null
+  }
+  return anchor.endLine && anchor.endLine !== anchor.line
+    ? `${anchor.line}–${anchor.endLine}`
+    : `${anchor.line}`
+})
 
 const breadcrumbs = computed(() => {
   const items: Array<{ label: string, to?: string }> = [
@@ -126,7 +181,7 @@ useHead({
 onMounted(async () => {
   await loadRepo()
   if (repo.value) {
-    await loadBlob()
+    await Promise.all([loadBlob(), loadDiscussions()])
   }
 })
 </script>
@@ -212,6 +267,32 @@ onMounted(async () => {
           </nav>
 
           <div
+            v-if="pendingLineAnchor && !showLineActions"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm"
+            style="border-color: var(--ogb-border); background: var(--ogb-bg);"
+          >
+            <p class="font-mono text-xs text-[var(--ogb-text-muted)]">
+              {{ pendingLineAnchor.filePath }}:{{ selectedRangeLabel }}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                size="sm"
+                icon="i-lucide-message-square-plus"
+                @click="showLineActions = true"
+              >
+                {{ t('repo.discussions.discussSelectedCode') }}
+              </UButton>
+              <UButton
+                size="sm"
+                variant="ghost"
+                @click="clearLineAnchor"
+              >
+                {{ t('common.cancel') }}
+              </UButton>
+            </div>
+          </div>
+
+          <div
             v-if="contentLoading"
             class="text-sm text-[var(--ogb-text-muted)]"
           >
@@ -222,9 +303,20 @@ onMounted(async () => {
             v-else-if="blob"
             :blob="blob"
             :raw-url="rawUrl"
+            :line-pick-enabled="linePickEnabled"
+            @line-anchor="onLineAnchor"
           />
         </div>
       </UCard>
+
+      <DiscussionBlobLineActions
+        v-if="pendingLineAnchor"
+        v-model:open="showLineActions"
+        :anchor="pendingLineAnchor"
+        :owner="owner"
+        :repo-slug="repoSlug"
+        :discussions="discussions"
+      />
     </template>
   </div>
 </template>
