@@ -1,5 +1,7 @@
-# Branch mapping — Git HTTPS PAT
+# Branches
 
-| Work item | Feature branch | Base branch | Notes |
-|-----------|----------------|-------------|-------|
-| git-https-01 … git-https-08 | `feat/git-https-pat` | `main` | Single branch for entire PRD chain |
+Per user request, all work committed on **`main`** (no `feat/disc-*` branches).
+
+| Work item | Branch | Base |
+|-----------|--------|------|
+| disc-11 … disc-16 | `main` | `main` |

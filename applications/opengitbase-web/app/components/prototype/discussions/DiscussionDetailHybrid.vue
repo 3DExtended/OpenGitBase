@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /** PROTOTYPE — shared detail layout (grill v2): right meta sidebar + bottom composer. */
+import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
 import CommentAnchorPreview from '~/components/discussions/CommentAnchorPreview.vue'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
@@ -81,34 +82,23 @@ if (!ctx) {
               {{ ctx.t('repo.discussions.noComments') }}
             </p>
 
-            <article
+            <div
               v-for="comment in ctx.comments"
-              :id="`comment-${comment.id}`"
               :key="comment.id"
-              class="space-y-2 border-b pb-4 last:border-b-0 scroll-mt-24"
-              style="border-color: var(--ogb-border);"
+              class="space-y-2"
             >
-              <div class="flex items-center justify-between gap-2 text-xs text-[var(--ogb-text-muted)]">
-                <span class="font-medium text-[var(--ogb-text)]">{{ ctx.memberLabel(comment.authorUserId) }}</span>
-                <span>{{ new Date(comment.createdAt).toLocaleString() }}</span>
-              </div>
-              <CommentAnchorPreview
-                v-if="comment.anchor && !comment.isDeleted"
+              <DiscussionSubThread
+                :comment="comment"
                 :owner="ctx.owner"
                 :repo-slug="ctx.repoSlug"
-                :anchor="comment.anchor"
+                :member-label="ctx.memberLabel"
+                :can-resolve="ctx.canResolveSubThread(comment)"
+                :can-reply="ctx.auth.isAuthenticated"
+                @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
+                @resolve="ctx.resolveSubThread(comment.id)"
+                @unresolve="ctx.unresolveSubThread(comment.id)"
               />
-              <p
-                v-if="comment.isDeleted"
-                class="text-sm italic text-[var(--ogb-text-muted)]"
-              >
-                {{ ctx.t('repo.discussions.commentDeleted') }}
-              </p>
-              <RepoMarkdown
-                v-else-if="comment.bodyMarkdown"
-                :source="comment.bodyMarkdown"
-              />
-            </article>
+            </div>
           </section>
         </div>
 

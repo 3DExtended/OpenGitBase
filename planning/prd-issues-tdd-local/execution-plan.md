@@ -1,32 +1,30 @@
-# Execution Plan — Git HTTPS PAT
+# PRD issues TDD — execution plan
 
-**PRD:** `docs/prd/git-https-personal-access-tokens.md`  
-**Items:** `docs/issues/git-https-pat/`  
-**Strategy:** Single branch `feat/git-https-pat`, sequential TDD, no parallelism  
-**Default branch:** `main`
+Source: [docs/prd/discussion-sub-threads.md](../../docs/prd/discussion-sub-threads.md)
+
+Branch strategy: **main** (per user request; no per-issue feature branches).
+
+| Order | ID | Title | Status |
+|------:|-----|-------|--------|
+| 1 | disc-11 | Basic sub-thread replies | completed |
+| 2 | disc-12 | Anchored replies | completed |
+| 3 | disc-13 | Sub-thread resolve and collapse UI | completed |
+| 4 | disc-14 | Orphan replies after root soft-delete | completed |
+| 5 | disc-15 | Sub-thread resolve notifications | completed |
+| 6 | disc-16 | Sub-thread integration tests | completed |
 
 ## Dependency graph
 
 ```
-git-https-01 ──► git-https-02 ──► git-https-03 ──┐
-                                                  ├──► git-https-04 ──► git-https-05 ──► git-https-08
-git-https-01 ──► git-https-06 ◄── git-https-05   │
-git-https-01,06 ─► git-https-07 ─────────────────┘
+disc-04, disc-09 (pre-existing) ──► disc-11 ──┬──► disc-12
+                                            ├──► disc-13 ──► disc-15
+                                            └──► disc-14
+disc-11…disc-15 ──► disc-16
 ```
 
-## Topological execution order
+## Verification
 
-| Step | ID | Title | Status |
-|------|-----|-------|--------|
-| 1 | git-https-01 | Git access tokens + settings UI + git config | completed |
-| 2 | git-https-02 | PAT repository access-check + storage HTTP routing | completed |
-| 3 | git-https-03 | Storage git-http-backend | completed |
-| 4 | git-https-04 | Dispatcher Smart HTTP edge | completed |
-| 5 | git-https-05 | HAProxy unified HTTP routing + Cloudflare tunnel | completed |
-| 6 | git-https-06 | SSH disable gate | completed |
-| 7 | git-https-07 | Repository HTTPS clone URLs + settings navigation | completed |
-| 8 | git-https-08 | End-to-end HTTPS git integration test | completed |
-
-## Branching
-
-All work items share **`feat/git-https-pat`** (branched from `main`). No per-item feature branches.
+- `dotnet test tests/OpenGitBase.Features.Discussion.Tests` — 57 passed
+- `./scripts/test-discussions-e2e.sh` against Docker Compose — passed (includes sub-thread scenarios)
+- `npm test` in `opengitbase-web` — 19 passed
+- Playwright `discussion-subthreads.spec.ts` — 3 viewport snapshots generated

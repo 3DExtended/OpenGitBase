@@ -174,6 +174,51 @@ export function useDiscussionDetailPage() {
     }
   }
 
+  async function postReply(
+    parentCommentId: string,
+    bodyMarkdown: string,
+    anchor: CommentAnchorInput | null,
+  ): Promise<void> {
+    if (!auth.isAuthenticated) {
+      await navigateTo('/sign-in')
+      return
+    }
+    const result = await api.discussions.createComment(
+      owner.value,
+      repoSlug.value,
+      discussionNumber.value,
+      {
+        bodyMarkdown,
+        parentCommentId,
+        anchor,
+      },
+    )
+    if (result.error) {
+      ctx.postError = result.error
+      return
+    }
+    await loadDiscussion()
+  }
+
+  function canResolveSubThread(comment: DiscussionComment): boolean {
+    if (!auth.user) {
+      return false
+    }
+    const member = ctx.members.find(m => m.username === auth.user?.username)
+    const isAuthor = member?.userId === comment.authorUserId
+    return isAuthor || isWriterPlus.value
+  }
+
+  async function resolveSubThread(commentId: string): Promise<void> {
+    await api.discussions.resolveSubThread(owner.value, repoSlug.value, commentId)
+    await loadDiscussion()
+  }
+
+  async function unresolveSubThread(commentId: string): Promise<void> {
+    await api.discussions.unresolveSubThread(owner.value, repoSlug.value, commentId)
+    await loadDiscussion()
+  }
+
   async function resolveDiscussion(): Promise<void> {
     ctx.resolving = true
     try {
@@ -221,6 +266,10 @@ export function useDiscussionDetailPage() {
     memberLabel,
     memberInitial,
     postComment,
+    postReply,
+    canResolveSubThread,
+    resolveSubThread,
+    unresolveSubThread,
     resolveDiscussion,
     dismissDiscussion,
   })

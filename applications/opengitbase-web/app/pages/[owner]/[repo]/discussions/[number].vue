@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { CommentAnchorInput } from '~/utils/api'
 import DiscussionDetailHybrid from '~/components/prototype/discussions/DiscussionDetailHybrid.vue'
 
 const ctx = useDiscussionDetailPage()
@@ -129,42 +130,23 @@ provide('discussionDetailCtx', ctx)
 
         <ul
           v-else
-          class="mb-6 divide-y"
-          style="border-color: var(--ogb-border);"
+          class="mb-6 space-y-4"
         >
           <li
             v-for="comment in ctx.comments"
-            :id="`comment-${comment.id}`"
             :key="comment.id"
-            class="py-4 first:pt-0 last:pb-0 scroll-mt-24"
           >
-            <div class="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--ogb-text-muted)]">
-              <span class="font-medium text-[var(--ogb-text)]">
-                {{ ctx.memberLabel(comment.authorUserId) }}
-              </span>
-              <span>
-                {{ new Date(comment.createdAt).toLocaleString() }}
-                <span v-if="comment.editedAt"> · {{ ctx.t('repo.discussions.edited') }}</span>
-              </span>
-            </div>
-            <p
-              v-if="comment.isDeleted"
-              class="text-sm italic text-[var(--ogb-text-muted)]"
-            >
-              {{ ctx.t('repo.discussions.commentDeleted') }}
-            </p>
-            <template v-else>
-              <p
-                v-if="comment.anchor"
-                class="mb-2 font-mono text-xs text-[var(--ogb-text-muted)]"
-              >
-                {{ comment.anchor.filePath }}:{{ comment.anchor.line }}
-                <span v-if="comment.anchor.resolution?.kind !== 'located'">
-                  ({{ ctx.t('repo.discussions.anchorOutdated') }})
-                </span>
-              </p>
-              <RepoMarkdown :source="comment.bodyMarkdown" />
-            </template>
+            <DiscussionSubThread
+              :comment="comment"
+              :owner="ctx.owner"
+              :repo-slug="ctx.repoSlug"
+              :member-label="ctx.memberLabel"
+              :can-resolve="ctx.canResolveSubThread(comment)"
+              :can-reply="ctx.auth.isAuthenticated"
+              @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
+              @resolve="ctx.resolveSubThread(comment.id)"
+              @unresolve="ctx.unresolveSubThread(comment.id)"
+            />
           </li>
         </ul>
 

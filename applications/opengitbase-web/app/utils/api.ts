@@ -310,6 +310,14 @@ export interface DiscussionComment {
   deletedAt?: string | null
   deletedByUserId?: string | null
   isDeleted: boolean
+  parentCommentId?: string | null
+  isResolved: boolean
+  resolvedAt?: string | null
+  resolvedByUserId?: string | null
+  replyCount: number
+  lastReplyAt?: string | null
+  orphanedFromDeletedRoot: boolean
+  replies: DiscussionComment[]
   anchor?: CommentAnchor | null
 }
 
@@ -320,6 +328,7 @@ export type NotificationEventType =
   | 'Resolved'
   | 'Dismissed'
   | 'Reopened'
+  | 'SubThreadResolved'
 
 export interface Notification {
   id: string
@@ -599,6 +608,10 @@ function normalizeCommentAnchor(raw: Record<string, unknown>): CommentAnchor {
 }
 
 function normalizeDiscussionComment(raw: Record<string, unknown>): DiscussionComment {
+  const replies = Array.isArray(raw.replies)
+    ? raw.replies.map(item => normalizeDiscussionComment(item as Record<string, unknown>))
+    : []
+
   return {
     id: normalizeId(raw.id),
     discussionId: normalizeId(raw.discussionId),
@@ -610,6 +623,14 @@ function normalizeDiscussionComment(raw: Record<string, unknown>): DiscussionCom
     deletedAt: raw.deletedAt ? String(raw.deletedAt) : null,
     deletedByUserId: raw.deletedByUserId ? normalizeId(raw.deletedByUserId) : null,
     isDeleted: Boolean(raw.isDeleted),
+    parentCommentId: raw.parentCommentId ? normalizeId(raw.parentCommentId) : null,
+    isResolved: Boolean(raw.isResolved),
+    resolvedAt: raw.resolvedAt ? String(raw.resolvedAt) : null,
+    resolvedByUserId: raw.resolvedByUserId ? normalizeId(raw.resolvedByUserId) : null,
+    replyCount: Number(raw.replyCount ?? replies.length),
+    lastReplyAt: raw.lastReplyAt ? String(raw.lastReplyAt) : null,
+    orphanedFromDeletedRoot: Boolean(raw.orphanedFromDeletedRoot),
+    replies,
     anchor: raw.anchor && typeof raw.anchor === 'object'
       ? normalizeCommentAnchor(raw.anchor as Record<string, unknown>)
       : null,
@@ -623,6 +644,7 @@ const NOTIFICATION_EVENT_MAP: Record<number, NotificationEventType> = {
   3: 'Resolved',
   4: 'Dismissed',
   5: 'Reopened',
+  6: 'SubThreadResolved',
 }
 
 function normalizeNotificationEventType(raw: unknown): NotificationEventType {
@@ -1252,11 +1274,37 @@ export function createApi(baseUrl: string) {
         owner: string,
         slug: string,
         number: number,
-        body: { bodyMarkdown: string, anchor?: CommentAnchorInput | null },
+        body: {
+          bodyMarkdown: string
+          parentCommentId?: string | null
+          anchor?: CommentAnchorInput | null
+        },
       ) => {
         const result = await request<Record<string, unknown>>(
           `${discussionSlugPath(owner, slug)}/discussions/${number}/comments`,
           { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussionComment(result.data) : null,
+        }
+      },
+
+      resolveSubThread: async (owner: string, slug: string, commentId: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/comments/${commentId}/resolve`,
+          { method: 'POST' },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussionComment(result.data) : null,
+        }
+      },
+
+      unresolveSubThread: async (owner: string, slug: string, commentId: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/comments/${commentId}/unresolve`,
+          { method: 'POST' },
         )
         return {
           ...result,
