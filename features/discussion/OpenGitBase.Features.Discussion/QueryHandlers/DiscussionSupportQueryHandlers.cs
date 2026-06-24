@@ -619,10 +619,18 @@ public class CreateDiscussionNotificationQueryHandler : IQueryHandler<CreateDisc
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var recipientIds = subscriberIds
-            .Concat(query.AdditionalRecipientUserIds.Select(u => u.Value))
-            .Distinct()
-            .ToList();
+        var recipientIds = query.RestrictToExplicitRecipients
+            ? query.AdditionalRecipientUserIds.Select(u => u.Value).Distinct().ToList()
+            : subscriberIds
+                .Concat(query.AdditionalRecipientUserIds.Select(u => u.Value))
+                .Distinct()
+                .ToList();
+
+        var actorId = query.ActorUserId.Value == Guid.Empty ? (Guid?)null : query.ActorUserId.Value;
+        if (actorId is not null)
+        {
+            recipientIds = recipientIds.Where(id => id != actorId.Value).ToList();
+        }
 
         var utcNow = _systemClock.UtcNow;
         foreach (var userId in recipientIds)

@@ -210,6 +210,46 @@ ANCHOR_PATH="$(json_field "${TMP_DIR}/anchor-comment.json" 'd.get("anchor", {}).
 [[ "${ANCHOR_PATH}" == "README.md" ]] || fail "expected anchor filePath README.md got ${ANCHOR_PATH}"
 pass "anchored comment stored"
 
+# --- sub-thread: reply, nested list, resolve ---
+status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/subthread-disc.json" -w '%{http_code}' \
+  -X POST "${PUBLIC_DISC}" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Sub-thread e2e","body":"thread body"}')"
+[[ "${status}" == "200" || "${status}" == "201" ]] || fail "sub-thread discussion create expected 200/201 got ${status}"
+SUB_NUMBER="$(json_field "${TMP_DIR}/subthread-disc.json" 'd["number"]')"
+
+status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/subthread-root.json" -w '%{http_code}' \
+  -X POST "${PUBLIC_DISC}/${SUB_NUMBER}/comments" \
+  -H 'Content-Type: application/json' \
+  -d '{"bodyMarkdown":"root note"}')"
+[[ "${status}" == "200" ]] || fail "sub-thread root expected 200 got ${status}"
+ROOT_ID="$(json_field "${TMP_DIR}/subthread-root.json" 'd["id"]["value"] if isinstance(d.get("id"), dict) else d["id"]')"
+
+status="$(auth_curl "${READER_TOKEN}" -o "${TMP_DIR}/subthread-reply.json" -w '%{http_code}' \
+  -X POST "${PUBLIC_DISC}/${SUB_NUMBER}/comments" \
+  -H 'Content-Type: application/json' \
+  -d "{\"bodyMarkdown\":\"reply note\",\"parentCommentId\":\"${ROOT_ID}\"}")"
+[[ "${status}" == "200" ]] || fail "sub-thread reply expected 200 got ${status}"
+
+auth_curl "${OWNER_TOKEN}" "${PUBLIC_DISC}/${SUB_NUMBER}/comments" > "${TMP_DIR}/subthread-list.json"
+python3 -c "
+import json
+items = json.load(open('${TMP_DIR}/subthread-list.json'))
+root = next(i for i in items if (i.get('id', {}).get('value', i.get('id')) == '${ROOT_ID}' or str(i.get('id')) == '${ROOT_ID}'))
+replies = root.get('replies') or []
+assert len(replies) == 1, f'expected 1 reply got {len(replies)}'
+" || fail "nested replies missing"
+
+status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/subthread-resolved.json" -w '%{http_code}' \
+  -X POST "${PUBLIC_DISC}/comments/${ROOT_ID}/resolve")"
+[[ "${status}" == "200" ]] || fail "sub-thread resolve expected 200 got ${status}"
+RESOLVED="$(json_field "${TMP_DIR}/subthread-resolved.json" 'd.get("isResolved", False)')"
+[[ "${RESOLVED}" == "True" ]] || fail "expected isResolved true got ${RESOLVED}"
+
+DISC_STATUS="$(auth_curl "${OWNER_TOKEN}" "${PUBLIC_DISC}/${SUB_NUMBER}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
+[[ "${DISC_STATUS}" == "0" ]] || fail "sub-thread resolve must not close discussion, got status ${DISC_STATUS}"
+pass "sub-thread reply, nested list, and resolve"
+
 # --- tags: create, assign, filter ---
 status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/tag.json" -w '%{http_code}' \
   -X POST "${PUBLIC_TAGS}" \

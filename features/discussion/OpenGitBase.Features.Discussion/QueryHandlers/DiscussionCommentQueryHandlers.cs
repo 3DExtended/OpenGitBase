@@ -59,6 +59,29 @@ public partial class CreateDiscussionCommentQueryHandler
             return Option<DiscussionCommentDto>.None;
         }
 
+        var isReply = query.ParentCommentId is not null;
+        DiscussionCommentEntity? parentComment = null;
+        if (isReply)
+        {
+            parentComment = await context
+                .Set<DiscussionCommentEntity>()
+                .FirstOrDefaultAsync(
+                    c => c.Id == query.ParentCommentId!.Value,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+            if (
+                parentComment is null
+                || parentComment.DiscussionId != discussion.Id
+                || parentComment.ParentCommentId is not null
+                || parentComment.DeletedAt is not null
+            )
+            {
+                return Option<DiscussionCommentDto>.None;
+            }
+        }
+
         var wasClosed =
             discussion.Status is (int)DiscussionStatus.Resolved
                 or (int)DiscussionStatus.Dismissed;
@@ -71,6 +94,7 @@ public partial class CreateDiscussionCommentQueryHandler
             BodyMarkdown = query.BodyMarkdown.Trim(),
             CreatedAt = utcNow,
             UpdatedAt = utcNow,
+            ParentCommentId = isReply ? parentComment!.Id : null,
         };
 
         if (query.Anchor is not null && !string.IsNullOrWhiteSpace(query.Anchor.FilePath))
@@ -106,7 +130,8 @@ public partial class CreateDiscussionCommentQueryHandler
                 .ConfigureAwait(false);
         }
         else if (
-            !discussion.HasEverBeenEngaged
+            !isReply
+            && !discussion.HasEverBeenEngaged
             && discussion.CreatorUserId != query.AuthorUserId.Value
             && discussion.Status == (int)DiscussionStatus.Open
         )
@@ -234,16 +259,15 @@ public class ListDiscussionCommentsQueryHandler
             return Option<IReadOnlyList<DiscussionCommentDto>>.None;
         }
 
-        var comments = await context
+        var allComments = await context
             .Set<DiscussionCommentEntity>()
             .Include(c => c.Anchor)
-            .Where(c => c.DiscussionId == discussion.Id && c.DeletedAt == null)
-            .OrderBy(c => c.CreatedAt)
+            .Where(c => c.DiscussionId == discussion.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return Option.From<IReadOnlyList<DiscussionCommentDto>>(
-            comments.Select(DiscussionProjection.ToCommentDto).ToList()
+            DiscussionProjection.BuildNestedCommentList(allComments)
         );
     }
 }

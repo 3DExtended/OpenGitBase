@@ -11,4 +11,5 @@ public class CreateDiscussionNotificationQuery : IQuery<Unit, CreateDiscussionNo
     public UserId ActorUserId { get; set; } = UserId.From(Guid.Empty);
     public string Message { get; set; } = string.Empty;
     public IReadOnlyList<UserId> AdditionalRecipientUserIds { get; set; } = [];
+    public bool RestrictToExplicitRecipients { get; set; }
 }

@@ -39,8 +39,13 @@ internal static class DiscussionProjection
         };
     }
 
-    public static DiscussionCommentDto ToCommentDto(DiscussionCommentEntity entity)
+    public static DiscussionCommentDto ToCommentDto(
+        DiscussionCommentEntity entity,
+        IReadOnlyList<DiscussionCommentDto>? replies = null,
+        bool orphanedFromDeletedRoot = false
+    )
     {
+        var replyList = replies ?? [];
         return new DiscussionCommentDto
         {
             Id = DiscussionCommentId.From(entity.Id),
@@ -55,6 +60,18 @@ internal static class DiscussionProjection
                 ? null
                 : UserId.From(entity.DeletedByUserId.Value),
             IsDeleted = entity.DeletedAt is not null,
+            ParentCommentId = entity.ParentCommentId is null
+                ? null
+                : DiscussionCommentId.From(entity.ParentCommentId.Value),
+            IsResolved = entity.ResolvedAt is not null,
+            ResolvedAt = entity.ResolvedAt,
+            ResolvedByUserId = entity.ResolvedByUserId is null
+                ? null
+                : UserId.From(entity.ResolvedByUserId.Value),
+            ReplyCount = replyList.Count,
+            LastReplyAt = replyList.Count > 0 ? replyList[^1].CreatedAt : null,
+            OrphanedFromDeletedRoot = orphanedFromDeletedRoot,
+            Replies = replyList,
             Anchor = entity.Anchor is null
                 ? null
                 : new CommentAnchorDto
@@ -66,6 +83,52 @@ internal static class DiscussionProjection
                     EndLine = entity.Anchor.EndLine,
                 },
         };
+    }
+
+    public static IReadOnlyList<DiscussionCommentDto> BuildNestedCommentList(
+        IReadOnlyList<DiscussionCommentEntity> allComments
+    )
+    {
+        var deletedRootIds = allComments
+            .Where(c => c.ParentCommentId is null && c.DeletedAt is not null)
+            .Select(c => c.Id)
+            .ToHashSet();
+
+        var visible = allComments.Where(c => c.DeletedAt is null).ToList();
+
+        var repliesByParent = visible
+            .Where(c => c.ParentCommentId is not null)
+            .GroupBy(c => c.ParentCommentId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<DiscussionCommentDto>)g
+                    .OrderBy(c => c.CreatedAt)
+                    .Select(c => ToCommentDto(c))
+                    .ToList()
+            );
+
+        var roots = visible
+            .Where(c => c.ParentCommentId is null)
+            .Select(c =>
+                ToCommentDto(
+                    c,
+                    repliesByParent.GetValueOrDefault(c.Id, []),
+                    orphanedFromDeletedRoot: false
+                )
+            )
+            .ToList();
+
+        var orphans = visible
+            .Where(c =>
+                c.ParentCommentId is not null && deletedRootIds.Contains(c.ParentCommentId.Value)
+            )
+            .Select(c => ToCommentDto(c, orphanedFromDeletedRoot: true))
+            .ToList();
+
+        return roots
+            .Concat(orphans)
+            .OrderBy(c => c.CreatedAt)
+            .ToList();
     }
 
     public static IQueryable<DiscussionEntity> WithIncludes(IQueryable<DiscussionEntity> query) =>

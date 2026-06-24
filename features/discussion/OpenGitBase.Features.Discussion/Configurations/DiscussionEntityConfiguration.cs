@@ -33,6 +33,11 @@ public class DiscussionCommentEntityConfiguration : IEntityTypeConfiguration<Dis
             .WithOne(a => a.Comment)
             .HasForeignKey<CommentAnchorEntity>(a => a.CommentId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(entity => entity.ParentComment)
+            .WithMany()
+            .HasForeignKey(entity => entity.ParentCommentId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(entity => new { entity.DiscussionId, entity.ParentCommentId, entity.CreatedAt });
     }
 }
 

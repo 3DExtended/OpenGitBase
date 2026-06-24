@@ -9,5 +9,6 @@ public class CreateDiscussionCommentQuery : IQuery<DiscussionCommentDto, CreateD
     public int DiscussionNumber { get; set; }
     public UserId AuthorUserId { get; set; } = UserId.From(Guid.Empty);
     public string BodyMarkdown { get; set; } = string.Empty;
+    public DiscussionCommentId? ParentCommentId { get; set; }
     public CommentAnchorInput? Anchor { get; set; }
 }

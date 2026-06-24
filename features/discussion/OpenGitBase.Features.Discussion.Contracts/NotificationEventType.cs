@@ -8,4 +8,5 @@ public enum NotificationEventType
     Resolved = 3,
     Dismissed = 4,
     Reopened = 5,
+    SubThreadResolved = 6,
 }

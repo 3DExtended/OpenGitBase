@@ -13,7 +13,11 @@ public class DiscussionCommentEntity : IIdentifiableEntity<Guid>
     public DateTimeOffset? EditedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? DeletedByUserId { get; set; }
+    public Guid? ParentCommentId { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public Guid? ResolvedByUserId { get; set; }
 
     public DiscussionEntity? Discussion { get; set; }
+    public DiscussionCommentEntity? ParentComment { get; set; }
     public CommentAnchorEntity? Anchor { get; set; }
 }

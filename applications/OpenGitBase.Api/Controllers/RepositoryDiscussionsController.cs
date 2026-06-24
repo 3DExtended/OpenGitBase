@@ -359,7 +359,74 @@ public sealed class RepositoryDiscussionsController : ControllerBase
                     DiscussionNumber = number,
                     AuthorUserId = access.UserId!,
                     BodyMarkdown = request.BodyMarkdown,
+                    ParentCommentId = request.ParentCommentId is null
+                        ? null
+                        : DiscussionCommentId.From(request.ParentCommentId.Value),
                     Anchor = request.Anchor is null ? null : ToAnchorInput(request.Anchor),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return result.IsNone ? BadRequest() : Ok(result.Get());
+    }
+
+    [HttpPost("comments/{commentId:guid}/resolve")]
+    public async Task<IActionResult> ResolveSubThread(
+        string owner,
+        string slug,
+        Guid commentId,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeParticipateAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != DiscussionParticipationResultKind.Allowed)
+        {
+            return ToParticipationResult(access);
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new ResolveSubThreadDiscussionCommentQuery
+                {
+                    CommentId = DiscussionCommentId.From(commentId),
+                    ActingUserId = access.UserId!,
+                    IsWriterPlus = access.Role >= RepositoryRole.Writer,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return result.IsNone ? BadRequest() : Ok(result.Get());
+    }
+
+    [HttpPost("comments/{commentId:guid}/unresolve")]
+    public async Task<IActionResult> UnresolveSubThread(
+        string owner,
+        string slug,
+        Guid commentId,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeParticipateAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != DiscussionParticipationResultKind.Allowed)
+        {
+            return ToParticipationResult(access);
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new UnresolveSubThreadDiscussionCommentQuery
+                {
+                    CommentId = DiscussionCommentId.From(commentId),
+                    ActingUserId = access.UserId!,
+                    IsWriterPlus = access.Role >= RepositoryRole.Writer,
                 },
                 cancellationToken
             )

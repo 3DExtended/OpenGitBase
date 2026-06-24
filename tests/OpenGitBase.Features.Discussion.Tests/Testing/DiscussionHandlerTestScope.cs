@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using OpenGitBase.Api;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.SendGrid.QueryHandlers;
 using OpenGitBase.Common.Services;
@@ -15,6 +16,7 @@ using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.Discussion;
 using OpenGitBase.Features.Discussion.QueryHandlers;
 using OpenGitBase.Features.Repository;
+using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.Users;
 
 namespace OpenGitBase.Features.Discussion.Tests.Testing;
@@ -36,11 +38,19 @@ public sealed class DiscussionHandlerTestScope : IAsyncDisposable
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection);
         services.AddLogging();
         services.AddSingleton<ISystemClock, SystemClock>();
+        services.AddSingleton(
+            new EncryptionOptions
+            {
+                DataKey = Convert.ToBase64String(new byte[32]),
+                Pepper = "discussion-test-pepper",
+            }
+        );
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
         services.AddSingleton<ISendGridEmailSender>(_ => Substitute.For<ISendGridEmailSender>());
 
         var mapsterConfig = new TypeAdapterConfig();
         new DiscussionMapsterConfig().Register(mapsterConfig);
+        new RepositoryMapsterConfig().Register(mapsterConfig);
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddCqrs(options =>

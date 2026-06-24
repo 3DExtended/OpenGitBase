@@ -21,6 +21,7 @@ public sealed class UpdateDiscussionRequest
 public sealed class CreateDiscussionCommentRequest
 {
     public string BodyMarkdown { get; set; } = string.Empty;
+    public Guid? ParentCommentId { get; set; }
     public CommentAnchorRequest? Anchor { get; set; }
 }
 

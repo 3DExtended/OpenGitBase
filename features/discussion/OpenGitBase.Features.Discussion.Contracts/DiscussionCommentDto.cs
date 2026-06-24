@@ -14,5 +14,13 @@ public class DiscussionCommentDto : ModelBase<DiscussionCommentId, Guid>
     public DateTimeOffset? DeletedAt { get; set; }
     public UserId? DeletedByUserId { get; set; }
     public bool IsDeleted { get; set; }
+    public DiscussionCommentId? ParentCommentId { get; set; }
+    public bool IsResolved { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public UserId? ResolvedByUserId { get; set; }
+    public int ReplyCount { get; set; }
+    public DateTimeOffset? LastReplyAt { get; set; }
+    public bool OrphanedFromDeletedRoot { get; set; }
+    public IReadOnlyList<DiscussionCommentDto> Replies { get; set; } = [];
     public CommentAnchorDto? Anchor { get; set; }
 }
