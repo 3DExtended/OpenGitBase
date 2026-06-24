@@ -4,10 +4,13 @@ const { t } = useI18n()
 const auth = useAuth()
 const route = useRoute()
 
+const { context } = useSidebarContext()
+
 const sidebarOpen = useState('sidebarOpen', () => true)
 const mobileDrawerOpen = useState('mobileDrawerOpen', () => false)
 
-const showDesktopSidebar = computed(() => auth.isAuthenticated)
+const showDesktopSidebar = computed(() => auth.isAuthenticated || context.value === 'repo')
+const guestMobileDrawer = computed(() => !auth.isAuthenticated && context.value !== 'repo')
 
 watch(() => route.path, () => {
   mobileDrawerOpen.value = false
@@ -64,7 +67,7 @@ function closeMobileDrawer() {
         >
           <AppSidebarPanel
             :expanded="true"
-            :guest-mobile="!auth.isAuthenticated"
+            :guest-mobile="guestMobileDrawer"
           />
         </aside>
       </div>

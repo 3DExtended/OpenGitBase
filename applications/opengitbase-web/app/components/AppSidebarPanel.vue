@@ -68,7 +68,7 @@ const repoNavItems = computed(() => {
   }
   const owner = ownerSlug.value
   const repo = repoSlug.value
-  return [
+  const items = [
     {
       label: t('sidebar.repo.code'),
       to: `/${owner}/${repo}`,
@@ -86,14 +86,20 @@ const repoNavItems = computed(() => {
       to: `/${owner}/${repo}/settings`,
       icon: 'i-lucide-settings',
       active: matchesSidebarRoute(route.path, `/${owner}/${repo}/settings`, true),
+      requiresAuth: true,
     },
     {
       label: t('repo.members.title'),
       to: `/${owner}/${repo}/members`,
       icon: 'i-lucide-users',
       active: matchesSidebarRoute(route.path, `/${owner}/${repo}/members`, true),
+      requiresAuth: true,
     },
   ]
+  if (auth.isAuthenticated) {
+    return items
+  }
+  return items.filter(item => !item.requiresAuth)
 })
 
 const ownerNavItems = computed(() => {
@@ -140,7 +146,7 @@ function navButtonClass(active: boolean): string {
   >
     <!-- Guest mobile drawer -->
     <nav
-      v-if="guestMobile"
+      v-if="guestMobile && context !== 'repo'"
       class="min-h-0 flex-1 space-y-1"
     >
       <UButton

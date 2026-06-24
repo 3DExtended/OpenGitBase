@@ -17,6 +17,24 @@ const RESERVED_TOP_LEVEL = new Set([
   '__visual__',
 ])
 
+type PathContext = 'owner' | 'repo'
+
+function resolveOwnerOrRepoContext(parts: string[]): PathContext | null {
+  if (parts.length < 1 || RESERVED_TOP_LEVEL.has(parts[0]!)) {
+    return null
+  }
+  if (parts.length === 1) {
+    return 'owner'
+  }
+  if (parts.length === 2 && parts[1] === 'members') {
+    return 'owner'
+  }
+  if (parts.length >= 2) {
+    return 'repo'
+  }
+  return null
+}
+
 export function useSidebarContext() {
   const route = useRoute()
   const auth = useAuth()
@@ -24,30 +42,30 @@ export function useSidebarContext() {
   const pathSegments = computed(() => route.path.split('/').filter(Boolean))
 
   const context = computed<SidebarContext>(() => {
-    if (!auth.isAuthenticated) {
-      return 'guest'
-    }
-
     const parts = pathSegments.value
-    if (parts[0] === 'settings') {
-      return 'settings'
-    }
-    if (parts[0] === 'admin') {
-      return 'admin'
-    }
-    if (parts.length >= 1 && !RESERVED_TOP_LEVEL.has(parts[0]!)) {
-      if (parts.length === 1) {
+
+    if (auth.isAuthenticated) {
+      if (parts[0] === 'settings') {
+        return 'settings'
+      }
+      if (parts[0] === 'admin') {
+        return 'admin'
+      }
+      const pathContext = resolveOwnerOrRepoContext(parts)
+      if (pathContext === 'owner') {
         return 'owner'
       }
-      if (parts.length === 2 && parts[1] === 'members') {
-        return 'owner'
-      }
-      if (parts.length >= 2) {
+      if (pathContext === 'repo') {
         return 'repo'
       }
+      return 'global'
     }
 
-    return 'global'
+    if (resolveOwnerOrRepoContext(parts) === 'repo') {
+      return 'repo'
+    }
+
+    return 'guest'
   })
 
   const ownerSlug = computed(() => {

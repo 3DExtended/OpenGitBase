@@ -10,7 +10,10 @@ defineEmits<{
 
 const { t } = useI18n()
 const auth = useAuth()
+const { context } = useSidebarContext()
 const colorMode = useColorMode()
+
+const showSidebarToggle = computed(() => auth.isAuthenticated || context.value === 'repo')
 
 const navLinks = [
   { labelKey: 'nav.home', to: '/' },
@@ -45,7 +48,7 @@ const userMenuItems = computed(() => {
         color="neutral"
         variant="ghost"
         class="inline-flex"
-        :class="{ 'md:hidden': !auth.isAuthenticated }"
+        :class="{ 'md:hidden': !showSidebarToggle }"
         :aria-label="t('nav.toggleSidebar')"
         @click="$emit('toggleSidebar')"
       />
