@@ -10,7 +10,7 @@ const props = defineProps<{
 
 const api = useApi()
 const { t } = useI18n()
-const expanded = ref(false)
+const expanded = ref(true)
 const snippet = ref<string | null>(null)
 const snippetStartLine = ref(1)
 const loading = ref(false)
@@ -57,7 +57,7 @@ watch(expanded, (isExpanded) => {
   if (isExpanded) {
     void loadSnippet()
   }
-})
+}, { immediate: true })
 </script>
 
 <template>
