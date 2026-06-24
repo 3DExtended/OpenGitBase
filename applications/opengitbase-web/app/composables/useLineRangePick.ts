@@ -3,45 +3,59 @@ export type LineRange = {
   endLine: number | null
 }
 
-export function useLineRangePick(onComplete?: (range: LineRange) => void) {
-  const pickStep = ref<'start' | 'end'>('start')
-  const startLine = ref<number | null>(null)
+export function useLineRangePick(
+  onComplete?: (range: LineRange) => void,
+  onClear?: () => void,
+) {
   const hoverLine = ref<number | null>(null)
   const confirmedRange = ref<LineRange | null>(null)
 
   function resetPick(): void {
-    pickStep.value = 'start'
-    startLine.value = null
     hoverLine.value = null
     confirmedRange.value = null
+  }
+
+  function clearSelection(): void {
+    resetPick()
+    onClear?.()
   }
 
   function onLineHover(lineNumber: number | null): void {
     hoverLine.value = lineNumber
   }
 
-  function onLineClick(lineNumber: number): void {
-    if (pickStep.value === 'start') {
-      startLine.value = lineNumber
-      hoverLine.value = lineNumber
-      pickStep.value = 'end'
-      return
-    }
-    if (startLine.value === null) {
-      return
-    }
-    const line = Math.min(startLine.value, lineNumber)
-    const end = Math.max(startLine.value, lineNumber)
-    const range: LineRange = {
-      line,
-      endLine: end === line ? null : end,
-    }
+  function applyRange(range: LineRange): void {
     confirmedRange.value = range
     onComplete?.(range)
   }
 
+  function onLineClick(lineNumber: number): void {
+    if (confirmedRange.value !== null) {
+      const lo = confirmedRange.value.line
+      const hi = confirmedRange.value.endLine ?? confirmedRange.value.line
+
+      if (lineNumber >= lo && lineNumber <= hi) {
+        clearSelection()
+        return
+      }
+
+      const line = Math.min(lo, lineNumber)
+      const end = Math.max(lo, lineNumber)
+      applyRange({
+        line,
+        endLine: end === line ? null : end,
+      })
+      return
+    }
+
+    applyRange({
+      line: lineNumber,
+      endLine: null,
+    })
+  }
+
   function lineClass(lineNumber: number): string {
-    const range = confirmedRange.value ?? previewRange()
+    const range = previewRange()
     if (!range) {
       return ''
     }
@@ -54,24 +68,34 @@ export function useLineRangePick(onComplete?: (range: LineRange) => void) {
   }
 
   function previewRange(): LineRange | null {
-    if (startLine.value === null) {
-      return null
+    if (confirmedRange.value !== null) {
+      const cur = confirmedRange.value
+      if (cur.endLine === null && hoverLine.value !== null && hoverLine.value !== cur.line) {
+        const line = Math.min(cur.line, hoverLine.value)
+        const end = Math.max(cur.line, hoverLine.value)
+        return {
+          line,
+          endLine: end === line ? null : end,
+        }
+      }
+      return cur
     }
-    const end = hoverLine.value ?? startLine.value
-    return {
-      line: Math.min(startLine.value, end),
-      endLine: Math.max(startLine.value, end) === Math.min(startLine.value, end)
-        ? null
-        : Math.max(startLine.value, end),
+
+    if (hoverLine.value !== null) {
+      return {
+        line: hoverLine.value,
+        endLine: null,
+      }
     }
+
+    return null
   }
 
   return {
-    pickStep,
-    startLine,
-    hoverLine,
     confirmedRange,
+    hoverLine,
     resetPick,
+    clearSelection,
     onLineHover,
     onLineClick,
     lineClass,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RepositoryContentBlob } from '~/utils/api'
+import type { RepositoryContentBlob, Discussion } from '~/utils/api'
 import type { CommentAnchorInput } from '~/utils/api'
 import { fileNameFromPath, formatEntrySize, isMarkdownPath } from '~/utils/repoBrowse'
 
@@ -7,10 +7,17 @@ const props = defineProps<{
   blob: RepositoryContentBlob
   rawUrl: string
   linePickEnabled?: boolean
+  linePickRevision?: number
+  owner?: string
+  repoSlug?: string
+  refName?: string
+  commitSha?: string
+  discussions?: Discussion[]
 }>()
 
 const emit = defineEmits<{
   lineAnchor: [anchor: CommentAnchorInput]
+  lineAnchorCleared: []
 }>()
 
 const { t } = useI18n()
@@ -18,7 +25,6 @@ const { t } = useI18n()
 const fileName = computed(() => fileNameFromPath(props.blob.path))
 const isMarkdown = computed(() => isMarkdownPath(props.blob.path))
 const markdownMode = ref<'rendered' | 'raw'>('rendered')
-const linePickActive = ref(false)
 
 const imageSrc = computed(() => {
   if (props.blob.previewKind !== 'image' || props.blob.isTooLarge) {
@@ -57,15 +63,8 @@ const showSvgMessage = computed(() =>
 
 const showBinary = computed(() => props.blob.isBinary)
 const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinary)
-const showLinePick = computed(() =>
-  linePickActive.value
-  && props.linePickEnabled
-  && showText.value
-  && props.blob.textContent,
-)
 
 function onRangeSelected(payload: { line: number, endLine: number | null }): void {
-  linePickActive.value = false
   emit('lineAnchor', {
     ref: props.blob.ref,
     commitSha: '',
@@ -74,10 +73,14 @@ function onRangeSelected(payload: { line: number, endLine: number | null }): voi
     endLine: payload.endLine,
   })
 }
+
+function onRangeCleared(): void {
+  emit('lineAnchorCleared')
+}
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 w-full min-w-0">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="font-mono text-lg font-semibold">
@@ -113,23 +116,6 @@ function onRangeSelected(payload: { line: number, endLine: number | null }): voi
             {{ t('repo.browse.raw') }}
           </button>
         </div>
-        <UButton
-          v-if="linePickEnabled && !linePickActive"
-          variant="outline"
-          size="sm"
-          icon="i-lucide-message-square-plus"
-          @click="linePickActive = true"
-        >
-          {{ t('repo.discussions.discussCode') }}
-        </UButton>
-        <UButton
-          v-else-if="linePickEnabled && linePickActive"
-          variant="ghost"
-          size="sm"
-          @click="linePickActive = false"
-        >
-          {{ t('common.cancel') }}
-        </UButton>
         <UButton
           :to="rawUrl"
           target="_blank"
@@ -179,17 +165,19 @@ function onRangeSelected(payload: { line: number, endLine: number | null }): voi
       :source="blob.textContent!"
     />
 
-    <RepoLineSelectableCode
-      v-else-if="showLinePick"
-      :source="blob.textContent!"
-      :path="blob.path"
-      @range-selected="onRangeSelected"
-    />
-
     <RepoHighlightedCode
       v-else-if="showText"
       :source="blob.textContent!"
       :path="blob.path"
+      :line-pick-enabled="linePickEnabled"
+      :line-pick-revision="linePickRevision"
+      :owner="owner"
+      :repo-slug="repoSlug"
+      :ref-name="refName"
+      :commit-sha="commitSha"
+      :discussions="discussions"
+      @range-selected="onRangeSelected"
+      @range-cleared="onRangeCleared"
     />
   </div>
 </template>

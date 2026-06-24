@@ -185,7 +185,12 @@ export function useDiscussionsListPage() {
     if (!notFound.value) {
       await Promise.all([loadDiscussions(), loadTags(), loadMembers()])
     }
-    const route = useRoute()
+    applyRouteAnchorDraft()
+  })
+
+  const route = useRoute()
+
+  function applyRouteAnchorDraft(): void {
     const draftAnchor = parseAnchorFromRouteQuery(route.query)
     if (draftAnchor) {
       setPendingAnchor(draftAnchor)
@@ -193,7 +198,14 @@ export function useDiscussionsListPage() {
     if (route.query.openCreate === '1') {
       openCreate()
     }
-  })
+  }
+
+  watch(
+    () => route.query,
+    () => {
+      applyRouteAnchorDraft()
+    },
+  )
 
   return Object.assign(ctx, {
     auth,

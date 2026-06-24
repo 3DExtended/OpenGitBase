@@ -27,13 +27,13 @@ const modalStep = ref<'browse' | 'pick'>('browse')
 const loading = ref(false)
 
 const {
-  pickStep: linePickStep,
   confirmedRange,
   onLineHover,
   onLineClick,
   lineClass,
   previewRange,
   resetPick,
+  clearSelection,
 } = useLineRangePick()
 
 const refOptions = computed(() => {
@@ -110,8 +110,17 @@ function confirmSelection(): void {
 }
 
 function onLineClickInModal(lineNumber: number): void {
+  const before = confirmedRange.value
   onLineClick(lineNumber)
-  if (confirmedRange.value) {
+  const after = confirmedRange.value
+  if (!after) {
+    return
+  }
+  if (!before) {
+    confirmSelection()
+    return
+  }
+  if (before.endLine === null && after.endLine !== null) {
     confirmSelection()
   }
 }
@@ -149,8 +158,7 @@ watch(refName, () => {
                 {{ t('repo.discussions.attachModalTitle') }}
               </h3>
               <p class="text-xs text-[var(--ogb-text-muted)]">
-                <span v-if="modalStep === 'pick' && linePickStep === 'start'">{{ t('repo.discussions.pickStartLine') }}</span>
-                <span v-else-if="modalStep === 'pick'">{{ t('repo.discussions.pickEndLine') }}</span>
+                <span v-if="modalStep === 'pick'">{{ t('repo.discussions.pickLineHint') }}</span>
                 <span v-else>{{ t('repo.discussions.browseFile') }}</span>
               </p>
             </div>
@@ -197,12 +205,22 @@ watch(refName, () => {
           </div>
 
           <template v-else>
-            <p
-              v-if="rangeLabel"
-              class="text-xs text-[var(--ogb-text-muted)]"
-            >
-              {{ t('repo.discussions.lineRangePreview', { range: rangeLabel }) }}
-            </p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p
+                v-if="rangeLabel"
+                class="text-xs text-[var(--ogb-text-muted)]"
+              >
+                {{ t('repo.discussions.lineRangePreview', { range: rangeLabel }) }}
+              </p>
+              <UButton
+                v-if="confirmedRange"
+                variant="ghost"
+                size="xs"
+                @click="clearSelection"
+              >
+                {{ t('repo.discussions.clearLineSelection') }}
+              </UButton>
+            </div>
             <div
               class="max-h-96 overflow-auto rounded border font-mono text-xs"
               style="border-color: var(--ogb-border);"

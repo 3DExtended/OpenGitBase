@@ -29,7 +29,7 @@ function plainCodeHtml(source: string): string {
   const body = source
     .split('\n')
     .map(line => `<span class="line"><span>${escapeHtml(line)}</span></span>`)
-    .join('\n')
+    .join('')
   return `<pre class="shiki"><code>${body}</code></pre>`
 }
 

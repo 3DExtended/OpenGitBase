@@ -27,8 +27,7 @@ const contentLoading = ref(false)
 const contentForbidden = ref(false)
 const contentUnavailable = ref(false)
 const blobNotFound = ref(false)
-const pendingLineAnchor = ref<CommentAnchorInput | null>(null)
-const showLineActions = ref(false)
+const linePickRevision = ref(0)
 
 const refName = computed(() => decodeRefParam(String(route.params.ref)))
 const currentPath = computed(() => parsePathParam(route.params.path))
@@ -68,29 +67,17 @@ async function loadDiscussions(): Promise<void> {
   discussions.value = result.data ?? []
 }
 
-function onLineAnchor(draft: CommentAnchorInput): void {
-  pendingLineAnchor.value = {
-    ...draft,
-    ref: refName.value,
-    commitSha: commitShaForRef(refName.value),
-  }
-  showLineActions.value = true
+function onLineAnchor(_draft: CommentAnchorInput): void {
+  // Selection UI lives in RepoHighlightedCode; anchor kept for future use.
 }
 
 function clearLineAnchor(): void {
-  pendingLineAnchor.value = null
-  showLineActions.value = false
+  linePickRevision.value += 1
 }
 
-const selectedRangeLabel = computed(() => {
-  const anchor = pendingLineAnchor.value
-  if (!anchor) {
-    return null
-  }
-  return anchor.endLine && anchor.endLine !== anchor.line
-    ? `${anchor.line}–${anchor.endLine}`
-    : `${anchor.line}`
-})
+function onLineAnchorCleared(): void {
+  // Child already reset local selection state.
+}
 
 const breadcrumbs = computed(() => {
   const items: Array<{ label: string, to?: string }> = [
@@ -187,7 +174,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-6">
+  <div class="w-full min-w-0 space-y-6">
     <div
       v-if="loading"
       class="text-sm text-[var(--ogb-text-muted)]"
@@ -239,7 +226,10 @@ onMounted(async () => {
         </p>
       </UCard>
 
-      <UCard v-else>
+      <UCard
+        v-else
+        :ui="{ body: 'overflow-visible p-4 sm:p-6' }"
+      >
         <div class="space-y-4">
           <nav
             aria-label="Breadcrumb"
@@ -267,32 +257,6 @@ onMounted(async () => {
           </nav>
 
           <div
-            v-if="pendingLineAnchor && !showLineActions"
-            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm"
-            style="border-color: var(--ogb-border); background: var(--ogb-bg);"
-          >
-            <p class="font-mono text-xs text-[var(--ogb-text-muted)]">
-              {{ pendingLineAnchor.filePath }}:{{ selectedRangeLabel }}
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <UButton
-                size="sm"
-                icon="i-lucide-message-square-plus"
-                @click="showLineActions = true"
-              >
-                {{ t('repo.discussions.discussSelectedCode') }}
-              </UButton>
-              <UButton
-                size="sm"
-                variant="ghost"
-                @click="clearLineAnchor"
-              >
-                {{ t('common.cancel') }}
-              </UButton>
-            </div>
-          </div>
-
-          <div
             v-if="contentLoading"
             class="text-sm text-[var(--ogb-text-muted)]"
           >
@@ -304,19 +268,17 @@ onMounted(async () => {
             :blob="blob"
             :raw-url="rawUrl"
             :line-pick-enabled="linePickEnabled"
+            :line-pick-revision="linePickRevision"
+            :owner="owner"
+            :repo-slug="repoSlug"
+            :ref-name="refName"
+            :commit-sha="commitShaForRef(refName)"
+            :discussions="discussions"
             @line-anchor="onLineAnchor"
+            @line-anchor-cleared="onLineAnchorCleared"
           />
         </div>
       </UCard>
-
-      <DiscussionBlobLineActions
-        v-if="pendingLineAnchor"
-        v-model:open="showLineActions"
-        :anchor="pendingLineAnchor"
-        :owner="owner"
-        :repo-slug="repoSlug"
-        :discussions="discussions"
-      />
     </template>
   </div>
 </template>
