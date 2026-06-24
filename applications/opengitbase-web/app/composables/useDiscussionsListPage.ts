@@ -7,7 +7,7 @@ import type {
 } from '~/utils/api'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
 
-/** Shared list-page state for production + prototype discussion UIs. */
+/** Shared state for the discussions list page. */
 export function useDiscussionsListPage() {
   const auth = useAuth()
   const { t } = useI18n()

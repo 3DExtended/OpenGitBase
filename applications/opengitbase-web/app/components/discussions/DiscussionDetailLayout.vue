@@ -1,19 +1,16 @@
 <script setup lang="ts">
-/** PROTOTYPE — shared detail layout (grill v2): right meta sidebar + bottom composer. */
 import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
-import CommentAnchorPreview from '~/components/discussions/CommentAnchorPreview.vue'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
 import DiscussionRichEditor from '~/components/discussions/DiscussionRichEditor.vue'
 
-const ctx = inject<DiscussionDetailPageContext>('discussionDetailCtx')
-if (!ctx) {
-  throw new Error('discussionDetailCtx is required')
-}
+defineProps<{
+  ctx: DiscussionDetailPageContext
+}>()
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl">
+  <div class="mx-auto max-w-6xl pb-8">
     <UButton
       :to="`/${ctx.owner}/${ctx.repoSlug}/discussions`"
       variant="ghost"
@@ -92,6 +89,7 @@ if (!ctx) {
                 :owner="ctx.owner"
                 :repo-slug="ctx.repoSlug"
                 :member-label="ctx.memberLabel"
+                :members="ctx.members"
                 :can-resolve="ctx.canResolveSubThread(comment)"
                 :can-reply="ctx.auth.isAuthenticated"
                 @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
@@ -149,7 +147,7 @@ if (!ctx) {
                 :loading="ctx.posting"
                 :disabled="!ctx.commentBody.trim()"
               >
-                {{ ctx.t('repo.discussions.postComment') }}
+                {{ ctx.auth.isAuthenticated ? ctx.t('repo.discussions.postComment') : ctx.t('nav.signIn') }}
               </UButton>
             </div>
             <UAlert
@@ -167,11 +165,17 @@ if (!ctx) {
         style="border-color: var(--ogb-border);"
       >
         <div>
-          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">Discussion</p>
-          <p class="mt-1 font-mono">#{{ ctx.discussion.number }}</p>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            Discussion
+          </p>
+          <p class="mt-1 font-mono">
+            #{{ ctx.discussion.number }}
+          </p>
         </div>
         <div>
-          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">Status</p>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            Status
+          </p>
           <UBadge
             :color="ctx.statusColor(ctx.discussion.status)"
             variant="subtle"
@@ -181,16 +185,28 @@ if (!ctx) {
           </UBadge>
         </div>
         <div v-if="ctx.discussion.assigneeUserId">
-          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">{{ ctx.t('repo.discussions.assignee') }}</p>
-          <p class="mt-1">{{ ctx.memberLabel(ctx.discussion.assigneeUserId) }}</p>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.assignee') }}
+          </p>
+          <p class="mt-1">
+            {{ ctx.memberLabel(ctx.discussion.assigneeUserId) }}
+          </p>
         </div>
         <div>
-          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">{{ ctx.t('repo.discussions.opened') }}</p>
-          <p class="mt-1 text-xs">{{ new Date(ctx.discussion.createdAt).toLocaleString() }}</p>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.opened') }}
+          </p>
+          <p class="mt-1 text-xs">
+            {{ new Date(ctx.discussion.createdAt).toLocaleString() }}
+          </p>
         </div>
         <div>
-          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">{{ ctx.t('repo.discussions.updated') }}</p>
-          <p class="mt-1 text-xs">{{ new Date(ctx.discussion.updatedAt).toLocaleString() }}</p>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.updated') }}
+          </p>
+          <p class="mt-1 text-xs">
+            {{ new Date(ctx.discussion.updatedAt).toLocaleString() }}
+          </p>
         </div>
         <div
           v-if="ctx.isWriterPlus && !ctx.isClosed"

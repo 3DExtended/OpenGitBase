@@ -7,7 +7,7 @@ import type {
 } from '~/utils/api'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
 
-/** Shared detail-page state for production + prototype discussion UIs. */
+/** Shared state for the discussion detail page. */
 export function useDiscussionDetailPage() {
   const route = useRoute()
   const auth = useAuth()

@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import type { CommentAnchorInput, DiscussionComment } from '~/utils/api'
+import type { CommentAnchorInput, DiscussionComment, RepositoryMember } from '~/utils/api'
 import CommentAnchorPreview from '~/components/discussions/CommentAnchorPreview.vue'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
+import DiscussionRichEditor from '~/components/discussions/DiscussionRichEditor.vue'
 
-const props = defineProps<{
-  comment: DiscussionComment
-  owner: string
-  repoSlug: string
-  memberLabel: (userId: string) => string
-  canResolve: boolean
-  canReply: boolean
-  defaultRef?: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    comment: DiscussionComment
+    owner: string
+    repoSlug: string
+    memberLabel: (userId: string) => string
+    members?: RepositoryMember[]
+    canResolve: boolean
+    canReply: boolean
+    defaultRef?: string | null
+  }>(),
+  {
+    members: () => [],
+  },
+)
 
 const emit = defineEmits<{
   reply: [body: string, anchor: CommentAnchorInput | null]
@@ -173,10 +180,11 @@ async function submitReply(): Promise<void> {
           class="space-y-2"
           @submit.prevent="submitReply"
         >
-          <UTextarea
+          <DiscussionRichEditor
             v-model="replyBody"
-            :rows="3"
+            :members="members"
             :placeholder="t('repo.discussions.replyPlaceholder')"
+            min-height="4rem"
           />
           <div
             v-if="replyAnchor"

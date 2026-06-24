@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/** Variant A — cards layout (selected winner). */
 import type { DiscussionsListPageContext } from '~/composables/useDiscussionsListPage'
 import DiscussionListFilters from '~/components/discussions/DiscussionListFilters.vue'
 import DiscussionListHeader from '~/components/discussions/DiscussionListHeader.vue'
@@ -18,14 +17,30 @@ function relativeTime(iso: string): string {
   <div class="mx-auto max-w-2xl space-y-6 pb-24">
     <DiscussionListHeader :ctx="ctx" />
 
-    <div v-if="ctx.loading" class="text-sm text-[var(--ogb-text-muted)]">{{ ctx.t('common.loading') }}</div>
-    <p v-else-if="ctx.notFound || ctx.forbidden" class="text-sm text-[var(--ogb-text-muted)]">
+    <div
+      v-if="ctx.loading"
+      class="text-sm text-[var(--ogb-text-muted)]"
+    >
+      {{ ctx.t('common.loading') }}
+    </div>
+    <p
+      v-else-if="ctx.notFound || ctx.forbidden"
+      class="text-sm text-[var(--ogb-text-muted)]"
+    >
       {{ ctx.forbidden ? ctx.t('repo.browse.forbidden') : ctx.t('repo.notFound') }}
     </p>
     <template v-else>
       <DiscussionListFilters :ctx="ctx" />
-      <div v-if="ctx.listLoading" class="text-sm text-[var(--ogb-text-muted)]">{{ ctx.t('common.loading') }}</div>
-      <div v-else class="space-y-3">
+      <div
+        v-if="ctx.listLoading"
+        class="text-sm text-[var(--ogb-text-muted)]"
+      >
+        {{ ctx.t('common.loading') }}
+      </div>
+      <div
+        v-else
+        class="space-y-3"
+      >
         <NuxtLink
           v-for="d in ctx.discussions"
           :key="d.id"
@@ -44,14 +59,21 @@ function relativeTime(iso: string): string {
           />
           <div class="min-w-0 flex-1 space-y-1.5">
             <div class="flex items-baseline justify-between gap-2">
-              <p class="truncate font-medium">#{{ d.number }} · {{ d.title }}</p>
+              <p class="truncate font-medium">
+                #{{ d.number }} · {{ d.title }}
+              </p>
               <span class="shrink-0 text-xs text-[var(--ogb-text-muted)]">{{ relativeTime(d.updatedAt) }}</span>
             </div>
-            <p class="text-xs text-[var(--ogb-text-muted)]">{{ ctx.statusLabel(d.status) }}</p>
+            <p class="text-xs text-[var(--ogb-text-muted)]">
+              {{ ctx.statusLabel(d.status) }}
+            </p>
           </div>
         </NuxtLink>
-        <p v-if="!ctx.discussions.length" class="py-8 text-center text-sm text-[var(--ogb-text-muted)]">
-          {{ ctx.t('repo.discussions.empty') }}
+        <p
+          v-if="!ctx.discussions.length"
+          class="py-8 text-center text-sm text-[var(--ogb-text-muted)]"
+        >
+          {{ ctx.signInRequired ? ctx.t('repo.discussions.signInToView') : ctx.t('repo.discussions.empty') }}
         </p>
       </div>
     </template>
