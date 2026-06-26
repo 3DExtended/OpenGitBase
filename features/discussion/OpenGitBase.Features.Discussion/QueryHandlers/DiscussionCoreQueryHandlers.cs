@@ -197,8 +197,25 @@ public class GetDiscussionByNumberQueryHandler
             .FindByNumberAsync(context, query.RepositoryId, query.Number, cancellationToken)
             .ConfigureAwait(false);
 
-        return entity is null
-            ? Option<DiscussionDto>.None
-            : Option.From(DiscussionProjection.ToDto(entity));
+        if (entity is null)
+        {
+            return Option<DiscussionDto>.None;
+        }
+
+        var dto = DiscussionProjection.ToDto(entity);
+
+        if (query.IncludeComments)
+        {
+            var allComments = await context
+                .Set<DiscussionCommentEntity>()
+                .Include(c => c.Anchor)
+                .Where(c => c.DiscussionId == entity.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            dto.Comments = DiscussionProjection.BuildNestedCommentList(allComments);
+        }
+
+        return Option.From(dto);
     }
 }

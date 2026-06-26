@@ -6,4 +6,5 @@ public class GetDiscussionByNumberQuery : IQuery<DiscussionDto, GetDiscussionByN
 {
     public Guid RepositoryId { get; set; }
     public int Number { get; set; }
+    public bool IncludeComments { get; set; }
 }

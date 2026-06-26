@@ -282,6 +282,7 @@ export interface Discussion {
   createdAt: string
   updatedAt: string
   tags: RepositoryTag[]
+  comments?: DiscussionComment[]
 }
 
 export interface AnchorResolution {
@@ -568,6 +569,9 @@ function normalizeDiscussion(raw: Record<string, unknown>): Discussion {
   const tags = Array.isArray(raw.tags)
     ? (raw.tags as Record<string, unknown>[]).map(normalizeRepositoryTag)
     : []
+  const comments = Array.isArray(raw.comments)
+    ? (raw.comments as Record<string, unknown>[]).map(normalizeDiscussionComment)
+    : undefined
   return {
     id: normalizeId(raw.id),
     repositoryId: normalizeId(raw.repositoryId),
@@ -581,6 +585,7 @@ function normalizeDiscussion(raw: Record<string, unknown>): Discussion {
     createdAt: String(raw.createdAt ?? ''),
     updatedAt: String(raw.updatedAt ?? ''),
     tags,
+    comments,
   }
 }
 
@@ -1186,9 +1191,10 @@ export function createApi(baseUrl: string) {
         }
       },
 
-      get: async (owner: string, slug: string, number: number) => {
+      get: async (owner: string, slug: string, number: number, options?: { includeComments?: boolean }) => {
+        const query = options?.includeComments ? '?include=comments' : ''
         const result = await request<Record<string, unknown>>(
-          `${discussionSlugPath(owner, slug)}/discussions/${number}`,
+          `${discussionSlugPath(owner, slug)}/discussions/${number}${query}`,
         )
         return {
           ...result,
@@ -1432,3 +1438,6 @@ export function createApi(baseUrl: string) {
 }
 
 export type ApiClient = ReturnType<typeof createApi>
+
+/** Exported for unit tests. */
+export { normalizeDiscussion, normalizeDiscussionComment }

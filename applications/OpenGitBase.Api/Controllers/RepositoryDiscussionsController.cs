@@ -66,6 +66,7 @@ public sealed class RepositoryDiscussionsController : ControllerBase
         string owner,
         string slug,
         int number,
+        [FromQuery] string? include,
         CancellationToken cancellationToken
     )
     {
@@ -78,12 +79,17 @@ public sealed class RepositoryDiscussionsController : ControllerBase
             return ToReadResult(access);
         }
 
+        var includeComments = string.Equals(include, "comments", StringComparison.OrdinalIgnoreCase)
+            || (include?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Contains("comments", StringComparer.OrdinalIgnoreCase) ?? false);
+
         var result = await _queryProcessor
             .RunQueryAsync(
                 new GetDiscussionByNumberQuery
                 {
                     RepositoryId = access.Repository.Id.Value,
                     Number = number,
+                    IncludeComments = includeComments,
                 },
                 cancellationToken
             )
@@ -143,7 +149,7 @@ public sealed class RepositoryDiscussionsController : ControllerBase
 
         var discussion = result.Get();
 
-        if (request.Anchor is not null && !string.IsNullOrWhiteSpace(request.Body))
+        if (!string.IsNullOrWhiteSpace(request.Body))
         {
             await _queryProcessor
                 .RunQueryAsync(
@@ -153,7 +159,7 @@ public sealed class RepositoryDiscussionsController : ControllerBase
                         DiscussionNumber = discussion.Number,
                         AuthorUserId = access.UserId!,
                         BodyMarkdown = request.Body,
-                        Anchor = ToAnchorInput(request.Anchor),
+                        Anchor = request.Anchor is null ? null : ToAnchorInput(request.Anchor),
                     },
                     cancellationToken
                 )

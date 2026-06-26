@@ -16,4 +16,5 @@ public class DiscussionDto : ModelBase<DiscussionId, Guid>
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public IReadOnlyList<RepositoryTagDto> Tags { get; set; } = [];
+    public IReadOnlyList<DiscussionCommentDto>? Comments { get; set; }
 }

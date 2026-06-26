@@ -331,6 +331,8 @@
       "updated": "Updated",
       "commentsTitle": "Comments",
       "noComments": "No comments yet.",
+      "commentsLoadError": "Couldn't load comments.",
+      "commentsRetry": "Retry",
       "commentDeleted": "This comment was deleted.",
       "edited": "edited",
       "anchorOutdated": "outdated",

@@ -3,6 +3,7 @@ import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
 import DiscussionRichEditor from '~/components/discussions/DiscussionRichEditor.vue'
+import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
 
 defineProps<{
   ctx: DiscussionDetailPageContext
@@ -72,31 +73,57 @@ defineProps<{
               {{ ctx.t('repo.discussions.commentsTitle') }}
             </h2>
 
+            <div
+              v-if="ctx.commentsLoading"
+              class="text-sm text-[var(--ogb-text-muted)]"
+            >
+              {{ ctx.t('common.loading') }}
+            </div>
+
+            <UAlert
+              v-else-if="ctx.commentsError"
+              color="error"
+              variant="subtle"
+              :description="ctx.commentsError"
+            >
+              <template #actions>
+                <UButton
+                  size="xs"
+                  variant="soft"
+                  @click="ctx.retryLoadComments"
+                >
+                  {{ ctx.t('repo.discussions.commentsRetry') }}
+                </UButton>
+              </template>
+            </UAlert>
+
             <p
-              v-if="!ctx.comments.length"
+              v-else-if="!ctx.comments.length"
               class="text-sm text-[var(--ogb-text-muted)]"
             >
               {{ ctx.t('repo.discussions.noComments') }}
             </p>
 
-            <div
-              v-for="comment in ctx.comments"
-              :key="comment.id"
-              class="space-y-2"
-            >
-              <DiscussionSubThread
-                :comment="comment"
-                :owner="ctx.owner"
-                :repo-slug="ctx.repoSlug"
-                :member-label="ctx.memberLabel"
-                :members="ctx.members"
-                :can-resolve="ctx.canResolveSubThread(comment)"
-                :can-reply="ctx.auth.isAuthenticated"
-                @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
-                @resolve="ctx.resolveSubThread(comment.id)"
-                @unresolve="ctx.unresolveSubThread(comment.id)"
-              />
-            </div>
+            <template v-else>
+              <div
+                v-for="comment in ctx.comments"
+                :key="comment.id"
+                class="space-y-2"
+              >
+                <DiscussionSubThread
+                  :comment="comment"
+                  :owner="ctx.owner"
+                  :repo-slug="ctx.repoSlug"
+                  :member-label="ctx.memberLabel"
+                  :members="ctx.members"
+                  :can-resolve="ctx.canResolveSubThread(comment)"
+                  :can-reply="ctx.auth.isAuthenticated"
+                  @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
+                  @resolve="ctx.resolveSubThread(comment.id)"
+                  @unresolve="ctx.unresolveSubThread(comment.id)"
+                />
+              </div>
+            </template>
           </section>
         </div>
 

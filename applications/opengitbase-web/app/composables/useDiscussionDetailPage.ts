@@ -5,6 +5,7 @@ import type {
   DiscussionStatus,
   RepositoryMember,
 } from '~/utils/api'
+import { resolveCommentsFallbackLoad, resolveDiscussionDetailLoad } from '~/utils/discussionDetailLoad'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
 
 /** Shared state for the discussion detail page. */
@@ -26,6 +27,8 @@ export function useDiscussionDetailPage() {
     isClosed: false,
     discussion: null as Discussion | null,
     comments: [] as DiscussionComment[],
+    commentsLoading: false,
+    commentsError: null as string | null,
     members: [] as RepositoryMember[],
     pageLoading: false,
     forbidden: false,
@@ -94,31 +97,64 @@ export function useDiscussionDetailPage() {
     return memberLabel(userId).slice(0, 1).toUpperCase()
   }
 
+  async function loadCommentsFallback(): Promise<void> {
+    ctx.commentsLoading = true
+    ctx.commentsError = null
+
+    const result = await resolveCommentsFallbackLoad({
+      listComments: () => api.discussions.listComments(
+        owner.value,
+        repoSlug.value,
+        discussionNumber.value,
+      ),
+      commentsLoadErrorMessage: t('repo.discussions.commentsLoadError'),
+    })
+    ctx.comments = result.comments
+    ctx.commentsError = result.commentsError
+  }
+
   async function loadDiscussion(): Promise<void> {
     ctx.pageLoading = true
     ctx.forbidden = false
+    ctx.commentsError = null
 
-    const result = await api.discussions.get(owner.value, repoSlug.value, discussionNumber.value)
-    if (result.status === 403) {
-      ctx.forbidden = true
-      ctx.pageLoading = false
-      return
-    }
-    if (result.status === 404) {
-      ctx.discussion = null
-      ctx.pageLoading = false
-      return
-    }
-    ctx.discussion = result.data
+    try {
+      const result = await resolveDiscussionDetailLoad({
+        getResult: await api.discussions.get(
+          owner.value,
+          repoSlug.value,
+          discussionNumber.value,
+          { includeComments: true },
+        ),
+        listComments: () => api.discussions.listComments(
+          owner.value,
+          repoSlug.value,
+          discussionNumber.value,
+        ),
+        commentsLoadErrorMessage: t('repo.discussions.commentsLoadError'),
+      })
 
-    const commentsResult = await api.discussions.listComments(
-      owner.value,
-      repoSlug.value,
-      discussionNumber.value,
-    )
-    ctx.comments = commentsResult.data ?? []
-    ctx.pageLoading = false
-    scrollToCommentFromHash()
+      ctx.forbidden = result.forbidden
+      ctx.discussion = result.discussion
+      ctx.comments = result.comments
+      ctx.commentsError = result.commentsError
+    }
+    finally {
+      ctx.pageLoading = false
+      ctx.commentsLoading = false
+      scrollToCommentFromHash()
+    }
+  }
+
+  async function retryLoadComments(): Promise<void> {
+    ctx.commentsLoading = true
+    ctx.commentsError = null
+    try {
+      await loadCommentsFallback()
+    }
+    finally {
+      ctx.commentsLoading = false
+    }
   }
 
   function scrollToCommentFromHash(): void {
@@ -272,6 +308,7 @@ export function useDiscussionDetailPage() {
     unresolveSubThread,
     resolveDiscussion,
     dismissDiscussion,
+    retryLoadComments,
   })
 }
 

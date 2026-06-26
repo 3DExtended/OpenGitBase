@@ -57,6 +57,60 @@ const mockOrgInvites = [
   },
 ]
 
+const mockMembers = [
+  {
+    id: '88888888-8888-8888-8888-888888888888',
+    repositoryId: '11111111-1111-1111-1111-111111111111',
+    userId: '22222222-2222-2222-2222-222222222222',
+    username: 'demo-user',
+    role: 2,
+  },
+]
+
+const mockDiscussionDetail = {
+  id: 'disc-0001-0000-0000-000000000001',
+  repositoryId: '11111111-1111-1111-1111-111111111111',
+  number: 1,
+  title: 'Architecture review',
+  body: null,
+  status: 'Open',
+  hasEverBeenEngaged: true,
+  creatorUserId: '22222222-2222-2222-2222-222222222222',
+  assigneeUserId: null,
+  createdAt: '2026-06-24T10:00:00.000Z',
+  updatedAt: '2026-06-24T11:00:00.000Z',
+  tags: [],
+  comments: [
+    {
+      id: 'comment-root-1',
+      discussionId: 'disc-0001-0000-0000-000000000001',
+      authorUserId: '22222222-2222-2222-2222-222222222222',
+      bodyMarkdown: 'Consider extracting this helper.',
+      createdAt: '2026-06-24T10:00:00.000Z',
+      updatedAt: '2026-06-24T10:00:00.000Z',
+      isDeleted: false,
+      isResolved: false,
+      replyCount: 1,
+      orphanedFromDeletedRoot: false,
+      replies: [
+        {
+          id: 'comment-reply-1',
+          discussionId: 'disc-0001-0000-0000-000000000001',
+          authorUserId: '33333333-3333-3333-3333-333333333333',
+          bodyMarkdown: 'Agreed — I pushed a follow-up snippet.',
+          createdAt: '2026-06-24T10:05:00.000Z',
+          updatedAt: '2026-06-24T10:05:00.000Z',
+          isDeleted: false,
+          isResolved: false,
+          replyCount: 0,
+          orphanedFromDeletedRoot: false,
+          replies: [],
+        },
+      ],
+    },
+  ],
+}
+
 export const handlers = [
   http.get('/api/account/me', () => {
     return HttpResponse.json(mockUser)
@@ -143,6 +197,43 @@ export const handlers = [
       return new HttpResponse(null, { status: 404 })
     }
     return HttpResponse.json(repo)
+  }),
+
+  http.get('/api/repository/by-slug/:owner/:slug/discussions/:number', ({ request }) => {
+    const url = new URL(request.url)
+    if (!url.pathname.endsWith('/discussions/1')) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    const includeComments = url.searchParams.get('include') === 'comments'
+    if (!includeComments) {
+      const { comments: _comments, ...discussionWithoutComments } = mockDiscussionDetail
+      return HttpResponse.json(discussionWithoutComments)
+    }
+    return HttpResponse.json(mockDiscussionDetail)
+  }),
+
+  http.get('/api/repository/by-slug/:owner/:slug/discussions/:number/comments', ({ request }) => {
+    const url = new URL(request.url)
+    if (!url.pathname.endsWith('/discussions/1/comments')) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    return HttpResponse.json(mockDiscussionDetail.comments)
+  }),
+
+  http.get('/api/repository/by-slug/:owner/:slug/content/refs', () => {
+    return HttpResponse.json({
+      branches: [{ name: 'main', commitSha: 'abc123' }],
+      tags: [],
+      defaultRef: 'main',
+      isEmpty: false,
+    })
+  }),
+
+  http.get('/api/repository-member/:repositoryId', ({ params }) => {
+    if (params.repositoryId === '11111111-1111-1111-1111-111111111111') {
+      return HttpResponse.json(mockMembers)
+    }
+    return HttpResponse.json([])
   }),
 
   http.get('/api/repository/:id/usage', () => {
