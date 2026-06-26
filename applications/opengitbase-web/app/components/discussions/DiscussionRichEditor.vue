@@ -53,6 +53,23 @@ function markdownFromEditor(ed: RichEditor): string {
   return storage.markdown?.getMarkdown?.() ?? ed.getText()
 }
 
+/** Matches RepoMarkdown rendered output; Tailwind preflight resets heading styles. */
+const editorTypographyClass = [
+  'discussion-rich-editor__content max-w-none focus:outline-none',
+  'text-sm leading-relaxed',
+  '[&_a]:text-[var(--ogb-accent)] [&_a]:underline',
+  '[&_code]:rounded [&_code]:bg-[var(--ogb-bg)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono',
+  '[&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1',
+  '[&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1',
+  '[&_ol]:list-decimal [&_ol]:pl-5',
+  '[&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-[var(--ogb-bg)] [&_pre]:p-3',
+  '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
+  '[&_ul]:list-disc [&_ul]:pl-5',
+  '[&_strong]:font-semibold',
+  '[&_s]:line-through',
+  '[&_u]:underline',
+].join(' ')
+
 const editor = useEditor({
   extensions: [
     StarterKit.configure({
@@ -78,7 +95,7 @@ const editor = useEditor({
   immediatelyRender: false,
   editorProps: {
     attributes: {
-      class: 'discussion-rich-editor__content max-w-none focus:outline-none',
+      class: editorTypographyClass,
     },
   },
   onUpdate: ({ editor: ed }) => {
@@ -305,5 +322,45 @@ onBeforeUnmount(() => {
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+.discussion-rich-editor :deep(.ProseMirror blockquote) {
+  border-left: 4px solid var(--ogb-border);
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  color: var(--ogb-text-muted);
+  font-style: italic;
+}
+
+.discussion-rich-editor :deep(.ProseMirror table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.discussion-rich-editor :deep(.ProseMirror th),
+.discussion-rich-editor :deep(.ProseMirror td) {
+  border: 1px solid var(--ogb-border);
+  padding: 0.25rem 0.5rem;
+}
+
+.discussion-rich-editor :deep(.ProseMirror th) {
+  background: var(--ogb-bg);
+  font-weight: 600;
+}
+
+.discussion-rich-editor :deep(.ProseMirror ul[data-type='taskList']) {
+  list-style: none;
+  padding-left: 0;
+}
+
+.discussion-rich-editor :deep(.ProseMirror ul[data-type='taskList'] li) {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.discussion-rich-editor :deep(.ProseMirror ul[data-type='taskList'] li > label) {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
 }
 </style>
