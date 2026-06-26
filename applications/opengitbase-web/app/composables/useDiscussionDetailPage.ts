@@ -7,6 +7,7 @@ import type {
 } from '~/utils/api'
 import { resolveCommentsFallbackLoad, resolveDiscussionDetailLoad } from '~/utils/discussionDetailLoad'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
+import { scrollToCommentFromHash } from '~/utils/discussionCommentHash'
 
 /** Shared state for the discussion detail page. */
 export function useDiscussionDetailPage() {
@@ -17,6 +18,9 @@ export function useDiscussionDetailPage() {
   const { owner, repoSlug, repo, loading, notFound, loadRepo } = useRepoMetadata()
 
   const discussionNumber = computed(() => Number(route.params.number))
+  const discussionRouteKey = computed(
+    () => `${owner.value}/${repoSlug.value}/${discussionNumber.value}`,
+  )
 
   const ctx = reactive({
     owner: '',
@@ -145,8 +149,17 @@ export function useDiscussionDetailPage() {
     finally {
       ctx.pageLoading = false
       ctx.commentsLoading = false
-      scrollToCommentFromHash()
+      queueCommentHashScroll()
     }
+  }
+
+  function queueCommentHashScroll(): void {
+    if (!import.meta.client) {
+      return
+    }
+    nextTick(() => {
+      scrollToCommentFromHash(route.hash)
+    })
   }
 
   async function retryLoadComments(): Promise<void> {
@@ -160,20 +173,37 @@ export function useDiscussionDetailPage() {
     }
   }
 
-  function scrollToCommentFromHash(): void {
-    if (!import.meta.client) {
-      return
+  async function initializePage(): Promise<void> {
+    await loadRepo()
+    if (!notFound.value) {
+      await Promise.all([loadDiscussion(), loadMembers()])
     }
-    const hash = route.hash
-    if (!hash.startsWith('#comment-')) {
-      return
+    const draftAnchor = parseAnchorFromRouteQuery(route.query)
+    if (draftAnchor) {
+      ctx.commentAnchor = draftAnchor
     }
-    nextTick(() => {
-      nextTick(() => {
-        document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      })
-    })
   }
+
+  onMounted(() => {
+    void initializePage()
+  })
+
+  watch(discussionRouteKey, (next, prev) => {
+    if (!prev || next === prev) {
+      return
+    }
+    void initializePage()
+  })
+
+  watch(() => route.hash, async (hash, oldHash) => {
+    if (oldHash === undefined) {
+      return
+    }
+    if (!hash.startsWith('#comment-') || hash === oldHash || ctx.pageLoading) {
+      return
+    }
+    await loadDiscussion()
+  })
 
   async function loadMembers(): Promise<void> {
     if (!repo.value?.id) {
@@ -279,23 +309,6 @@ export function useDiscussionDetailPage() {
       ctx.dismissing = false
     }
   }
-
-  onMounted(async () => {
-    await loadRepo()
-    if (!notFound.value) {
-      await Promise.all([loadDiscussion(), loadMembers()])
-    }
-    const draftAnchor = parseAnchorFromRouteQuery(route.query)
-    if (draftAnchor) {
-      ctx.commentAnchor = draftAnchor
-    }
-  })
-
-  watch(() => route.hash, () => {
-    if (!ctx.pageLoading) {
-      scrollToCommentFromHash()
-    }
-  })
 
   return Object.assign(ctx, {
     auth,

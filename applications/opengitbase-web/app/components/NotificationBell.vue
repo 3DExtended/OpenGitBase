@@ -38,9 +38,10 @@ async function openNotification(notification: Notification): Promise<void> {
     notification.discussionNumber,
     notification.commentId ? { commentId: notification.commentId } : undefined,
   )
-  if (target) {
-    await navigateTo(target)
+  if (!target) {
+    return
   }
+  await navigateTo(target)
 }
 
 watch(open, (isOpen) => {
