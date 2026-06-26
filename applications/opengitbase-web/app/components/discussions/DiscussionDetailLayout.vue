@@ -101,6 +101,7 @@ defineProps<{
         </div>
 
         <div
+          v-if="ctx.auth.isAuthenticated"
           class="sticky bottom-16 z-10 mt-6 border-t bg-[var(--ogb-bg)]/95 pb-3 backdrop-blur"
           style="border-color: var(--ogb-border);"
         >
@@ -147,7 +148,7 @@ defineProps<{
                 :loading="ctx.posting"
                 :disabled="!ctx.commentBody.trim()"
               >
-                {{ ctx.auth.isAuthenticated ? ctx.t('repo.discussions.postComment') : ctx.t('nav.signIn') }}
+                {{ ctx.t('repo.discussions.postComment') }}
               </UButton>
             </div>
             <UAlert
@@ -157,6 +158,22 @@ defineProps<{
               :description="ctx.postError"
             />
           </form>
+        </div>
+        <div
+          v-else
+          class="mt-6 border-t pt-3"
+          style="border-color: var(--ogb-border);"
+        >
+          <p class="text-sm text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.signInToComment') }}
+          </p>
+          <UButton
+            to="/sign-in"
+            class="mt-2"
+            size="sm"
+          >
+            {{ ctx.t('nav.signIn') }}
+          </UButton>
         </div>
       </main>
 

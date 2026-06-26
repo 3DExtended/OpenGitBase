@@ -322,6 +322,7 @@
       "backToList": "All discussions",
       "empty": "No discussions yet. Start the first conversation.",
       "signInToView": "Sign in to view discussions on this repository.",
+      "signInToComment": "Sign in to join the conversation.",
       "notFound": "Discussion not found.",
       "resolve": "Resolve",
       "dismiss": "Dismiss",
