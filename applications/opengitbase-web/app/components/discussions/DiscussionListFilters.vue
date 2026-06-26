@@ -16,7 +16,7 @@ const props = defineProps<{
         type="button"
         class="rounded-full px-3 py-1 text-xs font-medium transition"
         :class="props.ctx.statusFilter === opt.value
-          ? 'bg-[var(--ogb-text)] text-white'
+          ? 'bg-teal-600 text-white'
           : 'bg-[var(--ogb-bg)] text-[var(--ogb-text-muted)] hover:text-[var(--ogb-text)]'"
         @click="props.ctx.statusFilter = opt.value as DiscussionStatus | 'all'"
       >
