@@ -3,17 +3,23 @@ import {
   type BundledLanguage,
   type Highlighter,
 } from 'shiki'
-import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
-import { languageFromPath } from '~/utils/codeLanguage'
+import { inferCodeLanguage, languageFromPath } from './codeLanguage'
 
 type HighlightTheme = 'github-light' | 'github-dark'
 
-const jsEngine = createJavaScriptRegexEngine({ target: 'ES2018' })
-
 let highlighterPromise: Promise<Highlighter> | null = null
 
-function themeForColorMode(colorMode: string): HighlightTheme {
-  return colorMode === 'dark' ? 'github-dark' : 'github-light'
+export function themeForColorMode(colorMode: string): HighlightTheme {
+  if (colorMode === 'dark') {
+    return 'github-dark'
+  }
+  if (colorMode === 'light') {
+    return 'github-light'
+  }
+  if (import.meta.client && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'github-dark'
+  }
+  return 'github-light'
 }
 
 function escapeHtml(source: string): string {
@@ -33,12 +39,36 @@ function plainCodeHtml(source: string): string {
   return `<pre class="shiki"><code>${body}</code></pre>`
 }
 
+export function resolveHighlightLanguage(
+  source: string,
+  path: string,
+  languageOverride?: string,
+): string {
+  if (languageOverride && languageOverride !== 'text') {
+    return languageOverride
+  }
+
+  const inferred = inferCodeLanguage(source)
+  if (inferred) {
+    return inferred
+  }
+
+  const fromPath = languageFromPath(path)
+  if (fromPath !== 'text') {
+    return fromPath
+  }
+
+  return languageOverride ?? 'text'
+}
+
 async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
       themes: ['github-light', 'github-dark'],
       langs: ['text', 'typescript', 'javascript', 'tsx', 'jsx', 'json'],
-      engine: jsEngine,
+    }).catch((error: unknown) => {
+      highlighterPromise = null
+      throw error
     })
   }
   return highlighterPromise
@@ -67,7 +97,7 @@ export async function highlightSourceCode(
   colorMode: string,
   languageOverride?: string,
 ): Promise<string> {
-  const lang = languageOverride ?? languageFromPath(path)
+  const lang = resolveHighlightLanguage(source, path, languageOverride)
   const theme = themeForColorMode(colorMode)
 
   try {

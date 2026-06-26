@@ -128,3 +128,23 @@ export function languageFromFenceTag(tag: string): string {
   }
   return FENCE_LANGUAGE_ALIASES[normalized] ?? normalized
 }
+
+/** Best-effort language detection for untagged code fences. */
+export function inferCodeLanguage(source: string): string | null {
+  const trimmed = source.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      JSON.parse(trimmed)
+      return 'json'
+    }
+    catch {
+      return null
+    }
+  }
+
+  return null
+}

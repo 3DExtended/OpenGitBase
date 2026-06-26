@@ -55,7 +55,7 @@ function renderProse(markdown: string): string {
         v-else
         :source="segment.source"
         path="snippet.txt"
-        :language="languageFromFenceTag(segment.language)"
+        :language="segment.language.trim() ? languageFromFenceTag(segment.language) : undefined"
         :start-line="1"
       />
     </template>
