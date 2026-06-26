@@ -160,7 +160,12 @@ public class ResolveDiscussionQueryHandler : IQueryHandler<ResolveDiscussionQuer
             return Option<DiscussionDto>.None;
         }
 
-        if (target == DiscussionStatus.Resolved && entity.Status != (int)DiscussionStatus.Engaged)
+        if (
+            target == DiscussionStatus.Resolved
+            && entity.Status
+                is (int)DiscussionStatus.Resolved
+                    or (int)DiscussionStatus.Dismissed
+        )
         {
             return Option<DiscussionDto>.None;
         }
