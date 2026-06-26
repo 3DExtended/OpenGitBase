@@ -68,7 +68,7 @@ async function submitReply(): Promise<void> {
     data-testid="discussion-sub-thread"
   >
     <header
-      class="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+      class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2"
       style="background: var(--ogb-bg);"
     >
       <div class="flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--ogb-text-muted)]">
@@ -80,7 +80,9 @@ async function submitReply(): Promise<void> {
           {{ expanded ? '▾' : '▸' }}
         </button>
         <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(comment.authorUserId, comment.authorUsername) }}</span>
-        <span><RelativeTime :iso="comment.createdAt" /></span>
+        <span v-if="comment.replyCount > 0" class="text-[var(--ogb-text-muted)]">
+          {{ t('repo.discussions.replyCount', { count: comment.replyCount }) }}
+        </span>
         <UBadge
           v-if="comment.isResolved"
           color="neutral"
@@ -97,32 +99,29 @@ async function submitReply(): Promise<void> {
         >
           {{ t('repo.discussions.orphanReply') }}
         </UBadge>
-        <span v-if="comment.replyCount > 0" class="text-[var(--ogb-text-muted)]">
-          · {{ t('repo.discussions.replyCount', { count: comment.replyCount }) }}
-        </span>
       </div>
-      <div
-        v-if="canResolve && !comment.orphanedFromDeletedRoot"
-        class="flex gap-1"
-      >
-        <UButton
-          v-if="!comment.isResolved"
-          size="xs"
-          variant="soft"
-          color="success"
-          @click="emit('resolve')"
-        >
-          {{ t('repo.discussions.resolveSubThread') }}
-        </UButton>
-        <UButton
-          v-else
-          size="xs"
-          variant="soft"
-          color="neutral"
-          @click="emit('unresolve')"
-        >
-          {{ t('repo.discussions.unresolveSubThread') }}
-        </UButton>
+      <div class="flex shrink-0 items-center gap-2 text-xs text-[var(--ogb-text-muted)]">
+        <RelativeTime :iso="comment.createdAt" />
+        <template v-if="canResolve && !comment.orphanedFromDeletedRoot">
+          <UButton
+            v-if="!comment.isResolved"
+            size="xs"
+            variant="soft"
+            color="success"
+            @click="emit('resolve')"
+          >
+            {{ t('repo.discussions.resolveSubThread') }}
+          </UButton>
+          <UButton
+            v-else
+            size="xs"
+            variant="soft"
+            color="neutral"
+            @click="emit('unresolve')"
+          >
+            {{ t('repo.discussions.unresolveSubThread') }}
+          </UButton>
+        </template>
       </div>
     </header>
 
@@ -141,7 +140,7 @@ async function submitReply(): Promise<void> {
 
       <ul
         v-if="comment.replies?.length"
-        class="space-y-3 border-l pl-3"
+        class="list-none space-y-3 border-l pl-3"
         style="border-color: var(--ogb-border);"
       >
         <li
