@@ -105,7 +105,15 @@ public class ResolveSubThreadDiscussionCommentQueryHandler
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var nested = DiscussionProjection.BuildNestedCommentList(allComments);
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(
+                context,
+                DiscussionProjection.CollectCommentUserIds(allComments),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var nested = DiscussionProjection.BuildNestedCommentList(allComments, usernames);
         var root = nested.FirstOrDefault(c => c.Id.Value == comment.Id);
         return root is null ? Option<DiscussionCommentDto>.None : Option.From(root);
     }
@@ -174,7 +182,15 @@ public class UnresolveSubThreadDiscussionCommentQueryHandler
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var nested = DiscussionProjection.BuildNestedCommentList(allComments);
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(
+                context,
+                DiscussionProjection.CollectCommentUserIds(allComments),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var nested = DiscussionProjection.BuildNestedCommentList(allComments, usernames);
         var root = nested.FirstOrDefault(c => c.Id.Value == comment.Id);
         return root is null ? Option<DiscussionCommentDto>.None : Option.From(root);
     }

@@ -327,6 +327,7 @@
       "resolve": "Resolve",
       "dismiss": "Dismiss",
       "assignee": "Assignee",
+      "creator": "Creator",
       "opened": "Opened",
       "updated": "Updated",
       "commentsTitle": "Comments",

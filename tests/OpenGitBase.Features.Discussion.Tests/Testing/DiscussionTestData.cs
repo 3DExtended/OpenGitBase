@@ -5,6 +5,8 @@ using OpenGitBase.Features.Discussion.Entities;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.Users.Contracts.Models;
 
+using OpenGitBase.Features.Users.Entities;
+
 namespace OpenGitBase.Features.Discussion.Tests.Testing;
 
 public static class DiscussionTestData
@@ -17,8 +19,40 @@ public static class DiscussionTestData
         Guid.Parse("33333333-3333-3333-3333-333333333333")
     );
 
+    public static async Task SeedUsersAsync(OpenGitBaseDbContext context)
+    {
+        foreach (var (userId, username) in new[]
+        {
+            (CreatorUserId.Value, "creator-user"),
+            (OtherUserId.Value, "other-user"),
+        })
+        {
+            if (
+                await context.Set<UserEntity>()
+                    .AnyAsync(user => user.Id == userId)
+                    .ConfigureAwait(false)
+            )
+            {
+                continue;
+            }
+
+            context.Set<UserEntity>().Add(
+                new UserEntity
+                {
+                    Id = userId,
+                    Username = username,
+                    NormalizedUsername = username.ToUpperInvariant(),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                }
+            );
+        }
+
+        await context.SaveChangesAsync().ConfigureAwait(false);
+    }
+
     public static async Task SeedRepositoryAsync(OpenGitBaseDbContext context)
     {
+        await SeedUsersAsync(context).ConfigureAwait(false);
         if (
             await context.Set<RepositoryEntity>()
                 .AnyAsync(r => r.Id == RepositoryId)

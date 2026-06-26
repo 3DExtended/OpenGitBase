@@ -3,14 +3,61 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
 using OpenGitBase.Features.Users.Contracts.Models;
+using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.Discussion;
 
 internal static class DiscussionProjection
 {
-    public static DiscussionDto ToDto(DiscussionEntity entity)
+    public static async Task<IReadOnlyDictionary<Guid, string>> ResolveUsernamesAsync(
+        OpenGitBaseDbContext context,
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken
+    )
     {
-        return new DiscussionDto
+        var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        return await context
+            .Set<UserEntity>()
+            .AsNoTracking()
+            .Where(user => ids.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.Username, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public static IEnumerable<Guid> CollectCommentUserIds(
+        IReadOnlyList<DiscussionCommentEntity> comments
+    )
+    {
+        foreach (var comment in comments)
+        {
+            if (comment.AuthorUserId != Guid.Empty)
+            {
+                yield return comment.AuthorUserId;
+            }
+
+            if (comment.ResolvedByUserId is Guid resolvedByUserId)
+            {
+                yield return resolvedByUserId;
+            }
+
+            if (comment.DeletedByUserId is Guid deletedByUserId)
+            {
+                yield return deletedByUserId;
+            }
+        }
+    }
+
+    public static DiscussionDto ToDto(
+        DiscussionEntity entity,
+        IReadOnlyDictionary<Guid, string>? usernames = null
+    )
+    {
+        var dto = new DiscussionDto
         {
             Id = DiscussionId.From(entity.Id),
             RepositoryId = entity.RepositoryId,
@@ -37,12 +84,31 @@ internal static class DiscussionProjection
                 .OrderBy(t => t.Name)
                 .ToList(),
         };
+
+        if (usernames is not null)
+        {
+            if (usernames.TryGetValue(entity.CreatorUserId, out var creatorUsername))
+            {
+                dto.CreatorUsername = creatorUsername;
+            }
+
+            if (
+                entity.AssigneeUserId is Guid assigneeUserId
+                && usernames.TryGetValue(assigneeUserId, out var assigneeUsername)
+            )
+            {
+                dto.AssigneeUsername = assigneeUsername;
+            }
+        }
+
+        return dto;
     }
 
     public static DiscussionCommentDto ToCommentDto(
         DiscussionCommentEntity entity,
         IReadOnlyList<DiscussionCommentDto>? replies = null,
-        bool orphanedFromDeletedRoot = false
+        bool orphanedFromDeletedRoot = false,
+        IReadOnlyDictionary<Guid, string>? usernames = null
     )
     {
         var replyList = replies ?? [];
@@ -51,6 +117,10 @@ internal static class DiscussionProjection
             Id = DiscussionCommentId.From(entity.Id),
             DiscussionId = DiscussionId.From(entity.DiscussionId),
             AuthorUserId = UserId.From(entity.AuthorUserId),
+            AuthorUsername = usernames is not null
+                && usernames.TryGetValue(entity.AuthorUserId, out var authorUsername)
+                ? authorUsername
+                : null,
             BodyMarkdown = entity.BodyMarkdown,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
@@ -86,7 +156,8 @@ internal static class DiscussionProjection
     }
 
     public static IReadOnlyList<DiscussionCommentDto> BuildNestedCommentList(
-        IReadOnlyList<DiscussionCommentEntity> allComments
+        IReadOnlyList<DiscussionCommentEntity> allComments,
+        IReadOnlyDictionary<Guid, string>? usernames = null
     )
     {
         var deletedRootIds = allComments
@@ -103,7 +174,7 @@ internal static class DiscussionProjection
                 g => g.Key,
                 g => (IReadOnlyList<DiscussionCommentDto>)g
                     .OrderBy(c => c.CreatedAt)
-                    .Select(c => ToCommentDto(c))
+                    .Select(c => ToCommentDto(c, usernames: usernames))
                     .ToList()
             );
 
@@ -113,7 +184,8 @@ internal static class DiscussionProjection
                 ToCommentDto(
                     c,
                     repliesByParent.GetValueOrDefault(c.Id, []),
-                    orphanedFromDeletedRoot: false
+                    orphanedFromDeletedRoot: false,
+                    usernames: usernames
                 )
             )
             .ToList();
@@ -122,7 +194,7 @@ internal static class DiscussionProjection
             .Where(c =>
                 c.ParentCommentId is not null && deletedRootIds.Contains(c.ParentCommentId.Value)
             )
-            .Select(c => ToCommentDto(c, orphanedFromDeletedRoot: true))
+            .Select(c => ToCommentDto(c, orphanedFromDeletedRoot: true, usernames: usernames))
             .ToList();
 
         return roots

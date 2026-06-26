@@ -87,9 +87,22 @@ public class CreateDiscussionQueryHandler : IQueryHandler<CreateDiscussionQuery,
             .FindByNumberAsync(context, query.RepositoryId, number, cancellationToken)
             .ConfigureAwait(false);
 
-        return loaded is null
-            ? Option<DiscussionDto>.None
-            : Option.From(DiscussionProjection.ToDto(loaded));
+        if (loaded is null)
+        {
+            return Option<DiscussionDto>.None;
+        }
+
+        var userIds = new List<Guid> { loaded.CreatorUserId };
+        if (loaded.AssigneeUserId is Guid assigneeUserId)
+        {
+            userIds.Add(assigneeUserId);
+        }
+
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, userIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From(DiscussionProjection.ToDto(loaded, usernames));
     }
 
     internal static async Task ApplyTagsAsync(
@@ -166,8 +179,22 @@ public class ListDiscussionsByRepositoryQueryHandler
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var userIds = list.SelectMany(d =>
+        {
+            var ids = new List<Guid> { d.CreatorUserId };
+            if (d.AssigneeUserId is Guid assigneeUserId)
+            {
+                ids.Add(assigneeUserId);
+            }
+
+            return ids;
+        });
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, userIds, cancellationToken)
+            .ConfigureAwait(false);
+
         return Option.From<IReadOnlyList<DiscussionDto>>(
-            list.Select(DiscussionProjection.ToDto).ToList()
+            list.Select(entity => DiscussionProjection.ToDto(entity, usernames)).ToList()
         );
     }
 }
@@ -202,7 +229,13 @@ public class GetDiscussionByNumberQueryHandler
             return Option<DiscussionDto>.None;
         }
 
-        var dto = DiscussionProjection.ToDto(entity);
+        var userIds = new List<Guid> { entity.CreatorUserId };
+        if (entity.AssigneeUserId is Guid assigneeUserId)
+        {
+            userIds.Add(assigneeUserId);
+        }
+
+        DiscussionDto dto;
 
         if (query.IncludeComments)
         {
@@ -213,7 +246,22 @@ public class GetDiscussionByNumberQueryHandler
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            dto.Comments = DiscussionProjection.BuildNestedCommentList(allComments);
+            userIds.AddRange(DiscussionProjection.CollectCommentUserIds(allComments));
+
+            var usernames = await DiscussionProjection
+                .ResolveUsernamesAsync(context, userIds, cancellationToken)
+                .ConfigureAwait(false);
+
+            dto = DiscussionProjection.ToDto(entity, usernames);
+            dto.Comments = DiscussionProjection.BuildNestedCommentList(allComments, usernames);
+        }
+        else
+        {
+            var usernames = await DiscussionProjection
+                .ResolveUsernamesAsync(context, userIds, cancellationToken)
+                .ConfigureAwait(false);
+
+            dto = DiscussionProjection.ToDto(entity, usernames);
         }
 
         return Option.From(dto);

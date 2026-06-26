@@ -228,12 +228,20 @@ defineProps<{
             {{ ctx.statusLabel(ctx.discussion.status) }}
           </UBadge>
         </div>
+        <div>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.creator') }}
+          </p>
+          <p class="mt-1">
+            {{ ctx.memberLabel(ctx.discussion.creatorUserId, ctx.discussion.creatorUsername) }}
+          </p>
+        </div>
         <div v-if="ctx.discussion.assigneeUserId">
           <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
             {{ ctx.t('repo.discussions.assignee') }}
           </p>
           <p class="mt-1">
-            {{ ctx.memberLabel(ctx.discussion.assigneeUserId) }}
+            {{ ctx.memberLabel(ctx.discussion.assigneeUserId, ctx.discussion.assigneeUsername) }}
           </p>
         </div>
         <div>

@@ -88,6 +88,52 @@ public class GetDiscussionByNumberQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_WithIncludeComments_ResolvesUsernames()
+    {
+        await using var scope = new DiscussionHandlerTestScope();
+        await scope.EnsureCreatedAsync();
+        await using var context = await scope.CreateDbContextAsync();
+        var discussion = await DiscussionTestData.SeedDiscussionAsync(context);
+        var root = await DiscussionTestData.SeedRootCommentAsync(
+            context,
+            discussion.Id,
+            DiscussionTestData.CreatorUserId,
+            body: "Root comment"
+        );
+
+        var replyEntity = new DiscussionCommentEntity
+        {
+            Id = Guid.NewGuid(),
+            DiscussionId = discussion.Id,
+            AuthorUserId = DiscussionTestData.OtherUserId.Value,
+            BodyMarkdown = "Reply one",
+            ParentCommentId = root.Id,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        context.Set<DiscussionCommentEntity>().Add(replyEntity);
+        await context.SaveChangesAsync();
+
+        var handler = scope.GetHandler<GetDiscussionByNumberQueryHandler>();
+        var result = await handler.RunQueryAsync(
+            new GetDiscussionByNumberQuery
+            {
+                RepositoryId = DiscussionTestData.RepositoryId,
+                Number = discussion.Number,
+                IncludeComments = true,
+            },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsSome);
+        var dto = result.Get();
+        Assert.Equal("creator-user", dto.CreatorUsername);
+        Assert.NotNull(dto.Comments);
+        Assert.Equal("creator-user", dto.Comments[0].AuthorUsername);
+        Assert.Equal("other-user", dto.Comments[0].Replies[0].AuthorUsername);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_WithIncludeComments_ReturnsMultipleRootThreads()
     {
         await using var scope = new DiscussionHandlerTestScope();

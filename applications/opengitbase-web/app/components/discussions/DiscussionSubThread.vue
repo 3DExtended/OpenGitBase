@@ -9,7 +9,7 @@ const props = withDefaults(
     comment: DiscussionComment
     owner: string
     repoSlug: string
-    memberLabel: (userId: string) => string
+    memberLabel: (userId: string, preferredUsername?: string | null) => string
     members?: RepositoryMember[]
     canResolve: boolean
     canReply: boolean
@@ -79,7 +79,7 @@ async function submitReply(): Promise<void> {
         >
           {{ expanded ? '▾' : '▸' }}
         </button>
-        <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(comment.authorUserId) }}</span>
+        <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(comment.authorUserId, comment.authorUsername) }}</span>
         <span>{{ new Date(comment.createdAt).toLocaleString() }}</span>
         <UBadge
           v-if="comment.isResolved"
@@ -152,7 +152,7 @@ async function submitReply(): Promise<void> {
           data-testid="discussion-sub-thread-reply"
         >
           <div class="flex items-center justify-between gap-2 text-xs text-[var(--ogb-text-muted)]">
-            <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(reply.authorUserId) }}</span>
+            <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(reply.authorUserId, reply.authorUsername) }}</span>
             <span>{{ new Date(reply.createdAt).toLocaleString() }}</span>
           </div>
           <CommentAnchorPreview

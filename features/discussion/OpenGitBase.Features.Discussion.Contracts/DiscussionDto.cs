@@ -12,7 +12,9 @@ public class DiscussionDto : ModelBase<DiscussionId, Guid>
     public DiscussionStatus Status { get; set; }
     public bool HasEverBeenEngaged { get; set; }
     public UserId CreatorUserId { get; set; } = UserId.From(Guid.Empty);
+    public string? CreatorUsername { get; set; }
     public UserId? AssigneeUserId { get; set; }
+    public string? AssigneeUsername { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public IReadOnlyList<RepositoryTagDto> Tags { get; set; } = [];

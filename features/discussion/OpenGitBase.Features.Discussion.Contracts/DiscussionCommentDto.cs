@@ -7,6 +7,7 @@ public class DiscussionCommentDto : ModelBase<DiscussionCommentId, Guid>
 {
     public DiscussionId DiscussionId { get; set; } = DiscussionId.From(Guid.Empty);
     public UserId AuthorUserId { get; set; } = UserId.From(Guid.Empty);
+    public string? AuthorUsername { get; set; }
     public string BodyMarkdown { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

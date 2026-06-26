@@ -208,7 +208,11 @@ public partial class CreateDiscussionCommentQueryHandler
             .FirstOrDefaultAsync(a => a.CommentId == comment.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        return Option.From(DiscussionProjection.ToCommentDto(comment));
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, [comment.AuthorUserId], cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From(DiscussionProjection.ToCommentDto(comment, usernames: usernames));
     }
 
     internal static IReadOnlyList<UserId> ParseMentions(string body) =>
@@ -266,8 +270,16 @@ public class ListDiscussionCommentsQueryHandler
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(
+                context,
+                DiscussionProjection.CollectCommentUserIds(allComments),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
         return Option.From<IReadOnlyList<DiscussionCommentDto>>(
-            DiscussionProjection.BuildNestedCommentList(allComments)
+            DiscussionProjection.BuildNestedCommentList(allComments, usernames)
         );
     }
 }
@@ -318,7 +330,11 @@ public class UpdateDiscussionCommentQueryHandler
         comment.EditedAt = utcNow;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return Option.From(DiscussionProjection.ToCommentDto(comment));
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, [comment.AuthorUserId], cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From(DiscussionProjection.ToCommentDto(comment, usernames: usernames));
     }
 }
 
@@ -371,6 +387,10 @@ public class SoftDeleteDiscussionCommentQueryHandler
         comment.UpdatedAt = utcNow;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return Option.From(DiscussionProjection.ToCommentDto(comment));
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, [comment.AuthorUserId], cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From(DiscussionProjection.ToCommentDto(comment, usernames: usernames));
     }
 }

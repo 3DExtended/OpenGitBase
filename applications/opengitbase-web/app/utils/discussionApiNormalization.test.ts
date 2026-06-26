@@ -7,6 +7,7 @@ describe('normalizeDiscussionComment', () => {
       id: { value: '4e4bf53e-98c5-439e-81c3-19cc009ae0f9' },
       discussionId: { value: '235c039b-315a-4880-b4f3-1c935688a69c' },
       authorUserId: { value: '25821f40-4f03-4566-b977-d87e44c00a73' },
+      authorUsername: 'alice',
       bodyMarkdown: 'asd',
       createdAt: '2026-06-22T12:24:39.620652+00:00',
       updatedAt: '2026-06-22T12:24:39.620652+00:00',
@@ -36,6 +37,7 @@ describe('normalizeDiscussionComment', () => {
     const comment = normalizeDiscussionComment(raw)
 
     expect(comment.id).toBe('4e4bf53e-98c5-439e-81c3-19cc009ae0f9')
+    expect(comment.authorUsername).toBe('alice')
     expect(comment.bodyMarkdown).toBe('asd')
     expect(comment.replyCount).toBe(1)
     expect(comment.replies).toHaveLength(1)
@@ -55,6 +57,7 @@ describe('normalizeDiscussion', () => {
       status: 0,
       hasEverBeenEngaged: false,
       creatorUserId: { value: '25821f40-4f03-4566-b977-d87e44c00a73' },
+      creatorUsername: 'alice',
       createdAt: '2026-06-22T12:23:56.914753+00:00',
       updatedAt: '2026-06-26T08:08:26.608154+00:00',
       tags: [],
@@ -78,6 +81,7 @@ describe('normalizeDiscussion', () => {
     const discussion = normalizeDiscussion(raw)
 
     expect(discussion.status).toBe('Open')
+    expect(discussion.creatorUsername).toBe('alice')
     expect(discussion.comments).toHaveLength(1)
     expect(discussion.comments?.[0]?.bodyMarkdown).toBe('first')
   })

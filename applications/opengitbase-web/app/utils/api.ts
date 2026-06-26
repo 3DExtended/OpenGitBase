@@ -278,7 +278,9 @@ export interface Discussion {
   status: DiscussionStatus
   hasEverBeenEngaged: boolean
   creatorUserId: string
+  creatorUsername?: string | null
   assigneeUserId?: string | null
+  assigneeUsername?: string | null
   createdAt: string
   updatedAt: string
   tags: RepositoryTag[]
@@ -304,6 +306,7 @@ export interface DiscussionComment {
   id: string
   discussionId: string
   authorUserId: string
+  authorUsername?: string | null
   bodyMarkdown: string
   createdAt: string
   updatedAt: string
@@ -581,7 +584,9 @@ function normalizeDiscussion(raw: Record<string, unknown>): Discussion {
     status: normalizeDiscussionStatus(raw.status),
     hasEverBeenEngaged: Boolean(raw.hasEverBeenEngaged),
     creatorUserId: normalizeId(raw.creatorUserId),
+    creatorUsername: raw.creatorUsername ? String(raw.creatorUsername) : null,
     assigneeUserId: raw.assigneeUserId ? normalizeId(raw.assigneeUserId) : null,
+    assigneeUsername: raw.assigneeUsername ? String(raw.assigneeUsername) : null,
     createdAt: String(raw.createdAt ?? ''),
     updatedAt: String(raw.updatedAt ?? ''),
     tags,
@@ -621,6 +626,7 @@ function normalizeDiscussionComment(raw: Record<string, unknown>): DiscussionCom
     id: normalizeId(raw.id),
     discussionId: normalizeId(raw.discussionId),
     authorUserId: normalizeId(raw.authorUserId),
+    authorUsername: raw.authorUsername ? String(raw.authorUsername) : null,
     bodyMarkdown: String(raw.bodyMarkdown ?? ''),
     createdAt: String(raw.createdAt ?? ''),
     updatedAt: String(raw.updatedAt ?? ''),

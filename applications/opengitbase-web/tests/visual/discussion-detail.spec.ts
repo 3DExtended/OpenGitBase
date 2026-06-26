@@ -11,6 +11,7 @@ const mockDiscussionDetail = {
   status: 'Open',
   hasEverBeenEngaged: true,
   creatorUserId: '22222222-2222-2222-2222-222222222222',
+  creatorUsername: 'demo-user',
   assigneeUserId: null,
   createdAt: '2026-06-24T10:00:00.000Z',
   updatedAt: '2026-06-24T11:00:00.000Z',
@@ -20,6 +21,7 @@ const mockDiscussionDetail = {
       id: 'comment-root-1',
       discussionId: 'disc-0001-0000-0000-000000000001',
       authorUserId: '22222222-2222-2222-2222-222222222222',
+      authorUsername: 'demo-user',
       bodyMarkdown: 'Consider extracting this helper.',
       createdAt: '2026-06-24T10:00:00.000Z',
       updatedAt: '2026-06-24T10:00:00.000Z',
@@ -32,6 +34,7 @@ const mockDiscussionDetail = {
           id: 'comment-reply-1',
           discussionId: 'disc-0001-0000-0000-000000000001',
           authorUserId: '33333333-3333-3333-3333-333333333333',
+          authorUsername: 'reviewer',
           bodyMarkdown: 'Agreed — I pushed a follow-up snippet.',
           createdAt: '2026-06-24T10:05:00.000Z',
           updatedAt: '2026-06-24T10:05:00.000Z',
@@ -111,5 +114,8 @@ test.describe('Discussion detail page', () => {
     await expect(page.getByTestId('discussion-sub-thread-reply')).toHaveCount(1)
     await expect(page.getByText('Consider extracting this helper.')).toBeVisible()
     await expect(page.getByText('Agreed — I pushed a follow-up snippet.')).toBeVisible()
+    await expect(page.getByText('demo-user')).toBeVisible()
+    await expect(page.getByText('reviewer')).toBeVisible()
+    await expect(page.getByText('Creator').locator('..').getByText('demo-user')).toBeVisible()
   })
 })

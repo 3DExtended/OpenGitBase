@@ -88,7 +88,10 @@ export function useDiscussionDetailPage() {
     return t(`repo.discussions.status.${status.toLowerCase()}`)
   }
 
-  function memberLabel(userId: string): string {
+  function memberLabel(userId: string, preferredUsername?: string | null): string {
+    if (preferredUsername) {
+      return preferredUsername
+    }
     const member = ctx.members.find(m => m.userId === userId)
     return member?.username ?? userId.slice(0, 8)
   }
