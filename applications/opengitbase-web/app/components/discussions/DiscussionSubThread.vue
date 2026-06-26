@@ -3,7 +3,7 @@ import type { CommentAnchorInput, DiscussionComment, RepositoryMember } from '~/
 import CommentAnchorPreview from '~/components/discussions/CommentAnchorPreview.vue'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
 import DiscussionRichEditor from '~/components/discussions/DiscussionRichEditor.vue'
-import { parseCommentIdFromHash, subtreeContainsComment } from '~/utils/discussionCommentHash'
+import { resolveTargetCommentId, subtreeContainsComment } from '~/utils/discussionCommentHash'
 
 const props = withDefaults(
   defineProps<{
@@ -36,9 +36,8 @@ const replyAnchor = ref<CommentAnchorInput | null>(null)
 const showAttachModal = ref(false)
 
 watch(
-  () => route.hash,
-  (hash) => {
-    const commentId = parseCommentIdFromHash(hash)
+  () => resolveTargetCommentId({ hash: route.hash, query: route.query }),
+  (commentId) => {
     if (commentId && subtreeContainsComment(props.comment, commentId)) {
       expanded.value = true
     }

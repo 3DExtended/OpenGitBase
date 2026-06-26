@@ -1,3 +1,5 @@
+import { normalizeCommentId } from '~/utils/discussionCommentHash'
+
 export interface ApiResult<T> {
   data: T | null
   error: string | null
@@ -673,7 +675,7 @@ function normalizeNotification(raw: Record<string, unknown>): Notification {
     discussionId: normalizeId(raw.discussionId),
     repositoryId: normalizeId(raw.repositoryId),
     discussionNumber: Number(raw.discussionNumber ?? 0),
-    commentId: raw.commentId ? normalizeId(raw.commentId) : null,
+    commentId: normalizeCommentId(raw.commentId),
     ownerSlug: String(raw.ownerSlug ?? raw.owner ?? ''),
     repositorySlug: String(raw.repositorySlug ?? raw.slug ?? ''),
     eventType: normalizeNotificationEventType(raw.eventType),

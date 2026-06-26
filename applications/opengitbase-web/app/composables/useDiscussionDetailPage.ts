@@ -7,7 +7,10 @@ import type {
 } from '~/utils/api'
 import { resolveCommentsFallbackLoad, resolveDiscussionDetailLoad } from '~/utils/discussionDetailLoad'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
-import { scrollToCommentFromHash } from '~/utils/discussionCommentHash'
+import {
+  resolveTargetCommentId,
+  scrollToCommentElement,
+} from '~/utils/discussionCommentHash'
 
 /** Shared state for the discussion detail page. */
 export function useDiscussionDetailPage() {
@@ -157,8 +160,12 @@ export function useDiscussionDetailPage() {
     if (!import.meta.client) {
       return
     }
+    const commentId = resolveTargetCommentId({ hash: route.hash, query: route.query })
+    if (!commentId) {
+      return
+    }
     nextTick(() => {
-      scrollToCommentFromHash(route.hash)
+      scrollToCommentElement(commentId)
     })
   }
 
@@ -195,15 +202,40 @@ export function useDiscussionDetailPage() {
     void initializePage()
   })
 
-  watch(() => route.hash, async (hash, oldHash) => {
-    if (oldHash === undefined) {
-      return
-    }
-    if (!hash.startsWith('#comment-') || hash === oldHash || ctx.pageLoading) {
-      return
-    }
-    await loadDiscussion()
-  })
+  watch(
+    () => [
+      resolveTargetCommentId({ hash: route.hash, query: route.query }),
+      ctx.comments.length,
+      ctx.pageLoading,
+      ctx.loading,
+      ctx.commentsLoading,
+    ] as const,
+    ([commentId, , pageLoading, loading, commentsLoading]) => {
+      if (!commentId || pageLoading || loading || commentsLoading) {
+        return
+      }
+      nextTick(() => {
+        scrollToCommentElement(commentId)
+      })
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    () => [route.hash, route.query.comment] as const,
+    async ([hash, commentQuery], oldValue) => {
+      if (!oldValue) {
+        return
+      }
+      const [oldHash, oldCommentQuery] = oldValue
+      const targetChanged = hash !== oldHash || commentQuery !== oldCommentQuery
+      const commentId = resolveTargetCommentId({ hash, query: route.query })
+      if (!commentId || !targetChanged || ctx.pageLoading) {
+        return
+      }
+      await loadDiscussion()
+    },
+  )
 
   async function loadMembers(): Promise<void> {
     if (!repo.value?.id) {

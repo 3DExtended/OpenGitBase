@@ -4,6 +4,7 @@ import { discussionDetailRoute } from '~/utils/discussionPaths'
 
 const { t } = useI18n()
 const api = useApi()
+const router = useRouter()
 
 const open = ref(false)
 const notifications = ref<Notification[]>([])
@@ -41,7 +42,7 @@ async function openNotification(notification: Notification): Promise<void> {
   if (!target) {
     return
   }
-  await navigateTo(target)
+  await router.push(target)
 }
 
 watch(open, (isOpen) => {

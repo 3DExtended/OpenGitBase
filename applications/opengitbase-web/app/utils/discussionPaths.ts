@@ -1,4 +1,5 @@
 import type { RouteLocationRaw } from 'vue-router'
+import { commentElementId, normalizeCommentId } from './discussionCommentHash'
 
 function normalizeSlug(value: string): string {
   return value.trim().replace(/^\/+|\/+$/g, '')
@@ -16,9 +17,16 @@ export function discussionDetailRoute(
   if (!ownerSlug || !repoSlug || !Number.isFinite(number) || number < 1) {
     return null
   }
+
   const path = `/${ownerSlug}/${repoSlug}/discussions/${number}`
-  if (options?.commentId) {
-    return { path, hash: `#comment-${options.commentId}` }
+  const commentId = options?.commentId ? normalizeCommentId(options.commentId) : null
+  if (!commentId) {
+    return path
   }
-  return path
+
+  return {
+    path,
+    hash: `#${commentElementId(commentId)}`,
+    query: { comment: commentId },
+  }
 }
