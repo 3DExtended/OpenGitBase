@@ -74,10 +74,14 @@ async function submitReply(): Promise<void> {
       <div class="flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--ogb-text-muted)]">
         <button
           type="button"
-          class="shrink-0 text-[var(--ogb-text-muted)]"
+          class="inline-flex shrink-0 items-center justify-center text-[var(--ogb-text-muted)] hover:text-[var(--ogb-text)]"
+          :aria-expanded="expanded"
           @click="toggleExpanded"
         >
-          {{ expanded ? '▾' : '▸' }}
+          <UIcon
+            :name="expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            class="size-4"
+          />
         </button>
         <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(comment.authorUserId, comment.authorUsername) }}</span>
         <span v-if="comment.replyCount > 0" class="text-[var(--ogb-text-muted)]">
