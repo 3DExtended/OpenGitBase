@@ -1,0 +1,16 @@
+# Local ingress for opengitbase Cloudflare tunnel (overrides broken remote rules).
+# Used when compose mounts docker/cloudflare/ and runs:
+#   cloudflared tunnel --config /etc/cloudflared/config.yml run
+tunnel: c313c0ce-21a7-4742-9744-05deb54e291d
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: git.opengitbase.com
+    service: ssh://ssh-lb:22
+  - hostname: www.opengitbase.com
+    service: http://ssh-lb:8080
+  - hostname: api.opengitbase.com
+    service: http://api-lb:8080
+  - hostname: opengitbase.com
+    service: http://ssh-lb:8080
+  - service: http_status:404
