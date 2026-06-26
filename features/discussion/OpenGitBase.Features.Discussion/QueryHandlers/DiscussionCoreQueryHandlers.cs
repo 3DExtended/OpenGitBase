@@ -174,10 +174,15 @@ public class ListDiscussionsByRepositoryQueryHandler
             );
         }
 
-        var list = await discussions
-            .OrderByDescending(d => d.UpdatedAt)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var list = await discussions.ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        list = list
+            .OrderBy(d =>
+                d.Status == (int)DiscussionStatus.Resolved
+                || d.Status == (int)DiscussionStatus.Dismissed
+            )
+            .ThenByDescending(d => d.UpdatedAt)
+            .ToList();
 
         var userIds = list.SelectMany(d =>
         {
