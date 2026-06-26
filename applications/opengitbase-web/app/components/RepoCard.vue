@@ -38,7 +38,11 @@ const { t } = useI18n()
       v-if="repo.updatedAt"
       class="mt-3 text-xs text-[var(--ogb-text-muted)]"
     >
-      {{ t('repo.updatedAt', { date: new Date(repo.updatedAt).toLocaleDateString() }) }}
+      <i18n-t keypath="repo.updatedAt">
+        <template #date>
+          <RelativeTime :iso="repo.updatedAt" />
+        </template>
+      </i18n-t>
     </p>
   </UCard>
 </template>

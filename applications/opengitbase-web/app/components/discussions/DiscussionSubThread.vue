@@ -80,7 +80,7 @@ async function submitReply(): Promise<void> {
           {{ expanded ? '▾' : '▸' }}
         </button>
         <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(comment.authorUserId, comment.authorUsername) }}</span>
-        <span>{{ new Date(comment.createdAt).toLocaleString() }}</span>
+        <span><RelativeTime :iso="comment.createdAt" /></span>
         <UBadge
           v-if="comment.isResolved"
           color="neutral"
@@ -153,7 +153,7 @@ async function submitReply(): Promise<void> {
         >
           <div class="flex items-center justify-between gap-2 text-xs text-[var(--ogb-text-muted)]">
             <span class="font-medium text-[var(--ogb-text)]">{{ memberLabel(reply.authorUserId, reply.authorUsername) }}</span>
-            <span>{{ new Date(reply.createdAt).toLocaleString() }}</span>
+            <span><RelativeTime :iso="reply.createdAt" /></span>
           </div>
           <CommentAnchorPreview
             v-if="reply.anchor"

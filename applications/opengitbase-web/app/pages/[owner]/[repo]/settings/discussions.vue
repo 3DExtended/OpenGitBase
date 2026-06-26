@@ -199,7 +199,7 @@ onMounted(() => {
                 {{ blocked.reason }}
               </p>
               <p class="text-xs text-[var(--ogb-text-muted)]">
-                {{ new Date(blocked.blockedAt).toLocaleString() }}
+                <RelativeTime :iso="blocked.blockedAt" />
               </p>
             </div>
             <UButton

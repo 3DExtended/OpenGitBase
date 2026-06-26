@@ -114,7 +114,7 @@ onMounted(() => {
               </p>
               <p class="mt-1 text-xs text-[var(--ogb-text-muted)]">
                 {{ notification.ownerSlug }}/{{ notification.repositorySlug }} #{{ notification.discussionNumber }}
-                · {{ new Date(notification.createdAt).toLocaleString() }}
+                · <RelativeTime :iso="notification.createdAt" />
               </p>
             </button>
           </li>

@@ -4,13 +4,6 @@ import DiscussionListFilters from '~/components/discussions/DiscussionListFilter
 import DiscussionListHeader from '~/components/discussions/DiscussionListHeader.vue'
 
 defineProps<{ ctx: DiscussionsListPageContext }>()
-
-function relativeTime(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (mins < 60) return `${mins}m`
-  const h = Math.floor(mins / 60)
-  return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`
-}
 </script>
 
 <template>
@@ -62,7 +55,7 @@ function relativeTime(iso: string): string {
               <p class="truncate font-medium">
                 #{{ d.number }} · {{ d.title }}
               </p>
-              <span class="shrink-0 text-xs text-[var(--ogb-text-muted)]">{{ relativeTime(d.updatedAt) }}</span>
+              <span class="shrink-0 text-xs text-[var(--ogb-text-muted)]"><RelativeTime :iso="d.updatedAt" /></span>
             </div>
             <p class="text-xs text-[var(--ogb-text-muted)]">
               {{ ctx.statusLabel(d.status) }}

@@ -336,7 +336,12 @@ async function revokeInvite(invite: OrganizationInvite) {
                 {{ invite.email }}
               </p>
               <p class="text-xs text-[var(--ogb-text-muted)]">
-                {{ roleLabel(invite.role) }} · {{ t('org.members.invites.expires', { date: new Date(invite.expiresAt).toLocaleDateString() }) }}
+                {{ roleLabel(invite.role) }} ·
+                <i18n-t keypath="org.members.invites.expires">
+                  <template #date>
+                    <RelativeTime :iso="invite.expiresAt" />
+                  </template>
+                </i18n-t>
               </p>
             </div>
             <div

@@ -67,7 +67,11 @@ const debug = useEmailVerificationDebug()
         v-if="debug.expiresAt"
         class="text-xs text-[var(--ogb-text-muted)]"
       >
-        {{ t('verification.debug.expiresAt', { date: new Date(debug.expiresAt).toLocaleString() }) }}
+        <i18n-t keypath="verification.debug.expiresAt">
+          <template #date>
+            <RelativeTime :iso="debug.expiresAt" />
+          </template>
+        </i18n-t>
       </p>
     </div>
 

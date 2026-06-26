@@ -249,7 +249,7 @@ defineProps<{
             {{ ctx.t('repo.discussions.opened') }}
           </p>
           <p class="mt-1 text-xs">
-            {{ new Date(ctx.discussion.createdAt).toLocaleString() }}
+            <RelativeTime :iso="ctx.discussion.createdAt" />
           </p>
         </div>
         <div>
@@ -257,7 +257,7 @@ defineProps<{
             {{ ctx.t('repo.discussions.updated') }}
           </p>
           <p class="mt-1 text-xs">
-            {{ new Date(ctx.discussion.updatedAt).toLocaleString() }}
+            <RelativeTime :iso="ctx.discussion.updatedAt" />
           </p>
         </div>
         <div

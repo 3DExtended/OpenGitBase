@@ -79,16 +79,14 @@ async function copyCreatedToken() {
   toast.add({ title: t('settings.accessTokens.copied'), color: 'success' })
 }
 
-function formatExpiry(token: GitAccessToken) {
+function expiryKind(token: GitAccessToken): 'revoked' | 'no-expiry' | 'dated' {
   if (token.revokedAt) {
-    return t('settings.accessTokens.revoked')
+    return 'revoked'
   }
   if (!token.expiresAt) {
-    return t('settings.accessTokens.noExpiry')
+    return 'no-expiry'
   }
-  return t('settings.accessTokens.expires', {
-    date: new Date(token.expiresAt).toLocaleDateString(),
-  })
+  return 'dated'
 }
 
 onMounted(loadTokens)
@@ -218,7 +216,21 @@ onMounted(loadTokens)
               {{ token.name }}
             </p>
             <p class="text-xs text-[var(--ogb-text-muted)]">
-              {{ token.scope }} · {{ formatExpiry(token) }}
+              {{ token.scope }} ·
+              <template v-if="expiryKind(token) === 'revoked'">
+                {{ t('settings.accessTokens.revoked') }}
+              </template>
+              <template v-else-if="expiryKind(token) === 'no-expiry'">
+                {{ t('settings.accessTokens.noExpiry') }}
+              </template>
+              <i18n-t
+                v-else
+                keypath="settings.accessTokens.expires"
+              >
+                <template #date>
+                  <RelativeTime :iso="token.expiresAt!" />
+                </template>
+              </i18n-t>
             </p>
           </div>
           <UButton
