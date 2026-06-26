@@ -100,3 +100,31 @@ export function languageFromPath(path: string): string {
   const extension = fileName.slice(dotIndex + 1)
   return EXTENSION_TO_LANGUAGE[extension] ?? 'text'
 }
+
+const FENCE_LANGUAGE_ALIASES: Record<string, string> = {
+  cjs: 'javascript',
+  cs: 'csharp',
+  'c#': 'csharp',
+  h: 'cpp',
+  hpp: 'cpp',
+  js: 'javascript',
+  md: 'markdown',
+  mjs: 'javascript',
+  mts: 'typescript',
+  py: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  sh: 'bash',
+  ts: 'typescript',
+  yml: 'yaml',
+  zsh: 'bash',
+}
+
+/** Map markdown fence info strings to shiki language ids. */
+export function languageFromFenceTag(tag: string): string {
+  const normalized = tag.trim().toLowerCase()
+  if (!normalized) {
+    return 'text'
+  }
+  return FENCE_LANGUAGE_ALIASES[normalized] ?? normalized
+}

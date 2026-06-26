@@ -65,8 +65,9 @@ export async function highlightSourceCode(
   source: string,
   path: string,
   colorMode: string,
+  languageOverride?: string,
 ): Promise<string> {
-  const lang = languageFromPath(path)
+  const lang = languageOverride ?? languageFromPath(path)
   const theme = themeForColorMode(colorMode)
 
   try {

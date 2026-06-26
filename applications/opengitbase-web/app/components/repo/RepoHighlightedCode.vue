@@ -8,6 +8,7 @@ const props = withDefaults(
     source: string
     path: string
     startLine?: number
+    language?: string
     linePickEnabled?: boolean
     linePickRevision?: number
     owner?: string
@@ -103,6 +104,7 @@ async function renderHighlight(): Promise<void> {
       props.source,
       props.path,
       colorMode.value,
+      props.language,
     ))
   }
   catch {
@@ -172,7 +174,7 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.source, props.path, colorMode.value] as const,
+  () => [props.source, props.path, props.language, colorMode.value] as const,
   () => {
     void renderHighlight()
   },
