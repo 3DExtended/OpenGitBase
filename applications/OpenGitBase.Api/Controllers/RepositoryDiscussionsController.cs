@@ -95,7 +95,22 @@ public sealed class RepositoryDiscussionsController : ControllerBase
             )
             .ConfigureAwait(false);
 
-        return result.IsNone ? NotFound() : Ok(result.Get());
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        var discussion = result.Get();
+        var viewerUserId = _authorization.TryGetAuthenticatedUserId();
+        if (viewerUserId is not null)
+        {
+            var role = await _authorization
+                .GetEffectiveRoleAsync(access.Repository, viewerUserId, cancellationToken)
+                .ConfigureAwait(false);
+            discussion.ViewerEffectiveRole = role.ToString();
+        }
+
+        return Ok(discussion);
     }
 
     [HttpPost]

@@ -8,6 +8,7 @@ using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.RepositoryMember.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Api.Tests.Controllers;
@@ -60,6 +61,41 @@ public class RepositoryDiscussionsControllerTests
         var response = Assert.IsType<DiscussionDto>(ok.Value);
         Assert.NotNull(response.Comments);
         Assert.Single(response.Comments);
+    }
+
+    [Fact]
+    public async Task Get_WhenAuthenticated_SetsViewerEffectiveRole()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        repository.OwnerUserId = userId;
+        var dto = new DiscussionDto
+        {
+            Id = DiscussionId.From(Guid.NewGuid()),
+            RepositoryId = repository.Id.Value,
+            Number = 1,
+            Title = "Test",
+        };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetDiscussionByNumberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(dto));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.Get(
+            "owner",
+            "repo",
+            1,
+            null,
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<DiscussionDto>(ok.Value);
+        Assert.Equal(nameof(RepositoryRole.Owner), response.ViewerEffectiveRole);
     }
 
     [Fact]

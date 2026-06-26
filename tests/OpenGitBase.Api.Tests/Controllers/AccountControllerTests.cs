@@ -27,6 +27,7 @@ public class AccountControllerTests : ControllerTestBase
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<AccountMeResponse>();
         Assert.NotNull(body);
+        Assert.NotEqual(Guid.Empty, body.UserId);
         Assert.Equal("account-me-user", body.Username);
         Assert.False(body.EmailVerified);
         Assert.False(body.IsAdmin);

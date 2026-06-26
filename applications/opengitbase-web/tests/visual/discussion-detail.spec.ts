@@ -116,6 +116,7 @@ test.describe('Discussion detail page', () => {
     await expect(page.getByText('Agreed — I pushed a follow-up snippet.')).toBeVisible()
     await expect(page.getByText('demo-user')).toBeVisible()
     await expect(page.getByText('reviewer')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Resolve thread' })).toBeVisible()
     await expect(page.getByText('Creator').locator('..').getByText('demo-user')).toBeVisible()
     await expect(page.locator('time[datetime]').first()).toBeVisible()
   })

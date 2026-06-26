@@ -11,6 +11,12 @@ import {
   resolveTargetCommentId,
   scrollToCommentElement,
 } from '~/utils/discussionCommentHash'
+import {
+  canResolveDiscussionSubThread,
+  parseRepositoryRole,
+  resolveEffectiveRepositoryRole,
+  RepositoryRole,
+} from '~/utils/discussionPermissions'
 
 /** Shared state for the discussion detail page. */
 export function useDiscussionDetailPage() {
@@ -37,6 +43,7 @@ export function useDiscussionDetailPage() {
     commentsLoading: false,
     commentsError: null as string | null,
     members: [] as RepositoryMember[],
+    viewerEffectiveRole: RepositoryRole.None,
     pageLoading: false,
     forbidden: false,
     commentBody: '',
@@ -48,15 +55,16 @@ export function useDiscussionDetailPage() {
     dismissing: false,
   })
 
-  const currentMemberRole = computed(() => {
-    if (!auth.user) {
-      return 0
-    }
-    const member = ctx.members.find(m => m.username === auth.user?.username)
-    return member?.role ?? 0
-  })
+  const effectiveRepositoryRole = computed(() =>
+    resolveEffectiveRepositoryRole({
+      viewerEffectiveRole: ctx.viewerEffectiveRole,
+      username: auth.user?.username,
+      members: ctx.members,
+      repo: repo.value,
+    }),
+  )
 
-  const isWriterPlus = computed(() => currentMemberRole.value >= 2)
+  const isWriterPlus = computed(() => effectiveRepositoryRole.value >= RepositoryRole.Writer)
   const isClosed = computed(() =>
     ctx.discussion?.status === 'Resolved' || ctx.discussion?.status === 'Dismissed',
   )
@@ -148,6 +156,7 @@ export function useDiscussionDetailPage() {
       ctx.discussion = result.discussion
       ctx.comments = result.comments
       ctx.commentsError = result.commentsError
+      ctx.viewerEffectiveRole = parseRepositoryRole(result.discussion?.viewerEffectiveRole)
     }
     finally {
       ctx.pageLoading = false
@@ -302,12 +311,12 @@ export function useDiscussionDetailPage() {
   }
 
   function canResolveSubThread(comment: DiscussionComment): boolean {
-    if (!auth.user) {
-      return false
-    }
-    const member = ctx.members.find(m => m.username === auth.user?.username)
-    const isAuthor = member?.userId === comment.authorUserId
-    return isAuthor || isWriterPlus.value
+    return canResolveDiscussionSubThread({
+      comment,
+      userId: auth.user?.userId,
+      username: auth.user?.username,
+      effectiveRole: effectiveRepositoryRole.value,
+    })
   }
 
   async function resolveSubThread(commentId: string): Promise<void> {

@@ -19,4 +19,5 @@ public class DiscussionDto : ModelBase<DiscussionId, Guid>
     public DateTimeOffset UpdatedAt { get; set; }
     public IReadOnlyList<RepositoryTagDto> Tags { get; set; } = [];
     public IReadOnlyList<DiscussionCommentDto>? Comments { get; set; }
+    public string? ViewerEffectiveRole { get; set; }
 }

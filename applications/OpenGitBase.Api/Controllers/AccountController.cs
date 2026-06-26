@@ -48,6 +48,7 @@ public class AccountController : ControllerBase
         var userModel = user.Get();
         var response = new AccountMeResponse
         {
+            UserId = userId.Value,
             Username = userModel.Username,
             EmailVerified = emailVerified.Get(),
             IsAdmin = userModel.IsAdmin,

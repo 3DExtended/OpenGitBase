@@ -1,8 +1,10 @@
 import { http, HttpResponse } from 'msw'
 
 const mockUser = {
+  userId: '22222222-2222-2222-2222-222222222222',
   username: 'demo-user',
   emailVerified: false,
+  isAdmin: false,
 }
 
 const mockRepos = [
@@ -80,6 +82,7 @@ const mockDiscussionDetail = {
   assigneeUserId: null,
   createdAt: '2026-06-24T10:00:00.000Z',
   updatedAt: '2026-06-24T11:00:00.000Z',
+  viewerEffectiveRole: 'Owner',
   tags: [],
   comments: [
     {

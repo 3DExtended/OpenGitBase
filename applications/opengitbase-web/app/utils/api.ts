@@ -1,4 +1,5 @@
 import { normalizeCommentId } from '~/utils/discussionCommentHash'
+import { normalizeRepositoryMemberRole } from '~/utils/discussionPermissions'
 
 export interface ApiResult<T> {
   data: T | null
@@ -90,6 +91,7 @@ export interface AccountDebugFeatures {
 }
 
 export interface AccountMe {
+  userId: string
   username: string
   emailVerified: boolean
   isAdmin: boolean
@@ -287,6 +289,7 @@ export interface Discussion {
   updatedAt: string
   tags: RepositoryTag[]
   comments?: DiscussionComment[]
+  viewerEffectiveRole?: string | null
 }
 
 export interface AnchorResolution {
@@ -464,7 +467,7 @@ function normalizeMember(raw: Record<string, unknown>): RepositoryMember {
     repositoryId: normalizeId(raw.repositoryId),
     userId: normalizeId(raw.userId),
     username: raw.username ? String(raw.username) : undefined,
-    role: Number(raw.role ?? 0),
+    role: normalizeRepositoryMemberRole(raw.role),
   }
 }
 
@@ -593,6 +596,7 @@ function normalizeDiscussion(raw: Record<string, unknown>): Discussion {
     updatedAt: String(raw.updatedAt ?? ''),
     tags,
     comments,
+    viewerEffectiveRole: raw.viewerEffectiveRole ? String(raw.viewerEffectiveRole) : null,
   }
 }
 
@@ -807,6 +811,7 @@ export function createApi(baseUrl: string) {
     account: {
       me: async () => {
         const result = await request<{
+          userId?: string | { value: string }
           username: string
           emailVerified: boolean
           isAdmin: boolean
@@ -818,6 +823,7 @@ export function createApi(baseUrl: string) {
         return {
           ...result,
           data: {
+            userId: normalizeId(result.data.userId),
             username: result.data.username,
             emailVerified: result.data.emailVerified,
             isAdmin: result.data.isAdmin,
