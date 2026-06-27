@@ -17,6 +17,7 @@ import {
   parseRepositoryRole,
   resolveEffectiveRepositoryRole,
   RepositoryRole,
+  type RepositoryRoleValue,
 } from '~/utils/discussionPermissions'
 
 /** Shared state for the discussion detail page. */
@@ -44,7 +45,7 @@ export function useDiscussionDetailPage() {
     commentsLoading: false,
     commentsError: null as string | null,
     members: [] as RepositoryMember[],
-    viewerEffectiveRole: RepositoryRole.None,
+    viewerEffectiveRole: RepositoryRole.None as RepositoryRoleValue,
     pageLoading: false,
     forbidden: false,
     commentBody: '',

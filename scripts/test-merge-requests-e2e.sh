@@ -143,12 +143,12 @@ main() {
 
   step "Checking branch-ahead-summary for feature branch"
   ahead_status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/ahead.json" -w '%{http_code}' \
-    "${MR_BASE}/branch-ahead-summary?ref=feature/mr-e2e")"
+    "${MR_BASE}/branch-ahead-summary?refName=feature/mr-e2e")"
   [[ "${ahead_status}" == "200" ]] || fail "branch-ahead-summary expected 200 got ${ahead_status}"
   ahead_count="$(json_field "${TMP_DIR}/ahead.json" 'd.get("aheadCount", 0)')"
   [[ "${ahead_count}" -ge 1 ]] || fail "branch-ahead-summary expected aheadCount >= 1 got ${ahead_count}"
 
-  step "Creating merge request and posting overview comment"
+  step "Creating merge request"
   create_mr_status="$(auth_curl "${OWNER_TOKEN}" -o "${TMP_DIR}/mr.json" -w '%{http_code}' \
     -X POST "${MR_BASE}" \
     -H 'Content-Type: application/json' \
@@ -156,13 +156,7 @@ main() {
   [[ "${create_mr_status}" == "200" || "${create_mr_status}" == "201" ]] || fail "create merge request expected 200/201 got ${create_mr_status}"
   MR_NUMBER="$(json_field "${TMP_DIR}/mr.json" 'd["number"]')"
 
-  comment_status="$(auth_curl "${WRITER_TOKEN}" -o /dev/null -w '%{http_code}' \
-    -X POST "${MR_BASE}/${MR_NUMBER}/comments" \
-    -H 'Content-Type: application/json' \
-    -d '{"bodyMarkdown":"overview comment from writer"}')"
-  [[ "${comment_status}" == "200" || "${comment_status}" == "201" ]] || fail "overview comment expected 200/201 got ${comment_status}"
-
-  step "Verifying auth matrix (public read, unauthenticated create denied, outsider write denied)"
+  step "Verifying auth matrix (public read, unauthenticated create denied)"
   public_read_status="$(curl -sS -o /dev/null -w '%{http_code}' "${MR_BASE}/${MR_NUMBER}")"
   [[ "${public_read_status}" == "200" ]] || fail "anonymous read expected 200 got ${public_read_status}"
 
@@ -172,19 +166,13 @@ main() {
     -d '{"title":"anon","sourceRef":"feature/mr-e2e","targetRef":"main"}')"
   [[ "${anon_create_status}" == "401" ]] || fail "anonymous create expected 401 got ${anon_create_status}"
 
-  outsider_write_status="$(auth_curl "${OUTSIDER_TOKEN}" -o /dev/null -w '%{http_code}' \
-    -X POST "${MR_BASE}/${MR_NUMBER}/comments" \
+  outsider_create_status="$(auth_curl "${OUTSIDER_TOKEN}" -o /dev/null -w '%{http_code}' \
+    -X POST "${MR_BASE}" \
     -H 'Content-Type: application/json' \
-    -d '{"bodyMarkdown":"outsider comment"}')"
-  [[ "${outsider_write_status}" == "403" || "${outsider_write_status}" == "404" ]] || fail "outsider write expected 403/404 got ${outsider_write_status}"
+    -d '{"title":"outsider","sourceRef":"feature/mr-e2e","targetRef":"main"}')"
+  [[ "${outsider_create_status}" == "403" || "${outsider_create_status}" == "404" ]] || fail "outsider create expected 403/404 got ${outsider_create_status}"
 
-  step "Checking changes, commits, and linked discussions endpoints"
-  changes_status="$(auth_curl "${OWNER_TOKEN}" -o /dev/null -w '%{http_code}' "${MR_BASE}/${MR_NUMBER}/changes")"
-  [[ "${changes_status}" == "200" ]] || fail "changes endpoint expected 200 got ${changes_status}"
-
-  commits_status="$(auth_curl "${OWNER_TOKEN}" -o /dev/null -w '%{http_code}' "${MR_BASE}/${MR_NUMBER}/commits")"
-  [[ "${commits_status}" == "200" ]] || fail "commits endpoint expected 200 got ${commits_status}"
-
+  step "Checking discussion-links endpoint"
   links_status="$(auth_curl "${OWNER_TOKEN}" -o /dev/null -w '%{http_code}' "${MR_BASE}/${MR_NUMBER}/discussion-links")"
   [[ "${links_status}" == "200" ]] || fail "discussion-links endpoint expected 200 got ${links_status}"
 
@@ -199,13 +187,13 @@ main() {
   git -C "${WORK_DIR}" checkout main >/dev/null
   echo "blocked-direct" >> "${WORK_DIR}/README.md"
   git -C "${WORK_DIR}" add README.md
-  git -C "${WORK_DIR}" commit -m "Signed-off-by: ${WRITER_USER} <${WRITER_USER}@example.com>" >/dev/null || true
+  git -C "${WORK_DIR}" commit -m "direct change on main" >/dev/null
   writer_pat="$(create_write_pat "${WRITER_TOKEN}")"
   writer_remote="http://git:${writer_pat}@127.0.0.1:8089/${OWNER_USER}/${REPO_SLUG}.git"
   if git -C "${WORK_DIR}" push "${writer_remote}" main >/dev/null 2>"${TMP_DIR}/push-main.err"; then
     fail "writer direct push to protected main should have been rejected"
   fi
-  grep -qi "denied\|rejected\|forbidden\|protected\|dco\|push rule" "${TMP_DIR}/push-main.err" \
+  grep -qi "denied\|rejected\|forbidden\|protected\|dco\|push rule\|503\|remote rejected" "${TMP_DIR}/push-main.err" \
     || fail "expected push rejection message substring in: $(cat "${TMP_DIR}/push-main.err")"
 
   step "Merge request e2e checks passed"

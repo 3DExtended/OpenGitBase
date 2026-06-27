@@ -2216,7 +2216,7 @@ export function createApi(baseUrl: string) {
       deleteProtectedBranchRule: async (owner: string, slug: string, ruleId: string) => {
         const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
         if (!repoResult.data) {
-          return repoResult satisfies ApiResult<null>
+          return { ...repoResult, data: null } satisfies ApiResult<null>
         }
         const repositoryId = normalizeId(repoResult.data.id)
         return request<null>(

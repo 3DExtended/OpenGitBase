@@ -4,6 +4,7 @@ using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Api.Tests.Services;
@@ -32,7 +33,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto
             {
@@ -82,7 +83,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             adminUserId,
@@ -125,7 +126,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             UserId.From(Guid.Empty),
@@ -178,7 +179,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             UserId.From(Guid.NewGuid()),
@@ -239,7 +240,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             UserId.From(Guid.NewGuid()),
@@ -293,7 +294,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             UserId.From(Guid.NewGuid()),
@@ -339,7 +340,7 @@ public class GitPushEnforcementServiceTests
                 )
             );
 
-        var service = new GitPushEnforcementService(queryProcessor);
+        var service = CreateService(queryProcessor);
         var result = await service.EvaluateAsync(
             new RepositoryDto { Id = repositoryId, DefaultBranchName = "main" },
             UserId.From(Guid.NewGuid()),
@@ -362,4 +363,76 @@ public class GitPushEnforcementServiceTests
 
         Assert.True(result.Allowed);
     }
+
+    [Fact]
+    public async Task EnrichForcePushFlagsAsync_WhenStorageReportsNonAncestor_SetsForcePushTrue()
+    {
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageClient = Substitute.For<IStorageContentClient>();
+        var storageNodeId = Guid.NewGuid();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryReplicationRoutingDto
+                    {
+                        Targets =
+                        [
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = storageNodeId,
+                                InternalHost = "127.0.0.1",
+                                InternalHttpPort = 8081,
+                                IsPrimary = true,
+                                IsHealthy = true,
+                            },
+                        ],
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From("token"));
+        storageClient
+            .IsAncestorAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(false);
+
+        var service = CreateService(queryProcessor, storageClient);
+        var enriched = await service.EnrichForcePushFlagsAsync(
+            new RepositoryDto
+            {
+                Id = repositoryId,
+                PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+            },
+            [
+                new GitRefUpdateRequest
+                {
+                    RefName = "refs/heads/main",
+                    OldSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    NewSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                },
+            ],
+            CancellationToken.None
+        );
+
+        Assert.True(enriched[0].IsForcePush);
+    }
+
+    private static GitPushEnforcementService CreateService(
+        IQueryProcessor queryProcessor,
+        IStorageContentClient? storageClient = null
+    ) =>
+        new(
+            queryProcessor,
+            storageClient ?? Substitute.For<IStorageContentClient>(),
+            new WebReadReplicaSelector()
+        );
 }

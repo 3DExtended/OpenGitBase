@@ -17,7 +17,7 @@ const slugError = ref<string | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-const organizations = ref<Array<{ id: string, name: string }>>([])
+const organizations = ref<Array<{ id: string, name: string, slug?: string }>>([])
 
 useHead({ title: t('repo.create.title') })
 

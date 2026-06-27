@@ -87,7 +87,7 @@ async function resolveLanguage(highlighter: Highlighter, lang: string): Promise<
     if (!loaded.includes('text')) {
       await highlighter.loadLanguage('text')
     }
-    return 'text'
+    return 'plaintext' as BundledLanguage
   }
 }
 

@@ -97,6 +97,15 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
+    Task<bool?> IsAncestorAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string ancestorSha,
+        string descendantSha,
+        CancellationToken cancellationToken
+    );
+
     Task<bool> DeleteRefAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

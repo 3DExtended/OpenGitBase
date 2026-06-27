@@ -23,6 +23,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY storage-agent.sh /usr/local/bin/storage-agent.sh
 COPY storage-http-server.py /usr/local/bin/storage-http-server.py
 COPY storage_content.py /usr/local/bin/storage_content.py
+COPY storage_merge.py /usr/local/bin/storage_merge.py
 COPY storage_push_validation.py /usr/local/bin/storage_push_validation.py
 COPY storage-pre-receive.sh /usr/local/bin/storage-pre-receive.sh
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh

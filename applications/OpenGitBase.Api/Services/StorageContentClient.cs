@@ -211,6 +211,26 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         };
     }
 
+    public async Task<bool?> IsAncestorAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string ancestorSha,
+        string descendantSha,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/is-ancestor?physicalPath={Uri.EscapeDataString(physicalPath)}&ancestorSha={Uri.EscapeDataString(ancestorSha)}&descendantSha={Uri.EscapeDataString(descendantSha)}";
+        var payload = await GetJsonAsync<StorageContentIsAncestorPayload>(
+                uri,
+                apiToken,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return payload?.IsAncestor;
+    }
+
     public async Task<bool> DeleteRefAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { replicationStateBadgeColor } from '~/composables/useAdminReplication'
 
-defineProps<{
+const props = defineProps<{
   state: string
 }>()
 
 const { t } = useI18n()
 
-const label = computed(() => t(`admin.replication.states.${state}`, state))
+const label = computed(() => t(`admin.replication.states.${props.state}`, props.state))
 </script>
 
 <template>
   <UBadge
-    :color="replicationStateBadgeColor(state)"
+    :color="replicationStateBadgeColor(props.state)"
     variant="subtle"
   >
     {{ label }}

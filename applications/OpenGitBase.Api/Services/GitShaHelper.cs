@@ -1,4 +1,4 @@
-﻿﻿namespace OpenGitBase.Api.Services;
+﻿namespace OpenGitBase.Api.Services;
 
 public static class GitShaHelper
 {
@@ -11,6 +11,9 @@ public static class GitShaHelper
     public static bool IsDeletion(string? newSha) => IsNullSha(newSha);
 
     public static bool IsRefCreation(string? oldSha) => IsNullSha(oldSha);
+
+    public static bool NeedsForcePushCheck(string? oldSha, string? newSha) =>
+        !IsRefCreation(oldSha) && !IsDeletion(newSha) && !string.Equals(oldSha, newSha, StringComparison.OrdinalIgnoreCase);
 
     public static string? TryGetBranchName(string refName)
     {

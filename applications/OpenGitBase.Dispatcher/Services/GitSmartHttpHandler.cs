@@ -55,17 +55,19 @@ public sealed class GitSmartHttpHandler
                 await context.Request.Body
                     .CopyToAsync(bodyCopy, context.RequestAborted)
                     .ConfigureAwait(false);
-                var body = bodyCopy.ToArray();
+                bodyCopy.Position = 0;
                 context.Request.Body.Position = 0;
 
-                GitReceivePackParser.TryParseRefUpdates(body, out var refUpdates);
+                var (_, refUpdates) = await GitReceivePackParser
+                    .ReadPrefixAsync(bodyCopy, context.RequestAborted)
+                    .ConfigureAwait(false);
                 accessCheck = await _accessCheckClient
                     .CheckWithTokenAsync(
                         accessToken,
                         gitRequest.RepositoryPath,
                         gitRequest.Operation,
                         refUpdates,
-                        packSizeBytes: body.LongLength,
+                        packSizeBytes: bodyCopy.Length,
                         maxFileBytes: 0,
                         context.RequestAborted
                     )

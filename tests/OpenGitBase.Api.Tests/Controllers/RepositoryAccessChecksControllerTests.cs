@@ -814,7 +814,11 @@ public class RepositoryAccessChecksControllerTests
         return new RepositoryAccessChecksController(
             queryProcessor,
             sshKeyService,
-            new GitPushEnforcementService(queryProcessor),
+            new GitPushEnforcementService(
+                queryProcessor,
+                Substitute.For<IStorageContentClient>(),
+                new WebReadReplicaSelector()
+            ),
             NullLogger<RepositoryAccessChecksController>.Instance,
             new RepositoryStorageQuotaOptions(),
             platformMergeOptions

@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -11,97 +10,31 @@ namespace OpenGitBase.Common.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "ProtectedBranchRule",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    RepositoryId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Pattern = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    BlockDirectPush = table.Column<bool>(type: "boolean", nullable: false),
-                    AllowedPushRoles = table.Column<int>(type: "integer", nullable: false),
-                    RequireMergeRequest = table.Column<bool>(type: "boolean", nullable: false),
-                    RequiredApprovalCount = table.Column<int>(type: "integer", nullable: false),
-                    MergeRoleThreshold = table.Column<int>(type: "integer", nullable: false),
-                    ForcePushPolicy = table.Column<int>(type: "integer", nullable: false),
-                    DismissApprovalsOnPush = table.Column<bool>(type: "boolean", nullable: false),
-                    LockedMergeStrategy = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProtectedBranchRule", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ProtectedBranchRule_Repository_RepositoryId",
-                        column: x => x.RepositoryId,
-                        principalTable: "Repository",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade
-                    );
-                });
-
-            migrationBuilder.CreateTable(
-                name: "ProtectedBranchAllowedUser",
-                columns: table => new
-                {
-                    ProtectedBranchRuleId = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProtectedBranchAllowedUser", x => new { x.ProtectedBranchRuleId, x.UserId });
-                    table.ForeignKey(
-                        name: "FK_ProtectedBranchAllowedUser_ProtectedBranchRule_ProtectedBranchRuleId",
-                        column: x => x.ProtectedBranchRuleId,
-                        principalTable: "ProtectedBranchRule",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade
-                    );
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PushRule",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ProtectedBranchRuleId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RuleType = table.Column<int>(type: "integer", nullable: false),
-                    ConfigJson = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PushRule", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_PushRule_ProtectedBranchRule_ProtectedBranchRuleId",
-                        column: x => x.ProtectedBranchRuleId,
-                        principalTable: "ProtectedBranchRule",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade
-                    );
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ProtectedBranchRule_RepositoryId_Pattern",
-                table: "ProtectedBranchRule",
-                columns: new[] { "RepositoryId", "Pattern" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PushRule_ProtectedBranchRuleId",
-                table: "PushRule",
-                column: "ProtectedBranchRuleId");
+            // Tables are created by AddProtectedBranchRules (20260627133716).
+            // This migration only adds the repository FK when missing.
+            migrationBuilder.Sql(
+                """
+                DO $$ BEGIN
+                  IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conname = 'FK_ProtectedBranchRule_Repository_RepositoryId'
+                  ) THEN
+                    ALTER TABLE "ProtectedBranchRule"
+                    ADD CONSTRAINT "FK_ProtectedBranchRule_Repository_RepositoryId"
+                    FOREIGN KEY ("RepositoryId") REFERENCES "Repository" ("Id") ON DELETE CASCADE;
+                  END IF;
+                END $$;
+                """
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ProtectedBranchAllowedUser");
-
-            migrationBuilder.DropTable(
-                name: "PushRule");
-
-            migrationBuilder.DropTable(
-                name: "ProtectedBranchRule");
+            migrationBuilder.DropForeignKey(
+                name: "FK_ProtectedBranchRule_Repository_RepositoryId",
+                table: "ProtectedBranchRule");
         }
     }
 }

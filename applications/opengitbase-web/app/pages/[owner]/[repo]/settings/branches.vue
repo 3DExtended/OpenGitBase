@@ -67,6 +67,14 @@ function emptyRule(): Partial<ProtectedBranchRule> {
 
 const ruleForm = reactive<Partial<ProtectedBranchRule>>(emptyRule())
 const forbiddenGlobsText = ref('')
+const commitMessageRegexModel = computed({
+  get: () => ruleForm.pushRules?.commitMessageRegex ?? '',
+  set: (value: string) => {
+    if (ruleForm.pushRules) {
+      ruleForm.pushRules.commitMessageRegex = value
+    }
+  },
+})
 
 function resetRuleForm(): void {
   Object.assign(ruleForm, emptyRule())
@@ -334,7 +342,7 @@ onMounted(() => {
                 :min="0"
               />
               <UInput
-                v-model="ruleForm.pushRules!.commitMessageRegex"
+                v-model="commitMessageRegexModel"
                 :placeholder="t('repo.mergeRequests.commitRegex')"
               />
               <UTextarea

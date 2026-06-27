@@ -26,7 +26,7 @@ from storage_content import (
     resolve_readme,
     resolve_ref,
 )
-from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff
+from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
@@ -265,6 +265,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if parsed.path == "/internal/repos/content/mergeability":
             self._handle_check_mergeability()
             return
+        if parsed.path == "/internal/repos/content/is-ancestor":
+            self._handle_is_ancestor()
+            return
         if parsed.path == "/internal/repos/usage":
             self._handle_disk_usage()
             return
@@ -498,6 +501,30 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         payload = check_mergeability(physical_path, target_sha, source_sha)
         self._send_json(200, payload)
+
+    def _handle_is_ancestor(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ancestor_sha = params.get("ancestorSha", [""])[0]
+        descendant_sha = params.get("descendantSha", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ancestor_sha or not descendant_sha:
+            self._send_json(400, {"error": "ancestorSha and descendantSha are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            is_ancestor = is_ancestor_commit(physical_path, ancestor_sha, descendant_sha)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        except RuntimeError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        self._send_json(200, {"isAncestor": is_ancestor})
 
     def do_POST(self) -> None:
         if not self._check_auth():

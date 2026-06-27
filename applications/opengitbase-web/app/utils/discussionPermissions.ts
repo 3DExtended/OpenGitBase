@@ -8,7 +8,7 @@ export const RepositoryRole = {
   Owner: 4,
 } as const
 
-const REPOSITORY_ROLE_BY_NAME: Record<string, number> = {
+const REPOSITORY_ROLE_BY_NAME: Record<string, RepositoryRoleValue> = {
   None: RepositoryRole.None,
   Reader: RepositoryRole.Reader,
   Writer: RepositoryRole.Writer,
@@ -16,7 +16,9 @@ const REPOSITORY_ROLE_BY_NAME: Record<string, number> = {
   Owner: RepositoryRole.Owner,
 }
 
-export function parseRepositoryRole(raw: unknown): number {
+export type RepositoryRoleValue = (typeof RepositoryRole)[keyof typeof RepositoryRole]
+
+export function parseRepositoryRole(raw: unknown): RepositoryRoleValue {
   if (typeof raw === 'string') {
     const named = REPOSITORY_ROLE_BY_NAME[raw]
     if (named !== undefined) {
@@ -24,7 +26,7 @@ export function parseRepositoryRole(raw: unknown): number {
     }
   }
   const numeric = Number(raw ?? 0)
-  return Number.isFinite(numeric) ? numeric : RepositoryRole.None
+  return Number.isFinite(numeric) ? (numeric as RepositoryRoleValue) : RepositoryRole.None
 }
 
 export function normalizeRepositoryMemberRole(raw: unknown): number {

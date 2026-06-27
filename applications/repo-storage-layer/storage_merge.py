@@ -313,6 +313,11 @@ def _is_ancestor(git_dir: str, ancestor_sha: str, descendant_sha: str) -> bool:
     return result.returncode == 0
 
 
+def is_ancestor_commit(repo_path: str, ancestor_sha: str, descendant_sha: str) -> bool:
+    git_dir = _git_dir(repo_path)
+    return _is_ancestor(git_dir, ancestor_sha, descendant_sha)
+
+
 def _merge_tree_has_conflicts(output: str) -> bool:
     lowered = output.lower()
     return "changed in both" in lowered or "conflict" in lowered

@@ -148,6 +148,7 @@ def main() -> int:
         ["git", "rev-parse", "--git-dir"],
         text=True,
     ).strip()
+    git_dir = str(Path(git_dir).resolve())
     updates: list[tuple[str, str, str]] = []
     for line in sys.stdin:
         parts = line.strip().split()

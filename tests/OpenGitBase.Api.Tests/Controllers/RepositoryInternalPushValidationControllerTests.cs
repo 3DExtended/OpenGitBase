@@ -50,7 +50,11 @@ public class RepositoryInternalPushValidationControllerTests
 
         var controller = new RepositoryInternalPushValidationController(
             queryProcessor,
-            new GitPushEnforcementService(queryProcessor)
+            new GitPushEnforcementService(
+                queryProcessor,
+                Substitute.For<IStorageContentClient>(),
+                new WebReadReplicaSelector()
+            )
         );
 
         var result = await controller.ValidatePush(
