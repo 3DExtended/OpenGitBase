@@ -12,13 +12,6 @@ public class GitAccessTokenMapsterConfigTests
     private static readonly IMapper Mapper =
         MapsterTestMapperFactory.Create<GitAccessTokenMapsterConfig>();
 
-    private static readonly (Type Type, string Name)[] ExcludedProperties =
-    [
-        (typeof(GitAccessTokenEntity), nameof(GitAccessTokenEntity.OwnerUser)),
-        (typeof(GitAccessTokenEntity), nameof(GitAccessTokenEntity.TokenHash)),
-        (typeof(GitAccessTokenEntity), nameof(GitAccessTokenEntity.TokenLookupHash)),
-    ];
-
     [Fact]
     public void GitAccessTokenEntity_GitAccessTokenDto_MapsMetadata()
     {

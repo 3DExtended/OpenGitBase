@@ -129,6 +129,9 @@ public class Startup
         services.AddScoped<RepositoryContentAuthorizationService>();
         services.AddScoped<DiscussionAuthorizationService>();
         services.AddScoped<MergeRequestAuthorizationService>();
+        services.AddScoped<MergeRequestRefService>();
+        services.AddScoped<MergeRequestMergeService>();
+        services.AddScoped<GitPushEnforcementService>();
         services.AddSingleton<WebReadReplicaSelector>();
         services.AddScoped<RepositoryContentService>();
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
@@ -152,6 +155,10 @@ public class Startup
         services.AddSingleton(
             Configuration.GetSection("RepositoryStorageQuota").Get<RepositoryStorageQuotaOptions>()
                 ?? new RepositoryStorageQuotaOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("PlatformMergeIdentity").Get<PlatformMergeIdentityOptions>()
+                ?? new PlatformMergeIdentityOptions()
         );
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()

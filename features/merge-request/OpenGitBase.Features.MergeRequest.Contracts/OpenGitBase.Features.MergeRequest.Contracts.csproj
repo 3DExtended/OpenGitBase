@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenGitBase.Features.MergeRequest.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\repository\OpenGitBase.Features.Repository.Contracts\OpenGitBase.Features.Repository.Contracts.csproj" />
+    <ProjectReference Include="..\..\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

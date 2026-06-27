@@ -64,7 +64,43 @@ internal static class SshSessionRunner
 
         try
         {
-            var accessCheck = await accessCheckClient.CheckWithPublicKeyAsync(
+            RepositoryAccessCheckResponse accessCheck;
+            if (operation == RepositoryOperation.WriteGit)
+            {
+                await using var stdin = Console.OpenStandardInput();
+                var (prefix, refUpdates) = await GitReceivePackParser
+                    .ReadPrefixAsync(stdin, CancellationToken.None)
+                    .ConfigureAwait(false);
+
+                accessCheck = await accessCheckClient
+                    .CheckWithPublicKeyAsync(
+                        sshPublicKey,
+                        repositoryPath,
+                        operation,
+                        refUpdates,
+                        packSizeBytes: 0,
+                        maxFileBytes: 0,
+                        CancellationToken.None
+                    )
+                    .ConfigureAwait(false);
+
+                if (!accessCheck.Allowed)
+                {
+                    await Console.Error.WriteLineAsync(
+                        accessCheck.Reason ?? "Repository access denied for user."
+                    );
+                    return 1;
+                }
+
+                await Console.Error.WriteLineAsync(
+                    "Repository access allowed. Proxying git session to storage."
+                );
+                return await gitSessionProxyService
+                    .ProxyAsync(accessCheck, operation, prefix, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+
+            accessCheck = await accessCheckClient.CheckWithPublicKeyAsync(
                 sshPublicKey,
                 repositoryPath,
                 operation,

@@ -47,14 +47,41 @@ public sealed class GitSmartHttpHandler
         RepositoryAccessCheckResponse accessCheck;
         try
         {
-            accessCheck = await _accessCheckClient
-                .CheckWithTokenAsync(
-                    accessToken,
-                    gitRequest.RepositoryPath,
-                    gitRequest.Operation,
-                    context.RequestAborted
-                )
-                .ConfigureAwait(false);
+            if (gitRequest.Operation == RepositoryOperation.WriteGit
+                && HttpMethods.IsPost(context.Request.Method))
+            {
+                context.Request.EnableBuffering();
+                await using var bodyCopy = new MemoryStream();
+                await context.Request.Body
+                    .CopyToAsync(bodyCopy, context.RequestAborted)
+                    .ConfigureAwait(false);
+                var body = bodyCopy.ToArray();
+                context.Request.Body.Position = 0;
+
+                GitReceivePackParser.TryParseRefUpdates(body, out var refUpdates);
+                accessCheck = await _accessCheckClient
+                    .CheckWithTokenAsync(
+                        accessToken,
+                        gitRequest.RepositoryPath,
+                        gitRequest.Operation,
+                        refUpdates,
+                        packSizeBytes: body.LongLength,
+                        maxFileBytes: 0,
+                        context.RequestAborted
+                    )
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                accessCheck = await _accessCheckClient
+                    .CheckWithTokenAsync(
+                        accessToken,
+                        gitRequest.RepositoryPath,
+                        gitRequest.Operation,
+                        context.RequestAborted
+                    )
+                    .ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {

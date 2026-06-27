@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from storage_content import (
     GitContentError,
+    count_commits_ahead,
     get_blob,
     get_disk_usage,
     get_raw_bytes,
@@ -23,7 +24,9 @@ from storage_content import (
     list_tags,
     list_tree,
     resolve_readme,
+    resolve_ref,
 )
+from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
@@ -89,6 +92,14 @@ def _install_replication_hook(physical_path: str) -> None:
         encoding="utf-8",
     )
     hook_path.chmod(0o755)
+    pre_receive_path = hooks_dir / "pre-receive"
+    pre_receive_path.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exec /usr/local/bin/storage-pre-receive.sh\n",
+        encoding="utf-8",
+    )
+    pre_receive_path.chmod(0o755)
     subprocess.run(
         ["chown", "-R", "git:git", str(hooks_dir)],
         check=True,
@@ -207,7 +218,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if exc.code == "invalid_path":
             self._send_json(400, {"error": exc.message})
             return
-        self._send_json(500, {"error": exc.message})
+        if exc.code == "invalid_strategy":
+            self._send_json(400, {"error": exc.message, "code": exc.code})
+            return
+        if exc.code in {"conflicts", "not_fast_forwardable"}:
+            self._send_json(409, {"error": exc.message, "code": exc.code})
+            return
+        self._send_json(500, {"error": exc.message, "code": exc.code})
 
     def do_GET(self) -> None:
         if not self._check_auth():
@@ -235,6 +252,18 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/internal/repos/content/empty":
             self._handle_is_empty()
+            return
+        if parsed.path == "/internal/repos/content/ahead-count":
+            self._handle_ahead_count()
+            return
+        if parsed.path == "/internal/repos/content/resolve-ref":
+            self._handle_resolve_ref()
+            return
+        if parsed.path == "/internal/repos/content/diff":
+            self._handle_get_diff()
+            return
+        if parsed.path == "/internal/repos/content/mergeability":
+            self._handle_check_mergeability()
             return
         if parsed.path == "/internal/repos/usage":
             self._handle_disk_usage()
@@ -391,16 +420,104 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(200, {"isEmpty": is_empty_repository(physical_path)})
 
+    def _handle_ahead_count(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        base_ref = params.get("baseRef", [""])[0]
+        head_ref = params.get("headRef", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not base_ref or not head_ref:
+            self._send_json(400, {"error": "baseRef and headRef are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            ahead_count = count_commits_ahead(physical_path, base_ref, head_ref)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"aheadCount": ahead_count})
+
+    def _handle_resolve_ref(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        ref = params.get("ref", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref:
+            self._send_json(400, {"error": "ref is required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            commit_sha = resolve_ref(physical_path, ref)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"commitSha": commit_sha})
+
+    def _handle_get_diff(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        base_sha = params.get("baseSha", [""])[0]
+        head_sha = params.get("headSha", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not base_sha or not head_sha:
+            self._send_json(400, {"error": "baseSha and headSha are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = get_diff(physical_path, base_sha, head_sha)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_check_mergeability(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        target_sha = params.get("targetSha", [""])[0]
+        source_sha = params.get("sourceSha", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not target_sha or not source_sha:
+            self._send_json(400, {"error": "targetSha and sourceSha are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        payload = check_mergeability(physical_path, target_sha, source_sha)
+        self._send_json(200, payload)
+
     def do_POST(self) -> None:
         if not self._check_auth():
             self.send_error(401)
             return
 
-        if self.path == "/internal/repos/sync-from":
+        parsed = urlparse(self.path)
+        if parsed.path == "/internal/repos/sync-from":
             self._handle_sync_from()
             return
 
-        if self.path != "/internal/repos":
+        if parsed.path == "/internal/repos/content/merge":
+            self._handle_execute_merge()
+            return
+
+        if parsed.path == "/internal/repos/content/delete-ref":
+            self._handle_delete_ref()
+            return
+
+        if parsed.path != "/internal/repos":
             self.send_error(404)
             return
 
@@ -485,6 +602,56 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(200, {"physicalPath": physical_path, "sourceHost": source_host})
+
+    def _handle_execute_merge(self) -> None:
+        data = self._read_json()
+        physical_path = self._physical_path_from_query() or data.get("physicalPath", "")
+        target_ref = data.get("targetRef", "")
+        source_ref = data.get("sourceRef", "")
+        strategy = data.get("strategy", "")
+        commit_message = data.get("commitMessage")
+
+        if not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not target_ref or not source_ref or not strategy:
+            self._send_json(400, {"error": "targetRef, sourceRef, and strategy are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = execute_merge(
+                physical_path,
+                target_ref,
+                source_ref,
+                strategy,
+                commit_message if isinstance(commit_message, str) else None,
+            )
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_delete_ref(self) -> None:
+        data = self._read_json()
+        physical_path = self._physical_path_from_query() or data.get("physicalPath", "")
+        ref_name = data.get("refName", "")
+        if not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not ref_name:
+            self._send_json(400, {"error": "refName is required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            delete_branch_ref(physical_path, ref_name)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, {"refName": ref_name})
 
     def do_DELETE(self) -> None:
         if self.path != "/internal/repos":

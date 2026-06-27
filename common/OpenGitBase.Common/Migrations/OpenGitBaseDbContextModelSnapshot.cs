@@ -338,20 +338,113 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("GitAccessToken", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.MergeRequest.Entities.MergeRequestApprovalEntity", b =>
+                {
+                    b.Property<Guid>("MergeRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CommitSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MergeRequestId", "UserId");
+
+                    b.ToTable("merge_request_approvals", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.MergeRequest.Entities.MergeRequestDiscussionLinkEntity", b =>
+                {
+                    b.Property<Guid>("MergeRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DiscussionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RelationshipType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MergeRequestId", "DiscussionId", "RelationshipType");
+
+                    b.ToTable("merge_request_discussion_links", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.MergeRequest.Entities.MergeRequestEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Body")
+                        .HasMaxLength(16000)
+                        .HasColumnType("character varying(16000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDraft")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MergeCommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceHeadSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceRef")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetBaseSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TargetRef")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
-                    b.ToTable("MergeRequest", (string)null);
+                    b.HasIndex("RepositoryId", "Number")
+                        .IsUnique();
+
+                    b.HasIndex("RepositoryId", "UpdatedAt");
+
+                    b.HasIndex("RepositoryId", "SourceRef", "TargetRef");
+
+                    b.ToTable("merge_requests", (string)null);
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationEntity", b =>
@@ -974,6 +1067,28 @@ namespace OpenGitBase.Common.Migrations
                         .IsRequired();
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.MergeRequest.Entities.MergeRequestApprovalEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.MergeRequest.Entities.MergeRequestEntity", "MergeRequest")
+                        .WithMany()
+                        .HasForeignKey("MergeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MergeRequest");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.MergeRequest.Entities.MergeRequestDiscussionLinkEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.MergeRequest.Entities.MergeRequestEntity", "MergeRequest")
+                        .WithMany()
+                        .HasForeignKey("MergeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MergeRequest");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationEntity", b =>

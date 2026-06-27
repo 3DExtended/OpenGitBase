@@ -53,4 +53,55 @@ public interface IStorageContentClient
         string physicalPath,
         CancellationToken cancellationToken
     );
+
+    Task<StorageContentAheadCountPayload?> GetAheadCountAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string baseRef,
+        string headRef,
+        CancellationToken cancellationToken
+    );
+
+    Task<StorageContentResolveRefPayload?> ResolveRefAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string refName,
+        CancellationToken cancellationToken
+    );
+
+    Task<StorageContentDiffPayload?> GetDiffAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string baseSha,
+        string headSha,
+        CancellationToken cancellationToken
+    );
+
+    Task<StorageContentMergeabilityPayload?> CheckMergeabilityAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string targetSha,
+        string sourceSha,
+        CancellationToken cancellationToken
+    );
+
+    Task<StorageContentExecuteMergeResult> ExecuteMergeAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        StorageContentExecuteMergeRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<bool> DeleteRefAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string refName,
+        CancellationToken cancellationToken
+    );
 }

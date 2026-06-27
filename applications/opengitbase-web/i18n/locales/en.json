@@ -33,7 +33,9 @@
   "common": {
     "loading": "Loading…",
     "save": "Save changes",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete"
   },
   "home": {
     "welcome": "Welcome to {instanceName}",
@@ -354,6 +356,21 @@
       "blockDirectPush": "Block direct pushes",
       "patternRequired": "Pattern is required.",
       "positiveFileSize": "Max file size must be positive.",
+      "patternHelper": "Use @default to protect the repository default branch.",
+      "requiredApprovalsLabel": "Required approvals",
+      "allowedPushRolesLabel": "Roles allowed to push directly",
+      "allowedPushMembersLabel": "Members allowed to push directly",
+      "allowedPushRoles": "Direct push roles: {roles}",
+      "editRule": "Edit rule",
+      "forbiddenGlobs": "Forbidden path globs (one per line)",
+      "forcePushDenyAll": "Deny all force pushes",
+      "forcePushAllowList": "Allow force push for allowlisted pushers",
+      "forcePushPlatformOnly": "Platform-only force push",
+      "mergeStrategyAny": "Any merge strategy",
+      "mergeStrategyMergeCommit": "Merge commit only",
+      "mergeStrategySquash": "Squash only",
+      "mergeStrategyFastForward": "Fast-forward only",
+      "editedComment": "Edited",
       "bannerTitle": "Create a merge request",
       "bannerDescription": "{branch} is {count} commit(s) ahead of the default branch."
     },

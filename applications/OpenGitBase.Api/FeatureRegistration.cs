@@ -14,6 +14,7 @@ public static class FeatureRegistration
                     typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
         typeof(global::OpenGitBase.Features.GitAccessToken.GitAccessTokenMapsterConfig).Assembly,
         typeof(global::OpenGitBase.Features.Discussion.DiscussionMapsterConfig).Assembly,
+        typeof(global::OpenGitBase.Features.MergeRequest.MergeRequestMapsterConfig).Assembly,
 // agentGenCli:feature-assemblies
         ];
 }

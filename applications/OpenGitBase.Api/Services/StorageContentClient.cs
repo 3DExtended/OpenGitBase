@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using OpenGitBase.Api.Models.StorageContent;
 using OpenGitBase.Features.Repository.Contracts;
@@ -20,7 +21,7 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     ) =>
         GetCombinedRefsAsync(target, apiToken, physicalPath, cancellationToken);
 
-    public async Task<StorageContentTreePayload?> GetTreeAsync(
+    public Task<StorageContentTreePayload?> GetTreeAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -31,11 +32,11 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/tree?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
-        return await GetJsonAsync<StorageContentTreePayload>(uri, apiToken, cancellationToken)
-            .ConfigureAwait(false);
+        return GetJsonAsync<StorageContentTreePayload>(uri, apiToken, cancellationToken)
+;
     }
 
-    public async Task<StorageContentBlobPayload?> GetBlobAsync(
+    public Task<StorageContentBlobPayload?> GetBlobAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -46,11 +47,11 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/blob?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
-        return await GetJsonAsync<StorageContentBlobPayload>(uri, apiToken, cancellationToken)
-            .ConfigureAwait(false);
+        return GetJsonAsync<StorageContentBlobPayload>(uri, apiToken, cancellationToken)
+;
     }
 
-    public async Task<StorageContentReadmePayload?> GetReadmeAsync(
+    public Task<StorageContentReadmePayload?> GetReadmeAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -60,8 +61,8 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/readme?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}";
-        return await GetJsonAsync<StorageContentReadmePayload>(uri, apiToken, cancellationToken)
-            .ConfigureAwait(false);
+        return GetJsonAsync<StorageContentReadmePayload>(uri, apiToken, cancellationToken)
+;
     }
 
     public async Task<HttpResponseMessage> GetRawAsync(
@@ -80,7 +81,7 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<StorageContentUsagePayload?> GetDiskUsageAsync(
+    public Task<StorageContentUsagePayload?> GetDiskUsageAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -89,8 +90,149 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/usage?physicalPath={Uri.EscapeDataString(physicalPath)}";
-        return await GetJsonAsync<StorageContentUsagePayload>(uri, apiToken, cancellationToken)
+        return GetJsonAsync<StorageContentUsagePayload>(uri, apiToken, cancellationToken)
+;
+    }
+
+    public Task<StorageContentAheadCountPayload?> GetAheadCountAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string baseRef,
+        string headRef,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/ahead-count?physicalPath={Uri.EscapeDataString(physicalPath)}&baseRef={Uri.EscapeDataString(baseRef)}&headRef={Uri.EscapeDataString(headRef)}";
+        return GetJsonAsync<StorageContentAheadCountPayload>(uri, apiToken, cancellationToken)
+;
+    }
+
+    public Task<StorageContentResolveRefPayload?> ResolveRefAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string refName,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/resolve-ref?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}";
+        return GetJsonAsync<StorageContentResolveRefPayload>(uri, apiToken, cancellationToken)
+;
+    }
+
+    public Task<StorageContentDiffPayload?> GetDiffAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string baseSha,
+        string headSha,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/diff?physicalPath={Uri.EscapeDataString(physicalPath)}&baseSha={Uri.EscapeDataString(baseSha)}&headSha={Uri.EscapeDataString(headSha)}";
+        return GetJsonAsync<StorageContentDiffPayload>(uri, apiToken, cancellationToken)
+;
+    }
+
+    public Task<StorageContentMergeabilityPayload?> CheckMergeabilityAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string targetSha,
+        string sourceSha,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/mergeability?physicalPath={Uri.EscapeDataString(physicalPath)}&targetSha={Uri.EscapeDataString(targetSha)}&sourceSha={Uri.EscapeDataString(sourceSha)}";
+        return GetJsonAsync<StorageContentMergeabilityPayload>(uri, apiToken, cancellationToken)
+;
+    }
+
+    public async Task<StorageContentExecuteMergeResult> ExecuteMergeAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        StorageContentExecuteMergeRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/merge?physicalPath={Uri.EscapeDataString(physicalPath)}";
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(request, JsonOptions),
+            System.Text.Encoding.UTF8,
+            "application/json"
+        );
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken)
             .ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode)
+        {
+            var payload = JsonSerializer.Deserialize<StorageContentExecuteMergeSuccessPayload>(
+                body,
+                JsonOptions
+            );
+            return new StorageContentExecuteMergeResult
+            {
+                Success = true,
+                StatusCode = (int)response.StatusCode,
+                CommitSha = payload?.CommitSha,
+                Strategy = payload?.Strategy,
+                TargetRef = payload?.TargetRef,
+            };
+        }
+
+        string? errorCode = null;
+        string? errorMessage = null;
+        try
+        {
+            var errorPayload = JsonSerializer.Deserialize<StorageContentErrorPayload>(body, JsonOptions);
+            errorCode = errorPayload?.Code;
+            errorMessage = errorPayload?.Error;
+        }
+        catch (JsonException)
+        {
+            errorMessage = body;
+        }
+
+        return new StorageContentExecuteMergeResult
+        {
+            Success = false,
+            StatusCode = (int)response.StatusCode,
+            ErrorCode = errorCode,
+            ErrorMessage = errorMessage ?? response.ReasonPhrase,
+        };
+    }
+
+    public async Task<bool> DeleteRefAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string refName,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/delete-ref?physicalPath={Uri.EscapeDataString(physicalPath)}";
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri)
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new { refName }, JsonOptions),
+                Encoding.UTF8,
+                "application/json"
+            ),
+        };
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken)
+            .ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
     }
 
     private async Task<StorageContentRefsPayload?> GetCombinedRefsAsync(
@@ -154,5 +296,21 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
             .ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private sealed class StorageContentExecuteMergeSuccessPayload
+    {
+        public string? CommitSha { get; init; }
+
+        public string? Strategy { get; init; }
+
+        public string? TargetRef { get; init; }
+    }
+
+    private sealed class StorageContentErrorPayload
+    {
+        public string? Error { get; init; }
+
+        public string? Code { get; init; }
     }
 }

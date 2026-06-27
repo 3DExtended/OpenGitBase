@@ -21,7 +21,7 @@ const visible = computed(() =>
   && props.refName !== defaultRef.value,
 )
 
-onMounted(async () => {
+async function loadSummary(): Promise<void> {
   if (!auth.isAuthenticated) {
     return
   }
@@ -29,6 +29,17 @@ onMounted(async () => {
   aheadCount.value = result.data?.aheadCount ?? 0
   defaultRef.value = result.data?.defaultRef ?? null
   hasActiveMergeRequest.value = result.data?.hasActiveMergeRequest ?? false
+}
+
+watch(
+  () => props.refName,
+  () => {
+    void loadSummary()
+  },
+)
+
+onMounted(() => {
+  void loadSummary()
 })
 </script>
 

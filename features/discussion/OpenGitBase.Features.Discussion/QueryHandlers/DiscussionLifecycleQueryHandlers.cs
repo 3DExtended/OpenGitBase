@@ -125,18 +125,18 @@ public class ResolveDiscussionQueryHandler : IQueryHandler<ResolveDiscussionQuer
         _queryProcessor = queryProcessor;
     }
 
-    public async Task<Option<DiscussionDto>> RunQueryAsync(
+    public Task<Option<DiscussionDto>> RunQueryAsync(
         ResolveDiscussionQuery query,
         CancellationToken cancellationToken
     )
     {
-        return await TransitionAsync(
+        return TransitionAsync(
             query.RepositoryId,
             query.Number,
             DiscussionStatus.Resolved,
             NotificationEventType.Resolved,
             cancellationToken
-        ).ConfigureAwait(false);
+        );
     }
 
     private async Task<Option<DiscussionDto>> TransitionAsync(

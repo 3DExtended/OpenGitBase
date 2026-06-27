@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
-using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.Repository.QueryHandlers;

@@ -109,6 +109,11 @@ def resolve_ref(git_dir: str, ref: str) -> str:
     return _run_git(git_dir, "rev-parse", "--verify", ref).strip()
 
 
+def count_commits_ahead(git_dir: str, base_ref: str, head_ref: str) -> int:
+    output = _run_git(git_dir, "rev-list", "--count", f"{base_ref}..{head_ref}")
+    return int(output.strip())
+
+
 def list_tree(git_dir: str, ref: str, path: str = "") -> dict[str, Any]:
     normalized_path = _normalize_repo_path(path)
     tree_ref = f"{ref}:{normalized_path}" if normalized_path else ref

@@ -53,3 +53,13 @@ Follow patterns from `scripts/e2e-https-git-test.sh` and discussion e2e (disc-10
 
 - Diff/review UI not fully exercised in script — API-level review comment smoke optional.
 - Notification email deliverability not asserted — in-app or API notification record check sufficient.
+
+## Running MR e2e locally
+
+With the docker compose stack up:
+
+```bash
+./scripts/test-merge-requests-e2e.sh
+```
+
+Optional env: `API_URL`, `MERGE_REQUEST_E2E_SUFFIX`, `MERGE_REQUEST_REPO`.

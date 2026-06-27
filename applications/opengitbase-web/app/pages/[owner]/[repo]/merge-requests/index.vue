@@ -100,12 +100,10 @@ onMounted(() => {
               {{ mr.sourceRef }} → {{ mr.targetRef }}
             </p>
           </div>
-          <UBadge
+          <CollaborationStatusBadge
+            :label="mr.status"
             :color="statusColor(mr.status)"
-            variant="subtle"
-          >
-            {{ mr.status }}
-          </UBadge>
+          />
         </div>
       </NuxtLink>
     </div>

@@ -8,6 +8,7 @@ import type {
   MergeRequestCommit,
   MergeRequestDiscussionLink,
   MergeRequestLinkType,
+  RepositoryMember,
 } from '~/utils/api'
 import type { CollaborationThread } from '~/components/collaboration/types'
 
@@ -26,6 +27,7 @@ const commits = ref<MergeRequestCommit[]>([])
 const overviewComments = ref<MergeRequestComment[]>([])
 const reviewComments = ref<MergeRequestComment[]>([])
 const linkedDiscussions = ref<MergeRequestDiscussionLink[]>([])
+const members = ref<RepositoryMember[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const activeTab = ref<'overview' | 'changes' | 'commits'>('overview')
@@ -36,6 +38,40 @@ const selectedLine = ref<MergeRequestCommentAnchor | null>(null)
 const lineCommentBody = ref('')
 const linkDiscussionNumber = ref<number | null>(null)
 const linkType = ref<MergeRequestLinkType>('related')
+
+function statusColor(status: MergeRequest['status']): 'neutral' | 'info' | 'success' | 'warning' {
+  switch (status) {
+    case 'Draft':
+      return 'neutral'
+    case 'Open':
+      return 'info'
+    case 'Approved':
+      return 'success'
+    case 'Merged':
+      return 'success'
+    case 'Closed':
+      return 'warning'
+  }
+}
+
+function memberLabel(_userId: string, preferred?: string | null): string {
+  return preferred ?? 'unknown'
+}
+
+function canEditComment(comment: MergeRequestComment): boolean {
+  return auth.isAuthenticated && auth.user?.userId === comment.authorUserId
+}
+
+function canDeleteComment(comment: MergeRequestComment): boolean {
+  if (!auth.isAuthenticated) {
+    return false
+  }
+  if (auth.user?.userId === comment.authorUserId) {
+    return true
+  }
+  const member = members.value.find(item => item.userId === auth.user?.userId)
+  return (member?.role ?? 0) >= 2
+}
 
 const tabItems = computed(() => ([
   { label: t('repo.mergeRequests.tabs.overview'), value: 'overview' },
@@ -109,6 +145,10 @@ async function loadAll(): Promise<void> {
   changes.value = changesResult.data
   commits.value = commitsResult.data ?? []
   linkedDiscussions.value = linksResult.data ?? []
+  if (mr.value) {
+    const membersResult = await api.repositoryMembers.list(mr.value.repositoryId)
+    members.value = membersResult.data ?? []
+  }
   loading.value = false
 }
 
@@ -203,6 +243,26 @@ async function removeDiscussionLink(link: MergeRequestDiscussionLink): Promise<v
   await loadAll()
 }
 
+async function editOverviewComment(commentId: string, bodyMarkdown: string): Promise<void> {
+  const result = await api.mergeRequests.updateComment(owner.value, repoSlug.value, number.value, commentId, {
+    bodyMarkdown,
+  })
+  if (result.error) {
+    replyError.value = result.error
+    return
+  }
+  await loadAll()
+}
+
+async function deleteOverviewComment(commentId: string): Promise<void> {
+  const result = await api.mergeRequests.deleteComment(owner.value, repoSlug.value, number.value, commentId)
+  if (result.error) {
+    replyError.value = result.error
+    return
+  }
+  await loadAll()
+}
+
 onMounted(() => {
   void loadAll()
 })
@@ -243,9 +303,10 @@ onMounted(() => {
           {{ mr.title }}
         </h1>
         <div class="flex flex-wrap items-center gap-2">
-          <UBadge variant="subtle">
-            {{ mr.status }}
-          </UBadge>
+          <CollaborationStatusBadge
+            :label="mr.status"
+            :color="statusColor(mr.status)"
+          />
           <span class="text-xs text-[var(--ogb-text-muted)]">{{ mr.sourceRef }} → {{ mr.targetRef }}</span>
         </div>
       </header>
@@ -276,30 +337,30 @@ onMounted(() => {
                 >
                   {{ t('repo.mergeRequests.noComments') }}
                 </p>
-                <CollaborationThread
-                  v-for="comment in overviewComments.filter(c => !c.parentCommentId)"
+                <CollaborationFlatComment
+                  v-for="comment in overviewComments.filter(c => !c.parentCommentId && !c.isDeleted)"
                   :key="comment.id"
-                  :thread="asThread(comment)"
-                  :owner="owner"
-                  :repo-slug="repoSlug"
-                  :member-label="(_userId, preferred) => preferred ?? 'unknown'"
-                  :can-resolve="auth.isAuthenticated"
-                  :can-reply="auth.isAuthenticated"
-                  :resolved-label="t('repo.discussions.subThreadResolved')"
-                  :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
-                  @reply="(body, anchor) => replyToComment(comment.id, body, anchor ? {
-                    headCommitSha: anchor.commitSha,
-                    filePath: anchor.filePath,
-                    lineNumber: anchor.line,
-                    diffSide: 'new',
-                  } : null)"
-                  @resolve="resolveComment(comment.id)"
-                  @unresolve="unresolveComment(comment.id)"
+                  :id="comment.id"
+                  :author="{ userId: comment.authorUserId, username: comment.authorUsername }"
+                  :body-markdown="comment.bodyMarkdown"
+                  :created-at="comment.createdAt"
+                  :edited-at="comment.editedAt"
+                  :member-label="memberLabel"
+                  :can-edit="canEditComment(comment)"
+                  :can-delete="canDeleteComment(comment)"
+                  :edited-label="t('repo.mergeRequests.editedComment')"
+                  @edit="body => editOverviewComment(comment.id, body)"
+                  @delete="deleteOverviewComment(comment.id)"
                 />
 
-                <div class="space-y-2 border-t pt-3" style="border-color: var(--ogb-border);">
+                <div
+                  v-if="auth.isAuthenticated"
+                  class="space-y-2 border-t pt-3"
+                  style="border-color: var(--ogb-border);"
+                >
                   <CollaborationMarkdownEditor
                     v-model="commentBody"
+                    :members="members"
                     :placeholder="t('repo.mergeRequests.commentPlaceholder')"
                     min-height="5rem"
                   />
@@ -310,6 +371,12 @@ onMounted(() => {
                     {{ t('repo.mergeRequests.postComment') }}
                   </UButton>
                 </div>
+                <p
+                  v-else
+                  class="text-sm text-[var(--ogb-text-muted)]"
+                >
+                  {{ t('repo.discussions.signInToComment') }}
+                </p>
               </div>
             </UCard>
           </section>
@@ -389,7 +456,8 @@ onMounted(() => {
                           :thread="asThread(comment)"
                           :owner="owner"
                           :repo-slug="repoSlug"
-                          :member-label="(_userId, preferred) => preferred ?? 'unknown'"
+                          :member-label="memberLabel"
+                          :members="members"
                           :can-resolve="auth.isAuthenticated"
                           :can-reply="auth.isAuthenticated"
                           :resolved-label="t('repo.discussions.subThreadResolved')"

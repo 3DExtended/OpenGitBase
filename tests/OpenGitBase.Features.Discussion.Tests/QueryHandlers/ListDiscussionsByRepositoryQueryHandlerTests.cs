@@ -55,7 +55,7 @@ public class ListDiscussionsByRepositoryQueryHandlerTests
         );
     }
 
-    private static async Task SeedDiscussionAsync(
+    private static Task SeedDiscussionAsync(
         OpenGitBase.Common.Data.OpenGitBaseDbContext context,
         int number,
         DiscussionStatus status,
@@ -76,6 +76,6 @@ public class ListDiscussionsByRepositoryQueryHandlerTests
                 UpdatedAt = updatedAt,
             }
         );
-        await context.SaveChangesAsync().ConfigureAwait(false);
+        return context.SaveChangesAsync();
     }
 }

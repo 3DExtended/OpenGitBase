@@ -32,6 +32,8 @@
     <ProjectReference Include="..\..\features\git-access-token\OpenGitBase.Features.GitAccessToken.Contracts\OpenGitBase.Features.GitAccessToken.Contracts.csproj" />
     <ProjectReference Include="..\..\features\discussion\OpenGitBase.Features.Discussion\OpenGitBase.Features.Discussion.csproj" />
     <ProjectReference Include="..\..\features\discussion\OpenGitBase.Features.Discussion.Contracts\OpenGitBase.Features.Discussion.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\merge-request\OpenGitBase.Features.MergeRequest\OpenGitBase.Features.MergeRequest.csproj" />
+    <ProjectReference Include="..\..\features\merge-request\OpenGitBase.Features.MergeRequest.Contracts\OpenGitBase.Features.MergeRequest.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

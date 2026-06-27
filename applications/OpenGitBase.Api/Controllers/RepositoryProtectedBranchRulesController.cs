@@ -201,7 +201,7 @@ public class RepositoryProtectedBranchRulesController : ControllerBase
             AllowedPushUserIds = request.AllowedPushUserIds.Select(UserId.From).ToList(),
             RequireMergeRequest = request.RequireMergeRequest,
             RequiredApprovalCount = request.RequiredApprovalCount,
-            MergeRoleThreshold = (int)request.MergeRoleThreshold,
+            MergeRoleThreshold = request.MergeRoleThreshold,
             ForcePushPolicy = request.ForcePushPolicy,
             DismissApprovalsOnPush = request.DismissApprovalsOnPush,
             LockedMergeStrategy = request.LockedMergeStrategy,

@@ -8,7 +8,7 @@ namespace OpenGitBase.Dispatcher;
 
 internal static class HttpServerHost
 {
-    public static async Task RunAsync(string[] arguments)
+    public static Task RunAsync(string[] arguments)
     {
         var builder = WebApplication.CreateBuilder(arguments);
 
@@ -32,6 +32,6 @@ internal static class HttpServerHost
         );
 
         app.Urls.Add($"http://0.0.0.0:{options.HttpPort}");
-        await app.RunAsync().ConfigureAwait(false);
+        return app.RunAsync();
     }
 }

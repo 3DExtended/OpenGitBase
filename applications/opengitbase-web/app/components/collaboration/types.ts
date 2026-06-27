@@ -39,3 +39,16 @@ export interface CollaborationThreadProps {
   outdatedLabel?: string
   replyCountLabel?: (count: number) => string
 }
+
+/** Flat comment card for overview-style threads without resolve/reply chrome. */
+export interface CollaborationFlatCommentProps {
+  id: string
+  author: CollaborationAuthor
+  bodyMarkdown: string
+  createdAt: string
+  editedAt?: string | null
+  memberLabel: (userId: string, preferredUsername?: string | null) => string
+  canEdit: boolean
+  canDelete: boolean
+  editedLabel?: string
+}

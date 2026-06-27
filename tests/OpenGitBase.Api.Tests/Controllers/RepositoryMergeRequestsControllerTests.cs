@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Models.StorageContent;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Discussion.Contracts;
+using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.RepositoryMember.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Api.Tests.Controllers;
@@ -21,10 +25,10 @@ public class RepositoryMergeRequestsControllerTests
         var repository = CreateRepository(isPrivate: false);
         var controller = CreateController(repository, authenticatedUserId: null);
 
-        var result = await controller.List("owner", "repo", CancellationToken.None);
+        var result = await controller.List("owner", "repo", null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
+        Assert.IsAssignableFrom<IReadOnlyList<MergeRequestDto>>(ok.Value);
     }
 
     [Fact]
@@ -33,7 +37,7 @@ public class RepositoryMergeRequestsControllerTests
         var repository = CreateRepository(isPrivate: true);
         var controller = CreateController(repository, authenticatedUserId: null);
 
-        var result = await controller.List("owner", "repo", CancellationToken.None);
+        var result = await controller.List("owner", "repo", null, CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
@@ -45,7 +49,7 @@ public class RepositoryMergeRequestsControllerTests
         var repository = CreateRepository(isPrivate: true);
         var controller = CreateController(repository, userId, memberRole: null);
 
-        var result = await controller.List("owner", "repo", CancellationToken.None);
+        var result = await controller.List("owner", "repo", null, CancellationToken.None);
 
         Assert.IsType<ForbidResult>(result);
     }
@@ -61,7 +65,7 @@ public class RepositoryMergeRequestsControllerTests
             memberRole: RepositoryRole.Reader
         );
 
-        var result = await controller.List("owner", "repo", CancellationToken.None);
+        var result = await controller.List("owner", "repo", null, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
     }
@@ -75,7 +79,12 @@ public class RepositoryMergeRequestsControllerTests
         var result = await controller.Create(
             "owner",
             "repo",
-            new CreateMergeRequestRequest { Title = "Test" },
+            new CreateMergeRequestRequest
+            {
+                Title = "Test",
+                SourceRef = "feature/a",
+                TargetRef = "main",
+            },
             CancellationToken.None
         );
 
@@ -83,10 +92,39 @@ public class RepositoryMergeRequestsControllerTests
         Assert.NotNull(unauthorized.Value);
     }
 
+    [Fact]
+    public async Task Create_RejectsSourceNotAhead()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(
+            repository,
+            userId,
+            memberRole: RepositoryRole.Writer,
+            aheadCount: 0
+        );
+
+        var result = await controller.Create(
+            "owner",
+            "repo",
+            new CreateMergeRequestRequest
+            {
+                Title = "Test",
+                SourceRef = "feature/a",
+                TargetRef = "main",
+            },
+            CancellationToken.None
+        );
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.NotNull(badRequest.Value);
+    }
+
     private static RepositoryMergeRequestsController CreateController(
         RepositoryDto repository,
         UserId? authenticatedUserId,
-        RepositoryRole? memberRole = RepositoryRole.Reader
+        RepositoryRole? memberRole = RepositoryRole.Reader,
+        int aheadCount = 3
     )
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
@@ -120,6 +158,47 @@ public class RepositoryMergeRequestsControllerTests
             .RunQueryAsync(Arg.Any<IsRepositoryUserBlockedQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(false));
 
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<ListMergeRequestsByRepositoryQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Option.From<IReadOnlyList<MergeRequestDto>>([]));
+
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        storageContentClient
+            .ResolveRefAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                call =>
+                {
+                    var refName = call.ArgAt<string>(3);
+                    return Task.FromResult<StorageContentResolveRefPayload?>(
+                        new StorageContentResolveRefPayload
+                        {
+                            CommitSha = refName.Contains("main", StringComparison.OrdinalIgnoreCase)
+                                ? "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                                : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        }
+                    );
+                }
+            );
+        storageContentClient
+            .GetAheadCountAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new StorageContentAheadCountPayload { AheadCount = aheadCount });
+
         var contentAuth = new RepositoryContentAuthorizationService(
             queryProcessor,
             CreateHttpContextAccessor(authenticatedUserId)
@@ -130,8 +209,46 @@ public class RepositoryMergeRequestsControllerTests
             CreateHttpContextAccessor(authenticatedUserId)
         );
         var authorization = new MergeRequestAuthorizationService(discussionAuth);
+        var refService = new MergeRequestRefService(
+            queryProcessor,
+            storageContentClient,
+            new WebReadReplicaSelector()
+        );
+        var mergeService = new MergeRequestMergeService(
+            queryProcessor,
+            storageContentClient,
+            refService,
+            new PlatformMergeIdentityOptions { AccessToken = "platform-token" }
+        );
 
-        return new RepositoryMergeRequestsController(authorization)
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryReplicationRoutingDto
+                    {
+                        Targets =
+                        [
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = Guid.NewGuid(),
+                                InternalHost = "127.0.0.1",
+                                InternalHttpPort = 8081,
+                            },
+                        ],
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From("token"));
+
+        return new RepositoryMergeRequestsController(
+            authorization,
+            refService,
+            mergeService,
+            queryProcessor
+        )
         {
             ControllerContext = new ControllerContext
             {
@@ -169,6 +286,7 @@ public class RepositoryMergeRequestsControllerTests
             Slug = "repo",
             Name = "Repo",
             IsPrivate = isPrivate,
+            PhysicalPath = "/srv/git/test.git",
         };
     }
 }

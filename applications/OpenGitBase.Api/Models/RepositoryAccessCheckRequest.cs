@@ -12,4 +12,8 @@ public class RepositoryAccessCheckRequest
     public long PackSizeBytes { get; set; }
 
     public long MaxFileBytes { get; set; }
+
+    public IReadOnlyList<GitRefUpdateRequest> RefUpdates { get; set; } = [];
+
+    public IReadOnlyList<GitPushCommitRequest> Commits { get; set; } = [];
 }

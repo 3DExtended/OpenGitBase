@@ -222,20 +222,20 @@ internal static class DiscussionProjection
         return (max ?? 0) + 1;
     }
 
-    public static async Task<DiscussionEntity?> FindByNumberAsync(
+    public static Task<DiscussionEntity?> FindByNumberAsync(
         OpenGitBaseDbContext context,
         Guid repositoryId,
         int number,
         CancellationToken cancellationToken
     )
     {
-        return await WithIncludes(
+        return WithIncludes(
                 context.Set<DiscussionEntity>().Where(d =>
                     d.RepositoryId == repositoryId && d.Number == number
                 )
             )
             .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+;
     }
 
     public static async Task EnsureSubscriptionAsync(

@@ -25,9 +25,17 @@ public sealed class GitSessionProxyService
         return $"{command} '{physicalPath}'";
     }
 
+    public Task<int> ProxyAsync(
+        RepositoryAccessCheckResponse accessCheck,
+        RepositoryOperation operation,
+        CancellationToken cancellationToken
+    ) =>
+        ProxyAsync(accessCheck, operation, null, cancellationToken);
+
     public async Task<int> ProxyAsync(
         RepositoryAccessCheckResponse accessCheck,
         RepositoryOperation operation,
+        byte[]? receivePackPrefix,
         CancellationToken cancellationToken
     )
     {
@@ -75,6 +83,13 @@ public sealed class GitSessionProxyService
             async () =>
             {
                 await using var remoteInput = command.CreateInputStream();
+                if (receivePackPrefix is { Length: > 0 })
+                {
+                    await remoteInput
+                        .WriteAsync(receivePackPrefix.AsMemory(0, receivePackPrefix.Length), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
                 await localInput
                     .CopyToAsync(remoteInput, cancellationToken)
                     .ConfigureAwait(false);

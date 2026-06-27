@@ -25,20 +25,26 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly ISshKeyService _sshKeyService;
+    private readonly GitPushEnforcementService _gitPushEnforcementService;
     private readonly ILogger<RepositoryAccessChecksController> _logger;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
+    private readonly PlatformMergeIdentityOptions _platformMergeOptions;
 
     public RepositoryAccessChecksController(
         IQueryProcessor queryProcessor,
         ISshKeyService sshKeyService,
+        GitPushEnforcementService gitPushEnforcementService,
         ILogger<RepositoryAccessChecksController> logger,
-        RepositoryStorageQuotaOptions quotaOptions
+        RepositoryStorageQuotaOptions quotaOptions,
+        PlatformMergeIdentityOptions platformMergeOptions
     )
     {
         _queryProcessor = queryProcessor;
         _sshKeyService = sshKeyService;
+        _gitPushEnforcementService = gitPushEnforcementService;
         _logger = logger;
         _quotaOptions = quotaOptions;
+        _platformMergeOptions = platformMergeOptions;
     }
 
     [HttpPost]
@@ -109,10 +115,24 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         var username = pathParts[0];
         var repositorySlug = pathParts[1];
 
+        var isPlatformMergeIdentity =
+            hasAccessToken
+            && !string.IsNullOrWhiteSpace(_platformMergeOptions.AccessToken)
+            && string.Equals(
+                request.AccessToken,
+                _platformMergeOptions.AccessToken,
+                StringComparison.Ordinal
+            );
+
         Option<UserId> authenticatingUserId;
         string? accessTokenScope = null;
 
-        if (hasPublicKey)
+        if (isPlatformMergeIdentity)
+        {
+            authenticatingUserId = Option.From(UserId.From(Guid.Empty));
+            accessTokenScope = GitAccessTokenScopes.Write;
+        }
+        else if (hasPublicKey)
         {
             string fingerprint;
             try
@@ -210,6 +230,41 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         var resolvedUserId = authenticatingUserId.Get().Value;
         var repositoryDto = repository.Get();
 
+        if (isPlatformMergeIdentity)
+        {
+            var platformResponse = new RepositoryAccessCheckResponse
+            {
+                Allowed = true,
+                ResolvedUserId = resolvedUserId,
+                RepositoryId = repositoryDto.Id.Value,
+                EffectiveRole = "PlatformMerge",
+            };
+            var platformPushDenied = await TryBuildDeniedPushResponseAsync(
+                request,
+                repositoryDto,
+                authenticatingUserId.Get(),
+                RepositoryRole.Owner,
+                isOwnerEquivalent: true,
+                isPlatformMergeIdentity: true,
+                platformResponse.EffectiveRole,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (platformPushDenied is not null)
+            {
+                return OkWithLog(request, platformPushDenied);
+            }
+
+            return OkWithLog(
+                request,
+                await ApplyStorageRoutingAsync(
+                    repositoryDto,
+                    platformResponse,
+                    request.Operation,
+                    cancellationToken
+                )
+            );
+        }
+
         if (request.Operation == RepositoryOperation.WriteGit && _quotaOptions.Enabled)
         {
             if (request.MaxFileBytes > 0 && request.MaxFileBytes > _quotaOptions.MaxFileBytes)
@@ -246,17 +301,33 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
         if (repositoryDto.OwnerUserId == authenticatingUserId.Get())
         {
+            var ownerResponse = new RepositoryAccessCheckResponse
+            {
+                Allowed = true,
+                ResolvedUserId = resolvedUserId,
+                RepositoryId = repositoryDto.Id.Value,
+                EffectiveRole = "Owner",
+            };
+            var pushDenied = await TryBuildDeniedPushResponseAsync(
+                request,
+                repositoryDto,
+                authenticatingUserId.Get(),
+                RepositoryRole.Owner,
+                isOwnerEquivalent: true,
+                isPlatformMergeIdentity: false,
+                ownerResponse.EffectiveRole,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (pushDenied is not null)
+            {
+                return OkWithLog(request, pushDenied);
+            }
+
             return OkWithLog(
                 request,
                 await ApplyStorageRoutingAsync(
                     repositoryDto,
-                    new RepositoryAccessCheckResponse
-                    {
-                        Allowed = true,
-                        ResolvedUserId = resolvedUserId,
-                        RepositoryId = repositoryDto.Id.Value,
-                        EffectiveRole = "Owner",
-                    },
+                    ownerResponse,
                     request.Operation,
                     cancellationToken
                 )
@@ -284,6 +355,21 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 if (!organizationAccess.Allowed)
                 {
                     return OkWithLog(request, organizationAccess);
+                }
+
+                var orgPushDenied = await TryBuildDeniedPushResponseAsync(
+                    request,
+                    repositoryDto,
+                    authenticatingUserId.Get(),
+                    RepositoryRole.Writer,
+                    isOwnerEquivalent: organizationAccess.EffectiveRole == "Owner",
+                    isPlatformMergeIdentity,
+                    organizationAccess.EffectiveRole,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                if (orgPushDenied is not null)
+                {
+                    return OkWithLog(request, orgPushDenied);
                 }
 
                 return OkWithLog(
@@ -357,6 +443,21 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             if (!writeResponse.Allowed)
             {
                 return OkWithLog(request, writeResponse);
+            }
+
+            var memberPushDenied = await TryBuildDeniedPushResponseAsync(
+                request,
+                repositoryDto,
+                authenticatingUserId.Get(),
+                role,
+                isOwnerEquivalent: false,
+                isPlatformMergeIdentity,
+                effectiveRole,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (memberPushDenied is not null)
+            {
+                return OkWithLog(request, memberPushDenied);
             }
 
             return OkWithLog(
@@ -471,6 +572,50 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         return membership.Get().Role == OrganizationMemberRole.Owner
             ? RepositoryRole.Writer
             : RepositoryRole.Reader;
+    }
+
+    private async Task<RepositoryAccessCheckResponse?> TryBuildDeniedPushResponseAsync(
+        RepositoryAccessCheckRequest request,
+        RepositoryDto repositoryDto,
+        UserId userId,
+        RepositoryRole role,
+        bool isOwnerEquivalent,
+        bool isPlatformMergeIdentity,
+        string? effectiveRole,
+        CancellationToken cancellationToken
+    )
+    {
+        if (request.Operation != RepositoryOperation.WriteGit || request.RefUpdates.Count == 0)
+        {
+            return null;
+        }
+
+        var pushResult = await _gitPushEnforcementService
+            .EvaluateAsync(
+                repositoryDto,
+                userId,
+                role,
+                isOwnerEquivalent,
+                isPlatformMergeIdentity,
+                request.RefUpdates,
+                request.Commits,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (pushResult.Allowed)
+        {
+            return null;
+        }
+
+        return new RepositoryAccessCheckResponse
+        {
+            Allowed = false,
+            ResolvedUserId = userId.Value,
+            RepositoryId = repositoryDto.Id.Value,
+            EffectiveRole = effectiveRole,
+            Reason = pushResult.Reason,
+        };
     }
 
     private async Task<RepositoryAccessCheckResponse> ApplyStorageRoutingAsync(

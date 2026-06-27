@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenGitBase.Features.MergeRequest</RootNamespace>
+    <InternalsVisibleTo>OpenGitBase.Features.MergeRequest.Tests</InternalsVisibleTo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="7.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenGitBase.Features.MergeRequest.Contracts\OpenGitBase.Features.MergeRequest.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\discussion\OpenGitBase.Features.Discussion\OpenGitBase.Features.Discussion.csproj" />
+    <ProjectReference Include="..\..\discussion\OpenGitBase.Features.Discussion.Contracts\OpenGitBase.Features.Discussion.Contracts.csproj" />
+    <ProjectReference Include="..\..\repository\OpenGitBase.Features.Repository\OpenGitBase.Features.Repository.csproj" />
+    <ProjectReference Include="..\..\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
+    <ProjectReference Include="..\..\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
+  </ItemGroup>
+
+</Project>

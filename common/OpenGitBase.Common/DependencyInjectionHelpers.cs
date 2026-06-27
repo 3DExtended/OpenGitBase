@@ -25,6 +25,7 @@ public static class DependencyInjectionHelpers
     )
     {
         var assemblies = featureAssemblies ?? Array.Empty<Assembly>();
+        services.AddSingleton(configuration);
         services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider(assemblies));
 
         var env = services.BuildServiceProvider().GetRequiredService<IHostEnvironment>();

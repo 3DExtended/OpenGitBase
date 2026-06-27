@@ -34,6 +34,30 @@ public sealed class RepositoryAccessCheckClient
             cancellationToken
         );
 
+    public Task<RepositoryAccessCheckResponse> CheckWithPublicKeyAsync(
+        string publicKey,
+        string repositoryPath,
+        RepositoryOperation operation,
+        IReadOnlyList<GitRefUpdate> refUpdates,
+        long packSizeBytes,
+        long maxFileBytes,
+        CancellationToken cancellationToken
+    ) =>
+        CheckAsync(
+            GitPushAccessCheckRequestFactory.Create(
+                new RepositoryAccessCheckRequest
+                {
+                    PublicKey = publicKey,
+                    RepositoryPath = repositoryPath,
+                    Operation = operation,
+                },
+                refUpdates,
+                packSizeBytes,
+                maxFileBytes
+            ),
+            cancellationToken
+        );
+
     public Task<RepositoryAccessCheckResponse> CheckWithTokenAsync(
         string accessToken,
         string repositoryPath,
@@ -50,7 +74,31 @@ public sealed class RepositoryAccessCheckClient
             cancellationToken
         );
 
-    private async Task<RepositoryAccessCheckResponse> CheckAsync(
+    public Task<RepositoryAccessCheckResponse> CheckWithTokenAsync(
+        string accessToken,
+        string repositoryPath,
+        RepositoryOperation operation,
+        IReadOnlyList<GitRefUpdate> refUpdates,
+        long packSizeBytes,
+        long maxFileBytes,
+        CancellationToken cancellationToken
+    ) =>
+        CheckAsync(
+            GitPushAccessCheckRequestFactory.Create(
+                new RepositoryAccessCheckRequest
+                {
+                    AccessToken = accessToken,
+                    RepositoryPath = repositoryPath,
+                    Operation = operation,
+                },
+                refUpdates,
+                packSizeBytes,
+                maxFileBytes
+            ),
+            cancellationToken
+        );
+
+    public async Task<RepositoryAccessCheckResponse> CheckAsync(
         RepositoryAccessCheckRequest request,
         CancellationToken cancellationToken
     )

@@ -918,23 +918,239 @@ function normalizeDiscussionLinkedMergeRequest(raw: Record<string, unknown>): Di
 }
 
 function normalizeProtectedBranchRule(raw: Record<string, unknown>): ProtectedBranchRule {
+  const pushRulesRaw = Array.isArray(raw.pushRules) ? raw.pushRules : []
+  const extractedPushRules = extractPushRulesFromPayload(pushRulesRaw)
+  const allowedPushRoles = Array.isArray(raw.allowedPushRoles)
+    ? raw.allowedPushRoles.map(String)
+    : decodeAllowedPushRoles(raw.allowedPushRoles)
+
   return {
     id: normalizeId(raw.id),
     pattern: String(raw.pattern ?? ''),
     blockDirectPush: Boolean(raw.blockDirectPush),
-    allowedPushRoles: Array.isArray(raw.allowedPushRoles) ? raw.allowedPushRoles.map(String) : [],
-    allowedPushUserIds: Array.isArray(raw.allowedPushUserIds) ? raw.allowedPushUserIds.map(normalizeId) : [],
-    requiredApprovals: Number(raw.requiredApprovals ?? 0),
-    mergeRole: String(raw.mergeRole ?? 'Writer'),
-    forcePushPolicy: String(raw.forcePushPolicy ?? 'Deny'),
+    allowedPushRoles,
+    allowedPushUserIds: Array.isArray(raw.allowedPushUserIds)
+      ? raw.allowedPushUserIds.map(item => normalizeId(item))
+      : [],
+    requiredApprovals: Number(raw.requiredApprovals ?? raw.requiredApprovalCount ?? 0),
+    mergeRole: typeof raw.mergeRole === 'string'
+      ? String(raw.mergeRole)
+      : decodeMergeRole(raw.mergeRoleThreshold),
+    forcePushPolicy: typeof raw.forcePushPolicy === 'string'
+      ? String(raw.forcePushPolicy)
+      : decodeForcePushPolicy(raw.forcePushPolicy),
     dismissApprovalsOnPush: Boolean(raw.dismissApprovalsOnPush ?? true),
-    lockedMergeStrategy: raw.lockedMergeStrategy ? String(raw.lockedMergeStrategy) : null,
+    lockedMergeStrategy: raw.lockedMergeStrategy == null
+      ? null
+      : decodeLockedMergeStrategy(raw.lockedMergeStrategy),
     pushRules: {
-      maxFileSizeBytes: raw.maxFileSizeBytes == null ? null : Number(raw.maxFileSizeBytes),
-      forbiddenPathGlobs: Array.isArray(raw.forbiddenPathGlobs) ? raw.forbiddenPathGlobs.map(String) : null,
-      commitMessageRegex: raw.commitMessageRegex ? String(raw.commitMessageRegex) : null,
-      requireDcoSignoff: Boolean(raw.requireDcoSignoff),
+      maxFileSizeBytes: raw.maxFileSizeBytes == null
+        ? extractedPushRules.maxFileSizeBytes
+        : Number(raw.maxFileSizeBytes),
+      forbiddenPathGlobs: Array.isArray(raw.forbiddenPathGlobs)
+        ? raw.forbiddenPathGlobs.map(String)
+        : extractedPushRules.forbiddenPathGlobs,
+      commitMessageRegex: raw.commitMessageRegex == null
+        ? extractedPushRules.commitMessageRegex
+        : String(raw.commitMessageRegex),
+      requireDcoSignoff: raw.requireDcoSignoff == null
+        ? extractedPushRules.requireDcoSignoff
+        : Boolean(raw.requireDcoSignoff),
     },
+  }
+}
+
+function decodeAllowedPushRoles(raw: unknown): string[] {
+  const flags = Number(raw ?? 0)
+  const roles: string[] = []
+  if (flags & 1) {
+    roles.push('Owner')
+  }
+  if (flags & 2) {
+    roles.push('Admin')
+  }
+  if (flags & 4) {
+    roles.push('Writer')
+  }
+  return roles
+}
+
+function encodeAllowedPushRoles(roles: string[]): number {
+  let flags = 0
+  for (const role of roles) {
+    if (role === 'Owner') {
+      flags |= 1
+    }
+    if (role === 'Admin') {
+      flags |= 2
+    }
+    if (role === 'Writer') {
+      flags |= 4
+    }
+  }
+  return flags
+}
+
+const MERGE_ROLE_TO_THRESHOLD: Record<string, number> = {
+  Reader: 1,
+  Writer: 2,
+  Admin: 3,
+  Owner: 4,
+}
+
+const MERGE_THRESHOLD_TO_ROLE: Record<number, string> = {
+  1: 'Reader',
+  2: 'Writer',
+  3: 'Admin',
+  4: 'Owner',
+}
+
+function decodeMergeRole(raw: unknown): string {
+  if (typeof raw === 'string') {
+    return raw
+  }
+  return MERGE_THRESHOLD_TO_ROLE[Number(raw ?? 2)] ?? 'Writer'
+}
+
+function encodeMergeRole(role: string): number {
+  return MERGE_ROLE_TO_THRESHOLD[role] ?? 2
+}
+
+const FORCE_PUSH_TO_VALUE: Record<string, number> = {
+  DenyAll: 0,
+  AllowAllowedPushers: 1,
+  PlatformOnly: 2,
+}
+
+const FORCE_PUSH_FROM_VALUE: Record<number, string> = {
+  0: 'DenyAll',
+  1: 'AllowAllowedPushers',
+  2: 'PlatformOnly',
+}
+
+function decodeForcePushPolicy(raw: unknown): string {
+  if (typeof raw === 'string') {
+    return raw
+  }
+  return FORCE_PUSH_FROM_VALUE[Number(raw ?? 0)] ?? 'DenyAll'
+}
+
+function encodeForcePushPolicy(policy: string): number {
+  return FORCE_PUSH_TO_VALUE[policy] ?? 0
+}
+
+const LOCKED_MERGE_TO_VALUE: Record<string, number> = {
+  MergeCommit: 0,
+  Squash: 1,
+  FastForward: 2,
+}
+
+function decodeLockedMergeStrategy(raw: unknown): string | null {
+  if (raw == null) {
+    return null
+  }
+  if (typeof raw === 'string') {
+    return raw
+  }
+  const reverse: Record<number, string> = {
+    0: 'MergeCommit',
+    1: 'Squash',
+    2: 'FastForward',
+  }
+  return reverse[Number(raw)] ?? null
+}
+
+function encodeLockedMergeStrategy(strategy: string | null | undefined): number | null {
+  if (!strategy) {
+    return null
+  }
+  return LOCKED_MERGE_TO_VALUE[strategy] ?? null
+}
+
+function extractPushRulesFromPayload(pushRules: unknown[]): ProtectedBranchRule['pushRules'] {
+  const result: ProtectedBranchRule['pushRules'] = {
+    maxFileSizeBytes: null,
+    forbiddenPathGlobs: [],
+    commitMessageRegex: null,
+    requireDcoSignoff: false,
+  }
+
+  for (const item of pushRules) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    const ruleType = Number(record.ruleType ?? record.RuleType ?? -1)
+    let config: Record<string, unknown> = {}
+    try {
+      config = JSON.parse(String(record.configJson ?? record.ConfigJson ?? '{}')) as Record<string, unknown>
+    }
+    catch {
+      config = {}
+    }
+
+    if (ruleType === 0 && config.maxBytes != null) {
+      result.maxFileSizeBytes = Number(config.maxBytes)
+    }
+    if (ruleType === 1 && Array.isArray(config.globs)) {
+      result.forbiddenPathGlobs = config.globs.map(String)
+    }
+    if (ruleType === 2 && config.regex != null) {
+      result.commitMessageRegex = String(config.regex)
+    }
+    if (ruleType === 3) {
+      result.requireDcoSignoff = Boolean(config.required)
+    }
+  }
+
+  return result
+}
+
+function buildPushRulesPayload(pushRules: ProtectedBranchRule['pushRules'] | undefined): Array<{ ruleType: number, configJson: string }> {
+  const payload: Array<{ ruleType: number, configJson: string }> = []
+  if (!pushRules) {
+    return payload
+  }
+  if (pushRules.maxFileSizeBytes != null && pushRules.maxFileSizeBytes > 0) {
+    payload.push({
+      ruleType: 0,
+      configJson: JSON.stringify({ maxBytes: pushRules.maxFileSizeBytes }),
+    })
+  }
+  if (pushRules.forbiddenPathGlobs?.length) {
+    payload.push({
+      ruleType: 1,
+      configJson: JSON.stringify({ globs: pushRules.forbiddenPathGlobs }),
+    })
+  }
+  if (pushRules.commitMessageRegex) {
+    payload.push({
+      ruleType: 2,
+      configJson: JSON.stringify({ regex: pushRules.commitMessageRegex }),
+    })
+  }
+  if (pushRules.requireDcoSignoff) {
+    payload.push({
+      ruleType: 3,
+      configJson: JSON.stringify({ required: true }),
+    })
+  }
+  return payload
+}
+
+function serializeProtectedBranchRuleRequest(body: Partial<ProtectedBranchRule>): Record<string, unknown> {
+  return {
+    pattern: body.pattern ?? '',
+    blockDirectPush: body.blockDirectPush ?? true,
+    allowedPushRoles: encodeAllowedPushRoles(body.allowedPushRoles ?? ['Admin']),
+    allowedPushUserIds: body.allowedPushUserIds ?? [],
+    requireMergeRequest: true,
+    requiredApprovalCount: body.requiredApprovals ?? 0,
+    mergeRoleThreshold: encodeMergeRole(body.mergeRole ?? 'Writer'),
+    forcePushPolicy: encodeForcePushPolicy(body.forcePushPolicy ?? 'DenyAll'),
+    dismissApprovalsOnPush: body.dismissApprovalsOnPush ?? true,
+    lockedMergeStrategy: encodeLockedMergeStrategy(body.lockedMergeStrategy),
+    pushRules: buildPushRulesPayload(body.pushRules),
   }
 }
 
@@ -1900,8 +2116,13 @@ export function createApi(baseUrl: string) {
 
     repositorySettings: {
       getDefaultBranch: async (owner: string, slug: string) => {
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<{ defaultBranchName: string | null }>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
         const result = await request<Record<string, unknown>>(
-          `${discussionSlugPath(owner, slug)}/settings/default-branch`,
+          `/repository/${repositoryId}/settings/default-branch`,
         )
         if (!result.data) {
           return { ...result, data: null } satisfies ApiResult<{ defaultBranchName: string | null }>
@@ -1916,15 +2137,26 @@ export function createApi(baseUrl: string) {
         }
       },
 
-      updateDefaultBranch: (owner: string, slug: string, body: { defaultBranchName: string }) =>
-        request<null>(
-          `${discussionSlugPath(owner, slug)}/settings/default-branch`,
+      updateDefaultBranch: async (owner: string, slug: string, body: { defaultBranchName: string }) => {
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<{ defaultBranchName: string | null }>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
+        return request<{ defaultBranchName: string | null }>(
+          `/repository/${repositoryId}/settings/default-branch`,
           { method: 'PATCH', body: JSON.stringify(body) },
-        ),
+        )
+      },
 
       listProtectedBranchRules: async (owner: string, slug: string) => {
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<ProtectedBranchRule[]>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
         const result = await request<Record<string, unknown>[]>(
-          `${discussionSlugPath(owner, slug)}/protected-branch-rules`,
+          `/repository/${repositoryId}/protected-branch-rules`,
         )
         return {
           ...result,
@@ -1933,32 +2165,65 @@ export function createApi(baseUrl: string) {
       },
 
       createProtectedBranchRule: async (owner: string, slug: string, body: Partial<ProtectedBranchRule>) => {
-        const result = await request<Record<string, unknown>>(
-          `${discussionSlugPath(owner, slug)}/protected-branch-rules`,
-          { method: 'POST', body: JSON.stringify(body) },
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<ProtectedBranchRule>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
+        const result = await request<unknown>(
+          `/repository/${repositoryId}/protected-branch-rules`,
+          { method: 'POST', body: JSON.stringify(serializeProtectedBranchRuleRequest(body)) },
         )
+        if (result.error) {
+          return { ...result, data: null } satisfies ApiResult<ProtectedBranchRule>
+        }
+        const listResult = await request<Record<string, unknown>[]>(
+          `/repository/${repositoryId}/protected-branch-rules`,
+        )
+        const createdId = typeof result.data === 'string'
+          ? normalizeId(result.data)
+          : normalizeId((result.data as Record<string, unknown> | null)?.value ?? result.data)
+        const created = listResult.data?.find(item => normalizeId(item.id) === createdId)
         return {
           ...result,
-          data: result.data ? normalizeProtectedBranchRule(result.data) : null,
+          data: created ? normalizeProtectedBranchRule(created) : null,
         }
       },
 
       updateProtectedBranchRule: async (owner: string, slug: string, ruleId: string, body: Partial<ProtectedBranchRule>) => {
-        const result = await request<Record<string, unknown>>(
-          `${discussionSlugPath(owner, slug)}/protected-branch-rules/${ruleId}`,
-          { method: 'PATCH', body: JSON.stringify(body) },
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<ProtectedBranchRule>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
+        const result = await request<null>(
+          `/repository/${repositoryId}/protected-branch-rules/${ruleId}`,
+          { method: 'PUT', body: JSON.stringify(serializeProtectedBranchRuleRequest(body)) },
         )
+        if (result.error) {
+          return { ...result, data: null } satisfies ApiResult<ProtectedBranchRule>
+        }
+        const listResult = await request<Record<string, unknown>[]>(
+          `/repository/${repositoryId}/protected-branch-rules`,
+        )
+        const updated = listResult.data?.find(item => normalizeId(item.id) === ruleId)
         return {
           ...result,
-          data: result.data ? normalizeProtectedBranchRule(result.data) : null,
+          data: updated ? normalizeProtectedBranchRule(updated) : null,
         }
       },
 
-      deleteProtectedBranchRule: (owner: string, slug: string, ruleId: string) =>
-        request<null>(
-          `${discussionSlugPath(owner, slug)}/protected-branch-rules/${ruleId}`,
+      deleteProtectedBranchRule: async (owner: string, slug: string, ruleId: string) => {
+        const repoResult = await request<Record<string, unknown>>(`/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`)
+        if (!repoResult.data) {
+          return repoResult satisfies ApiResult<null>
+        }
+        const repositoryId = normalizeId(repoResult.data.id)
+        return request<null>(
+          `/repository/${repositoryId}/protected-branch-rules/${ruleId}`,
           { method: 'DELETE' },
-        ),
+        )
+      },
     },
 
     admin: {
