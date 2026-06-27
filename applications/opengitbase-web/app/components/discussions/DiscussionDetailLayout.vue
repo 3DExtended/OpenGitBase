@@ -2,7 +2,6 @@
 import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
-import DiscussionRichEditor from '~/components/discussions/DiscussionRichEditor.vue'
 import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
 
 defineProps<{
@@ -65,7 +64,7 @@ defineProps<{
           </header>
 
           <UCard v-if="ctx.discussion.body">
-            <RepoMarkdown :source="ctx.discussion.body" />
+            <CollaborationRenderedBody :source="ctx.discussion.body" />
           </UCard>
 
           <section class="space-y-4">
@@ -155,7 +154,7 @@ defineProps<{
                 @click.prevent="ctx.commentAnchor = null"
               />
             </div>
-            <DiscussionRichEditor
+            <CollaborationMarkdownEditor
               v-model="ctx.commentBody"
               :members="ctx.members"
               :placeholder="ctx.t('repo.discussions.commentPlaceholder')"
@@ -259,6 +258,32 @@ defineProps<{
           <p class="mt-1 text-xs">
             <RelativeTime :iso="ctx.discussion.updatedAt" />
           </p>
+        </div>
+        <div>
+          <p class="text-xs uppercase text-[var(--ogb-text-muted)]">
+            {{ ctx.t('repo.discussions.linkedMergeRequests') }}
+          </p>
+          <p
+            v-if="!ctx.linkedMergeRequests.length"
+            class="mt-1 text-xs text-[var(--ogb-text-muted)]"
+          >
+            {{ ctx.t('repo.discussions.noLinkedMergeRequests') }}
+          </p>
+          <div
+            v-else
+            class="mt-2 space-y-1"
+          >
+            <NuxtLink
+              v-for="mergeRequest in ctx.linkedMergeRequests"
+              :key="`${mergeRequest.number}-${mergeRequest.relationshipType}`"
+              :to="`/${ctx.owner}/${ctx.repoSlug}/merge-requests/${mergeRequest.number}`"
+              class="block rounded border px-2 py-1 text-xs"
+              style="border-color: var(--ogb-border);"
+            >
+              !{{ mergeRequest.number }} {{ mergeRequest.title }}
+              <span class="text-[var(--ogb-text-muted)]"> · {{ mergeRequest.relationshipType }}</span>
+            </NuxtLink>
+          </div>
         </div>
         <div
           v-if="ctx.isWriterPlus && !ctx.isClosed"
