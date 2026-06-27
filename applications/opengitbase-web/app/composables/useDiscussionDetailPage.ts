@@ -2,6 +2,7 @@ import type {
   CommentAnchorInput,
   Discussion,
   DiscussionComment,
+  DiscussionLinkedMergeRequest,
   DiscussionStatus,
   RepositoryMember,
 } from '~/utils/api'
@@ -53,6 +54,7 @@ export function useDiscussionDetailPage() {
     showAttachModal: false,
     resolving: false,
     dismissing: false,
+    linkedMergeRequests: [] as DiscussionLinkedMergeRequest[],
   })
 
   const effectiveRepositoryRole = computed(() =>
@@ -157,12 +159,22 @@ export function useDiscussionDetailPage() {
       ctx.comments = result.comments
       ctx.commentsError = result.commentsError
       ctx.viewerEffectiveRole = parseRepositoryRole(result.discussion?.viewerEffectiveRole)
+      await loadLinkedMergeRequests()
     }
     finally {
       ctx.pageLoading = false
       ctx.commentsLoading = false
       queueCommentHashScroll()
     }
+  }
+
+  async function loadLinkedMergeRequests(): Promise<void> {
+    const result = await api.discussions.listLinkedMergeRequests(
+      owner.value,
+      repoSlug.value,
+      discussionNumber.value,
+    )
+    ctx.linkedMergeRequests = result.data ?? []
   }
 
   function queueCommentHashScroll(): void {
