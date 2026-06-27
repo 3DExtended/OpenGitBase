@@ -20,5 +20,6 @@ public class RepositoryEntityConfiguration : IEntityTypeConfiguration<Entities.R
         builder.Property(entity => entity.PrimaryWatermark).IsRequired();
         builder.Property(entity => entity.ReplicationState).IsRequired();
         builder.HasIndex(e => new { e.Slug, e.OwnerUserId }).IsUnique();
+        builder.Property(entity => entity.DefaultBranchName).HasMaxLength(256);
     }
 }

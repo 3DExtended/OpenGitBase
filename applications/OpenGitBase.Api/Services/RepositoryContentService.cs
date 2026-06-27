@@ -80,11 +80,35 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             })
             .ToList();
 
+        var repository = access.Repository;
+        if (string.IsNullOrWhiteSpace(repository.DefaultBranchName) && branches.Count > 0)
+        {
+            var inferred = DefaultRefResolver.Resolve(branches);
+            if (!string.IsNullOrWhiteSpace(inferred))
+            {
+                var updated = await _queryProcessor
+                    .RunQueryAsync(
+                        new UpdateRepositoryDefaultBranchQuery
+                        {
+                            RepositoryId = repository.Id,
+                            DefaultBranchName = inferred,
+                            AllowMissingBranch = true,
+                        },
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (updated.IsSome)
+                {
+                    repository = updated.Get();
+                }
+            }
+        }
+
         var response = new RepositoryContentRefsResponse
         {
             Branches = branches,
             Tags = tags,
-            DefaultRef = DefaultRefResolver.Resolve(branches),
+            DefaultRef = DefaultRefResolver.Resolve(branches, repository.DefaultBranchName),
             IsEmpty = payload.IsEmpty,
             ReplicationLag = context.ReplicationLag,
         };
@@ -381,6 +405,25 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
                 ReplicationLag = context.ReplicationLag,
             }
         );
+    }
+
+    public async Task<IReadOnlyList<string>> ListBranchNamesAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var context = await LoadStorageContextAsync(repository, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return [];
+        }
+
+        var payload = await _storageContentClient
+            .GetRefsAsync(context.Target, context.ApiToken, context.PhysicalPath, cancellationToken)
+            .ConfigureAwait(false);
+
+        return payload?.Branches.Select(branch => branch.Name).ToList() ?? [];
     }
 
     private async Task<StorageContentContext?> LoadStorageContextAsync(

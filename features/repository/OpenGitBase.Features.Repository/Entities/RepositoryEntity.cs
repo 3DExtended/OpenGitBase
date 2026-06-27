@@ -29,4 +29,6 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
     public bool IsPrivate { get; set; } = false;
 
     public long StorageBytesUsed { get; set; }
+
+    public string? DefaultBranchName { get; set; }
 }

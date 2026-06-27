@@ -19,6 +19,7 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
             .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(dest => dest.DefaultBranchName, src => src.DefaultBranchName)
             .Map(
                 dest => dest.StorageNodeId,
                 src =>
@@ -36,6 +37,7 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
             .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(dest => dest.DefaultBranchName, src => src.DefaultBranchName)
             .Map(
                 dest => dest.StorageNodeId,
                 src => src.StorageNodeId != null ? src.StorageNodeId.Value : (Guid?)null

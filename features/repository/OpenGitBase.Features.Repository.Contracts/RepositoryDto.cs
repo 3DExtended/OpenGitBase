@@ -23,4 +23,6 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
     public string OwnerKind { get; set; } = "user";
 
     public string OwnerSlug { get; set; } = string.Empty;
+
+    public string? DefaultBranchName { get; set; }
 }
