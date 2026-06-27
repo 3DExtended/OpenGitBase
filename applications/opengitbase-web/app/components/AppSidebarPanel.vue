@@ -82,6 +82,12 @@ const repoNavItems = computed(() => {
       active: matchesSidebarRoute(route.path, `/${owner}/${repo}/discussions`),
     },
     {
+      label: t('repo.mergeRequests.title'),
+      to: `/${owner}/${repo}/merge-requests`,
+      icon: 'i-lucide-git-pull-request-arrow',
+      active: matchesSidebarRoute(route.path, `/${owner}/${repo}/merge-requests`),
+    },
+    {
       label: t('repo.settings.title'),
       to: `/${owner}/${repo}/settings`,
       icon: 'i-lucide-settings',

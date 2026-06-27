@@ -1,5 +1,5 @@
-import { normalizeCommentId } from '~/utils/discussionCommentHash'
-import { normalizeRepositoryMemberRole } from '~/utils/discussionPermissions'
+import { normalizeCommentId } from './discussionCommentHash'
+import { normalizeRepositoryMemberRole } from './discussionPermissions'
 
 export interface ApiResult<T> {
   data: T | null
@@ -330,6 +330,124 @@ export interface DiscussionComment {
   anchor?: CommentAnchor | null
 }
 
+export type MergeRequestStatus = 'Draft' | 'Open' | 'Approved' | 'Merged' | 'Closed'
+export type MergeRequestLinkType = 'closes' | 'related' | 'implements'
+export type DiffSide = 'new' | 'old'
+
+export interface MergeRequest {
+  id: string
+  repositoryId: string
+  number: number
+  title: string
+  body: string | null
+  status: MergeRequestStatus
+  isDraft: boolean
+  creatorUserId: string
+  creatorUsername?: string | null
+  sourceRef: string
+  targetRef: string
+  sourceHeadSha: string
+  targetBaseSha: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MergeRequestCommentAnchor {
+  headCommitSha: string
+  filePath: string
+  lineNumber: number
+  diffSide: DiffSide
+}
+
+export interface MergeRequestComment {
+  id: string
+  mergeRequestId: string
+  authorUserId: string
+  authorUsername?: string | null
+  bodyMarkdown: string
+  createdAt: string
+  updatedAt: string
+  editedAt?: string | null
+  deletedAt?: string | null
+  isDeleted: boolean
+  parentCommentId?: string | null
+  isResolved: boolean
+  isOutdated: boolean
+  replyCount: number
+  replies: MergeRequestComment[]
+  anchor?: MergeRequestCommentAnchor | null
+}
+
+export interface MergeRequestDiffLine {
+  oldLineNumber: number | null
+  newLineNumber: number | null
+  type: 'context' | 'add' | 'remove'
+  content: string
+}
+
+export interface MergeRequestDiffHunk {
+  header: string
+  lines: MergeRequestDiffLine[]
+}
+
+export interface MergeRequestDiffFile {
+  filePath: string
+  oldPath?: string | null
+  changeType: string
+  hunks: MergeRequestDiffHunk[]
+}
+
+export interface MergeRequestChanges {
+  files: MergeRequestDiffFile[]
+}
+
+export interface MergeRequestCommit {
+  sha: string
+  shortSha: string
+  message: string
+  authorName: string
+  authoredAt: string
+}
+
+export interface MergeRequestDiscussionLink {
+  discussionNumber: number
+  relationshipType: MergeRequestLinkType
+  discussionTitle?: string | null
+  discussionStatus?: string | null
+}
+
+export interface DiscussionLinkedMergeRequest {
+  number: number
+  title: string
+  status: MergeRequestStatus
+  relationshipType: MergeRequestLinkType
+}
+
+export interface BranchAheadSummary {
+  aheadCount: number
+  defaultRef: string | null
+  hasActiveMergeRequest: boolean
+}
+
+export interface ProtectedBranchRule {
+  id: string
+  pattern: string
+  blockDirectPush: boolean
+  allowedPushRoles: string[]
+  allowedPushUserIds: string[]
+  requiredApprovals: number
+  mergeRole: string
+  forcePushPolicy: string
+  dismissApprovalsOnPush: boolean
+  lockedMergeStrategy?: string | null
+  pushRules: {
+    maxFileSizeBytes?: number | null
+    forbiddenPathGlobs?: string[] | null
+    commitMessageRegex?: string | null
+    requireDcoSignoff?: boolean
+  }
+}
+
 export type NotificationEventType =
   | 'NewComment'
   | 'Mention'
@@ -338,13 +456,22 @@ export type NotificationEventType =
   | 'Dismissed'
   | 'Reopened'
   | 'SubThreadResolved'
+  | 'MergeRequestComment'
+  | 'MergeRequestMention'
+  | 'MergeRequestApproved'
+  | 'MergeRequestApprovalDismissed'
+  | 'MergeRequestMerged'
+  | 'MergeRequestClosed'
+  | 'MergeRequestReviewThreadResolved'
 
 export interface Notification {
   id: string
   userId: string
-  discussionId: string
-  repositoryId: string
-  discussionNumber: number
+  discussionId?: string | null
+  mergeRequestId?: string | null
+  repositoryId?: string | null
+  discussionNumber?: number | null
+  mergeRequestNumber?: number | null
   commentId?: string | null
   ownerSlug: string
   repositorySlug: string
@@ -654,6 +781,163 @@ function normalizeDiscussionComment(raw: Record<string, unknown>): DiscussionCom
   }
 }
 
+const MERGE_REQUEST_STATUS_MAP: Record<number, MergeRequestStatus> = {
+  0: 'Draft',
+  1: 'Open',
+  2: 'Approved',
+  3: 'Merged',
+  4: 'Closed',
+}
+
+function normalizeMergeRequestStatus(raw: unknown): MergeRequestStatus {
+  if (typeof raw === 'string' && ['Draft', 'Open', 'Approved', 'Merged', 'Closed'].includes(raw)) {
+    return raw as MergeRequestStatus
+  }
+  return MERGE_REQUEST_STATUS_MAP[Number(raw)] ?? 'Open'
+}
+
+function normalizeMergeRequest(raw: Record<string, unknown>): MergeRequest {
+  return {
+    id: normalizeId(raw.id),
+    repositoryId: normalizeId(raw.repositoryId),
+    number: Number(raw.number ?? 0),
+    title: String(raw.title ?? raw.name ?? ''),
+    body: raw.body == null ? null : String(raw.body),
+    status: normalizeMergeRequestStatus(raw.status),
+    isDraft: Boolean(raw.isDraft ?? (normalizeMergeRequestStatus(raw.status) === 'Draft')),
+    creatorUserId: normalizeId(raw.creatorUserId ?? raw.authorUserId),
+    creatorUsername: raw.creatorUsername ? String(raw.creatorUsername) : null,
+    sourceRef: String(raw.sourceRef ?? ''),
+    targetRef: String(raw.targetRef ?? ''),
+    sourceHeadSha: String(raw.sourceHeadSha ?? ''),
+    targetBaseSha: String(raw.targetBaseSha ?? ''),
+    createdAt: String(raw.createdAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? ''),
+  }
+}
+
+function normalizeMergeRequestCommentAnchor(raw: unknown): MergeRequestCommentAnchor | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  return {
+    headCommitSha: String(record.headCommitSha ?? record.commitSha ?? ''),
+    filePath: String(record.filePath ?? ''),
+    lineNumber: Number(record.lineNumber ?? record.line ?? 0),
+    diffSide: String(record.diffSide ?? 'new') as DiffSide,
+  }
+}
+
+function normalizeMergeRequestComment(raw: Record<string, unknown>): MergeRequestComment {
+  const replies = Array.isArray(raw.replies)
+    ? raw.replies.map(item => normalizeMergeRequestComment(item as Record<string, unknown>))
+    : []
+  return {
+    id: normalizeId(raw.id),
+    mergeRequestId: normalizeId(raw.mergeRequestId),
+    authorUserId: normalizeId(raw.authorUserId),
+    authorUsername: raw.authorUsername ? String(raw.authorUsername) : null,
+    bodyMarkdown: String(raw.bodyMarkdown ?? raw.body ?? ''),
+    createdAt: String(raw.createdAt ?? ''),
+    updatedAt: String(raw.updatedAt ?? ''),
+    editedAt: raw.editedAt ? String(raw.editedAt) : null,
+    deletedAt: raw.deletedAt ? String(raw.deletedAt) : null,
+    isDeleted: Boolean(raw.isDeleted),
+    parentCommentId: raw.parentCommentId ? normalizeId(raw.parentCommentId) : null,
+    isResolved: Boolean(raw.isResolved),
+    isOutdated: Boolean(raw.isOutdated),
+    replyCount: Number(raw.replyCount ?? replies.length),
+    replies,
+    anchor: normalizeMergeRequestCommentAnchor(raw.anchor),
+  }
+}
+
+function normalizeMergeRequestChanges(raw: Record<string, unknown>): MergeRequestChanges {
+  const files = Array.isArray(raw.files)
+    ? raw.files.map((item) => {
+      const record = item as Record<string, unknown>
+      const hunks = Array.isArray(record.hunks)
+        ? record.hunks.map((hunkRaw) => {
+          const hunkRecord = hunkRaw as Record<string, unknown>
+          const lines = Array.isArray(hunkRecord.lines)
+            ? hunkRecord.lines.map((lineRaw) => {
+              const lineRecord = lineRaw as Record<string, unknown>
+              return {
+                oldLineNumber: lineRecord.oldLineNumber == null ? null : Number(lineRecord.oldLineNumber),
+                newLineNumber: lineRecord.newLineNumber == null ? null : Number(lineRecord.newLineNumber),
+                type: String(lineRecord.type ?? 'context') as MergeRequestDiffLine['type'],
+                content: String(lineRecord.content ?? ''),
+              }
+            })
+            : []
+          return {
+            header: String(hunkRecord.header ?? ''),
+            lines,
+          }
+        })
+        : []
+      return {
+        filePath: String(record.filePath ?? ''),
+        oldPath: record.oldPath == null ? null : String(record.oldPath),
+        changeType: String(record.changeType ?? ''),
+        hunks,
+      }
+    })
+    : []
+  return { files }
+}
+
+function normalizeMergeRequestCommit(raw: Record<string, unknown>): MergeRequestCommit {
+  const sha = String(raw.sha ?? '')
+  return {
+    sha,
+    shortSha: String(raw.shortSha ?? sha.slice(0, 8)),
+    message: String(raw.message ?? ''),
+    authorName: String(raw.authorName ?? ''),
+    authoredAt: String(raw.authoredAt ?? raw.createdAt ?? ''),
+  }
+}
+
+function normalizeMergeRequestDiscussionLink(raw: Record<string, unknown>): MergeRequestDiscussionLink {
+  return {
+    discussionNumber: Number(raw.discussionNumber ?? 0),
+    relationshipType: String(raw.relationshipType ?? 'related') as MergeRequestLinkType,
+    discussionTitle: raw.discussionTitle ? String(raw.discussionTitle) : null,
+    discussionStatus: raw.discussionStatus ? String(raw.discussionStatus) : null,
+  }
+}
+
+function normalizeDiscussionLinkedMergeRequest(raw: Record<string, unknown>): DiscussionLinkedMergeRequest {
+  return {
+    number: Number(raw.number ?? 0),
+    title: String(raw.title ?? ''),
+    status: normalizeMergeRequestStatus(raw.status),
+    relationshipType: String(raw.relationshipType ?? 'related') as MergeRequestLinkType,
+  }
+}
+
+function normalizeProtectedBranchRule(raw: Record<string, unknown>): ProtectedBranchRule {
+  return {
+    id: normalizeId(raw.id),
+    pattern: String(raw.pattern ?? ''),
+    blockDirectPush: Boolean(raw.blockDirectPush),
+    allowedPushRoles: Array.isArray(raw.allowedPushRoles) ? raw.allowedPushRoles.map(String) : [],
+    allowedPushUserIds: Array.isArray(raw.allowedPushUserIds) ? raw.allowedPushUserIds.map(normalizeId) : [],
+    requiredApprovals: Number(raw.requiredApprovals ?? 0),
+    mergeRole: String(raw.mergeRole ?? 'Writer'),
+    forcePushPolicy: String(raw.forcePushPolicy ?? 'Deny'),
+    dismissApprovalsOnPush: Boolean(raw.dismissApprovalsOnPush ?? true),
+    lockedMergeStrategy: raw.lockedMergeStrategy ? String(raw.lockedMergeStrategy) : null,
+    pushRules: {
+      maxFileSizeBytes: raw.maxFileSizeBytes == null ? null : Number(raw.maxFileSizeBytes),
+      forbiddenPathGlobs: Array.isArray(raw.forbiddenPathGlobs) ? raw.forbiddenPathGlobs.map(String) : null,
+      commitMessageRegex: raw.commitMessageRegex ? String(raw.commitMessageRegex) : null,
+      requireDcoSignoff: Boolean(raw.requireDcoSignoff),
+    },
+  }
+}
+
 const NOTIFICATION_EVENT_MAP: Record<number, NotificationEventType> = {
   0: 'NewComment',
   1: 'Mention',
@@ -662,6 +946,13 @@ const NOTIFICATION_EVENT_MAP: Record<number, NotificationEventType> = {
   4: 'Dismissed',
   5: 'Reopened',
   6: 'SubThreadResolved',
+  7: 'MergeRequestComment',
+  8: 'MergeRequestMention',
+  9: 'MergeRequestApproved',
+  10: 'MergeRequestApprovalDismissed',
+  11: 'MergeRequestMerged',
+  12: 'MergeRequestClosed',
+  13: 'MergeRequestReviewThreadResolved',
 }
 
 function normalizeNotificationEventType(raw: unknown): NotificationEventType {
@@ -676,9 +967,11 @@ function normalizeNotification(raw: Record<string, unknown>): Notification {
   return {
     id: normalizeId(raw.id),
     userId: normalizeId(raw.userId),
-    discussionId: normalizeId(raw.discussionId),
-    repositoryId: normalizeId(raw.repositoryId),
-    discussionNumber: Number(raw.discussionNumber ?? 0),
+    discussionId: raw.discussionId ? normalizeId(raw.discussionId) : null,
+    mergeRequestId: raw.mergeRequestId ? normalizeId(raw.mergeRequestId) : null,
+    repositoryId: raw.repositoryId ? normalizeId(raw.repositoryId) : null,
+    discussionNumber: raw.discussionNumber == null ? null : Number(raw.discussionNumber),
+    mergeRequestNumber: raw.mergeRequestNumber == null ? null : Number(raw.mergeRequestNumber),
     commentId: normalizeCommentId(raw.commentId),
     ownerSlug: String(raw.ownerSlug ?? raw.owner ?? ''),
     repositorySlug: String(raw.repositorySlug ?? raw.slug ?? ''),
@@ -703,6 +996,10 @@ function normalizeBlockedUser(raw: Record<string, unknown>): BlockedUser {
 
 function discussionSlugPath(owner: string, slug: string): string {
   return `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`
+}
+
+function mergeRequestSlugPath(owner: string, slug: string): string {
+  return `${discussionSlugPath(owner, slug)}/merge-requests`
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -1332,6 +1629,16 @@ export function createApi(baseUrl: string) {
         }
       },
 
+      listLinkedMergeRequests: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/linked-merge-requests`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeDiscussionLinkedMergeRequest) ?? null,
+        }
+      },
+
       tags: {
         list: async (owner: string, slug: string) => {
           const result = await request<Record<string, unknown>[]>(
@@ -1404,6 +1711,254 @@ export function createApi(baseUrl: string) {
         markRead: (notificationId: string) =>
           request<null>(`/notifications/${notificationId}/read`, { method: 'POST' }),
       },
+    },
+
+    mergeRequests: {
+      list: async (owner: string, slug: string) => {
+        const result = await request<Record<string, unknown>[]>(mergeRequestSlugPath(owner, slug))
+        return {
+          ...result,
+          data: result.data?.map(normalizeMergeRequest) ?? null,
+        }
+      },
+
+      get: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>>(`${mergeRequestSlugPath(owner, slug)}/${number}`)
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequest(result.data) : null,
+        }
+      },
+
+      create: async (
+        owner: string,
+        slug: string,
+        body: {
+          title: string
+          body?: string | null
+          sourceRef: string
+          targetRef: string
+          isDraft?: boolean
+        },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          mergeRequestSlugPath(owner, slug),
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequest(result.data) : null,
+        }
+      },
+
+      listComments: async (owner: string, slug: string, number: number, params?: { type?: 'overview' | 'review' }) => {
+        const query = params?.type ? `?type=${params.type}` : ''
+        const result = await request<Record<string, unknown>[]>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/comments${query}`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeMergeRequestComment) ?? null,
+        }
+      },
+
+      createComment: async (
+        owner: string,
+        slug: string,
+        number: number,
+        body: {
+          bodyMarkdown: string
+          parentCommentId?: string | null
+          anchor?: MergeRequestCommentAnchor | null
+        },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/comments`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestComment(result.data) : null,
+        }
+      },
+
+      updateComment: async (
+        owner: string,
+        slug: string,
+        number: number,
+        commentId: string,
+        body: { bodyMarkdown: string },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/comments/${commentId}`,
+          { method: 'PATCH', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestComment(result.data) : null,
+        }
+      },
+
+      deleteComment: (owner: string, slug: string, number: number, commentId: string) =>
+        request<null>(`${mergeRequestSlugPath(owner, slug)}/${number}/comments/${commentId}`, { method: 'DELETE' }),
+
+      resolveComment: async (owner: string, slug: string, number: number, commentId: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/comments/${commentId}/resolve`,
+          { method: 'POST' },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestComment(result.data) : null,
+        }
+      },
+
+      unresolveComment: async (owner: string, slug: string, number: number, commentId: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/comments/${commentId}/unresolve`,
+          { method: 'POST' },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestComment(result.data) : null,
+        }
+      },
+
+      getChanges: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>>(`${mergeRequestSlugPath(owner, slug)}/${number}/changes`)
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestChanges(result.data) : null,
+        }
+      },
+
+      listCommits: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/commits`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeMergeRequestCommit) ?? null,
+        }
+      },
+
+      getBranchAheadSummary: async (owner: string, slug: string, refName: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/branch-ahead-summary?ref=${encodeURIComponent(refName)}`,
+        )
+        if (!result.data) {
+          return { ...result, data: null } satisfies ApiResult<BranchAheadSummary>
+        }
+        return {
+          ...result,
+          data: {
+            aheadCount: Number(result.data.aheadCount ?? 0),
+            defaultRef: result.data.defaultRef ? String(result.data.defaultRef) : null,
+            hasActiveMergeRequest: Boolean(result.data.hasActiveMergeRequest),
+          },
+        }
+      },
+
+      listDiscussionLinks: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/discussion-links`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeMergeRequestDiscussionLink) ?? null,
+        }
+      },
+
+      createDiscussionLink: async (
+        owner: string,
+        slug: string,
+        number: number,
+        body: { discussionNumber: number, relationshipType: MergeRequestLinkType },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/discussion-links`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeMergeRequestDiscussionLink(result.data) : null,
+        }
+      },
+
+      deleteDiscussionLink: (
+        owner: string,
+        slug: string,
+        number: number,
+        discussionNumber: number,
+        relationshipType: MergeRequestLinkType,
+      ) =>
+        request<null>(
+          `${mergeRequestSlugPath(owner, slug)}/${number}/discussion-links/${discussionNumber}?relationshipType=${relationshipType}`,
+          { method: 'DELETE' },
+        ),
+    },
+
+    repositorySettings: {
+      getDefaultBranch: async (owner: string, slug: string) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/settings/default-branch`,
+        )
+        if (!result.data) {
+          return { ...result, data: null } satisfies ApiResult<{ defaultBranchName: string | null }>
+        }
+        return {
+          ...result,
+          data: {
+            defaultBranchName: result.data.defaultBranchName
+              ? String(result.data.defaultBranchName)
+              : null,
+          },
+        }
+      },
+
+      updateDefaultBranch: (owner: string, slug: string, body: { defaultBranchName: string }) =>
+        request<null>(
+          `${discussionSlugPath(owner, slug)}/settings/default-branch`,
+          { method: 'PATCH', body: JSON.stringify(body) },
+        ),
+
+      listProtectedBranchRules: async (owner: string, slug: string) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${discussionSlugPath(owner, slug)}/protected-branch-rules`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeProtectedBranchRule) ?? null,
+        }
+      },
+
+      createProtectedBranchRule: async (owner: string, slug: string, body: Partial<ProtectedBranchRule>) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/protected-branch-rules`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeProtectedBranchRule(result.data) : null,
+        }
+      },
+
+      updateProtectedBranchRule: async (owner: string, slug: string, ruleId: string, body: Partial<ProtectedBranchRule>) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/protected-branch-rules/${ruleId}`,
+          { method: 'PATCH', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeProtectedBranchRule(result.data) : null,
+        }
+      },
+
+      deleteProtectedBranchRule: (owner: string, slug: string, ruleId: string) =>
+        request<null>(
+          `${discussionSlugPath(owner, slug)}/protected-branch-rules/${ruleId}`,
+          { method: 'DELETE' },
+        ),
     },
 
     admin: {
