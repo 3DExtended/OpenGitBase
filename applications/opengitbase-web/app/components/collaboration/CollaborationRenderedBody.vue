@@ -52,7 +52,7 @@ function renderProse(markdown: string): string {
         v-html="renderProse(segment.markdown)"
       />
       <RepoHighlightedCode
-        v-else
+        v-else-if="segment.type === 'code'"
         :source="segment.source"
         path="snippet.txt"
         :language="segment.language.trim() ? languageFromFenceTag(segment.language) : undefined"

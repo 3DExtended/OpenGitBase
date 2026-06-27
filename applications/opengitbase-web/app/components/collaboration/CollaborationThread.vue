@@ -11,7 +11,7 @@ const props = withDefaults(defineProps<CollaborationThreadProps>(), {
   members: () => [],
   resolvedLabel: 'Resolved',
   outdatedLabel: 'Outdated',
-  replyCountLabel: count => `${count} replies`,
+  replyCountLabel: (count: number) => `${count} replies`,
 })
 
 const emit = defineEmits<{
@@ -22,7 +22,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const route = useRoute()
-const expanded = ref(!props.thread.isResolved)
+const expanded = ref(!props.thread.isResolved && !props.thread.isOutdated)
 const showReplyForm = ref(false)
 const replyBody = ref('')
 const replyAnchor = ref<CommentAnchorInput | null>(null)
