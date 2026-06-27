@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Notification } from '~/utils/api'
 import { discussionDetailRoute } from '~/utils/discussionPaths'
+import { mergeRequestDetailRoute } from '~/utils/mergeRequestPaths'
 
 const { t } = useI18n()
 const api = useApi()
@@ -33,12 +34,18 @@ async function markRead(notification: Notification): Promise<void> {
 async function openNotification(notification: Notification): Promise<void> {
   open.value = false
   void markRead(notification)
-  const target = discussionDetailRoute(
-    notification.ownerSlug,
-    notification.repositorySlug,
-    notification.discussionNumber,
-    notification.commentId ? { commentId: notification.commentId } : undefined,
-  )
+  const target = notification.mergeRequestNumber
+    ? mergeRequestDetailRoute(
+        notification.ownerSlug,
+        notification.repositorySlug,
+        notification.mergeRequestNumber,
+      )
+    : discussionDetailRoute(
+        notification.ownerSlug,
+        notification.repositorySlug,
+        notification.discussionNumber ?? 0,
+        notification.commentId ? { commentId: notification.commentId } : undefined,
+      )
   if (!target) {
     return
   }
@@ -115,7 +122,9 @@ onMounted(() => {
                 {{ notification.message }}
               </p>
               <p class="mt-1 text-xs text-[var(--ogb-text-muted)]">
-                {{ notification.ownerSlug }}/{{ notification.repositorySlug }} #{{ notification.discussionNumber }}
+                {{ notification.ownerSlug }}/{{ notification.repositorySlug }}
+                <span v-if="notification.mergeRequestNumber"> !{{ notification.mergeRequestNumber }}</span>
+                <span v-else-if="notification.discussionNumber"> #{{ notification.discussionNumber }}</span>
                 · <RelativeTime :iso="notification.createdAt" />
               </p>
             </button>
