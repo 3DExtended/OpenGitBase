@@ -128,6 +128,7 @@ public class Startup
 
         services.AddScoped<RepositoryContentAuthorizationService>();
         services.AddScoped<DiscussionAuthorizationService>();
+        services.AddScoped<MergeRequestAuthorizationService>();
         services.AddSingleton<WebReadReplicaSelector>();
         services.AddScoped<RepositoryContentService>();
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
