@@ -162,6 +162,11 @@ onMounted(async () => {
       </div>
 
       <RepoSyncBanner :lag="replicationLag" />
+      <RepoMergeRequestBanner
+        :owner="owner"
+        :repo-slug="repoSlug"
+        :ref-name="refName"
+      />
 
       <UCard v-if="contentForbidden">
         <p class="text-sm text-[var(--ogb-text-muted)]">
