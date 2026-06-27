@@ -356,7 +356,7 @@
       "blockDirectPush": "Block direct pushes",
       "patternRequired": "Pattern is required.",
       "positiveFileSize": "Max file size must be positive.",
-      "patternHelper": "Use @default to protect the repository default branch.",
+      "patternHelper": "Use {'@'}default to protect the repository default branch.",
       "requiredApprovalsLabel": "Required approvals",
       "allowedPushRolesLabel": "Roles allowed to push directly",
       "allowedPushMembersLabel": "Members allowed to push directly",
