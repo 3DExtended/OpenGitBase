@@ -153,6 +153,25 @@ async function deleteRepo() {
       <UCard>
         <template #header>
           <h2 class="font-semibold">
+            {{ t('repo.mergeRequests.branchesTitle') }}
+          </h2>
+        </template>
+        <p class="text-sm text-[var(--ogb-text-muted)]">
+          {{ t('repo.mergeRequests.branchesDescription') }}
+        </p>
+        <UButton
+          :to="`/${owner}/${repoSlug}/settings/branches`"
+          variant="soft"
+          class="mt-4"
+          icon="i-lucide-git-branch-plus"
+        >
+          {{ t('repo.mergeRequests.manageBranches') }}
+        </UButton>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <h2 class="font-semibold">
             {{ t('repo.discussions.settings.title') }}
           </h2>
         </template>
