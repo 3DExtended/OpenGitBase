@@ -104,5 +104,7 @@ services:
   web-2:
     <<: *web-build
 
+  # Production (Unraid) only — requires COMPOSE_PROFILES=production-tunnel when running compose.
+  # Local dev: do not enable this profile; use http://localhost:8089 instead.
   opengitbase_cloudflare_tunnel:
     command: tunnel --no-autoupdate run --url http://ssh-lb:8080 --token REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN

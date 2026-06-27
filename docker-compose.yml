@@ -265,6 +265,8 @@ services:
     container_name: opengitbase_web_2
 
   opengitbase_cloudflare_tunnel:
+    profiles:
+      - production-tunnel
     image: cloudflare/cloudflared:latest
     container_name: opengitbase_cloudflare_tunnel
     depends_on:

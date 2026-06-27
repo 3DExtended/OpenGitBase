@@ -39,7 +39,49 @@ Environment:
   WAIT_TIMEOUT          Seconds to wait per service health (default: 180)
   API_URL               Host URL for API LB check when ssh-lb is not running (default: http://localhost:8089)
   WEB_URL               Host URL for web LB check when ssh-lb is not running (default: http://localhost:3000)
+  COMPOSE_PROFILES      Compose profiles to enable (production sets production-tunnel automatically when configured)
+  OPENGITBASE_ENABLE_TUNNEL  Set to 1 to force the production-tunnel profile
 EOF
+}
+
+enable_production_tunnel_profile() {
+  if [ -n "${COMPOSE_PROFILES:-}" ]; then
+    return
+  fi
+
+  if [ "${OPENGITBASE_ENABLE_TUNNEL:-0}" = "1" ]; then
+    export COMPOSE_PROFILES=production-tunnel
+    return
+  fi
+
+  if [ ! -f "${OVERRIDE_FILE}" ]; then
+    return
+  fi
+
+  if ! grep -q 'opengitbase_cloudflare_tunnel:' "${OVERRIDE_FILE}"; then
+    return
+  fi
+
+  if grep -q 'REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN' "${OVERRIDE_FILE}"; then
+    return
+  fi
+
+  export COMPOSE_PROFILES=production-tunnel
+}
+
+production_tunnel_profile_enabled() {
+  if [ -z "${COMPOSE_PROFILES:-}" ]; then
+    return 1
+  fi
+
+  case ",${COMPOSE_PROFILES}," in
+    *,production-tunnel,*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 while [ $# -gt 0 ]; do
@@ -72,6 +114,8 @@ COMPOSE_ARGS=(-f "${COMPOSE_FILE}")
 if [ -f "${OVERRIDE_FILE}" ]; then
   COMPOSE_ARGS+=(-f "${OVERRIDE_FILE}")
 fi
+
+enable_production_tunnel_profile
 
 compose() {
   docker-compose "${COMPOSE_ARGS[@]}" "$@"
@@ -265,6 +309,9 @@ if [ "${ROLL_FLEET}" = true ]; then
 else
   echo "    Mode: app (API and web only; pass --full for fleet)"
 fi
+if production_tunnel_profile_enabled; then
+  echo "    Cloudflare tunnel: enabled (COMPOSE_PROFILES=${COMPOSE_PROFILES})"
+fi
 
 run_step "Validate HAProxy configuration" \
   docker run --rm \
@@ -307,6 +354,11 @@ run_step "Verify API health via load balancer" \
 
 run_step "Verify web UI via load balancer" \
   verify_lb_web
+
+if production_tunnel_profile_enabled; then
+  run_step "Ensure Cloudflare tunnel is up" \
+    compose up -d opengitbase_cloudflare_tunnel
+fi
 
 if [ "${SKIP_TUNNEL_CHECK}" = false ] && container_running opengitbase_cloudflare_tunnel; then
   run_step "Verify API via Cloudflare tunnel target (ssh-lb:8080)" \

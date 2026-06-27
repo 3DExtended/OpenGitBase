@@ -188,3 +188,5 @@ PY
 
 echo "Start the stack with:"
 echo "  docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build"
+echo "  # Production (Unraid) with Cloudflare tunnel:"
+echo "  source scripts/docker-env.production.sh && docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build"
