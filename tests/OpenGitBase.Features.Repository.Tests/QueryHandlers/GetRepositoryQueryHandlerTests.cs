@@ -10,6 +10,8 @@ using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.Repository;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.QueryHandlers;
+using OpenGitBase.Features.Repository.Tests.Testing;
+using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.Repository.Tests.QueryHandlers;
 
@@ -55,5 +57,37 @@ public class GetRepositoryQueryHandlerTests
         );
 
         Assert.True(result.IsNone);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ThroughQueryProcessor_EnrichesOwnerSlug()
+    {
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMapsterConfig>(
+            typeof(GetRepositoryQueryHandler).Assembly,
+            typeof(UserEntity).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        await using var seedContext = await scope.CreateDbContextAsync();
+        var (repositoryId, _) = await RepositoryTestData.SeedPublicRepositoryAsync(
+            seedContext,
+            "demo-user",
+            "hello-world"
+        );
+
+        var processor = scope.GetService<IQueryProcessor>();
+        var result = await processor.RunQueryAsync(
+            new GetRepositoryQuery { ModelId = repositoryId },
+            CancellationToken.None
+        );
+
+        QueryHandlerResultAssert.AssertSome(
+            result,
+            repository =>
+            {
+                Assert.Equal("demo-user", repository.OwnerSlug);
+                Assert.Equal("hello-world", repository.Slug);
+            }
+        );
     }
 }

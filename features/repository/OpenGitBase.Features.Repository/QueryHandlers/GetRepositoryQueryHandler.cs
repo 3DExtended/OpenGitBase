@@ -31,7 +31,7 @@ public class GetRepositoryQueryHandler
         _contextFactory = contextFactory;
     }
 
-    public new async Task<Option<RepositoryDto>> RunQueryAsync(
+    public override async Task<Option<RepositoryDto>> RunQueryAsync(
         GetRepositoryQuery query,
         CancellationToken cancellationToken
     )

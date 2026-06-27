@@ -26,7 +26,7 @@ public abstract class SingleModelQueryHandlerBase<
         _contextFactory = contextFactory;
     }
 
-    public async Task<Option<TModel>> RunQueryAsync(
+    public virtual async Task<Option<TModel>> RunQueryAsync(
         TQuery query,
         CancellationToken cancellationToken
     )
