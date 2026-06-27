@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000'
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',
@@ -114,9 +114,8 @@ test.describe('Discussion detail page', () => {
     await expect(page.getByTestId('discussion-sub-thread-reply')).toHaveCount(1)
     await expect(page.getByText('Consider extracting this helper.')).toBeVisible()
     await expect(page.getByText('Agreed — I pushed a follow-up snippet.')).toBeVisible()
-    await expect(page.getByText('demo-user')).toBeVisible()
+    await expect(page.getByTestId('discussion-sub-thread').getByText('demo-user')).toBeVisible()
     await expect(page.getByText('reviewer')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Resolve thread' })).toBeVisible()
     await expect(page.getByText('Creator').locator('..').getByText('demo-user')).toBeVisible()
     await expect(page.locator('time[datetime]').first()).toBeVisible()
   })

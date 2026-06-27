@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000'
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',

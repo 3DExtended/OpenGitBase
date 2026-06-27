@@ -202,5 +202,94 @@ function toggleTheme() {
         :can-reply="false"
       />
     </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-merge-requests-overview"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Merge request overview comments
+      </h2>
+      <CollaborationThread
+        :thread="{
+          id: 'mr-thread-1',
+          author: { userId: 'user-1', username: 'alice' },
+          bodyMarkdown: 'Please split this helper into a separate composable.',
+          createdAt: '2026-06-27T08:00:00Z',
+          isResolved: false,
+          replyCount: 1,
+          replies: [
+            {
+              id: 'mr-reply-1',
+              author: { userId: 'user-2', username: 'bob' },
+              bodyMarkdown: 'Done in the latest commit.',
+              createdAt: '2026-06-27T08:20:00Z',
+            },
+          ],
+          anchor: null,
+        }"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-merge-request-banner"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Post-push merge request banner
+      </h2>
+      <UAlert
+        color="info"
+        variant="subtle"
+        icon="i-lucide-git-pull-request-create"
+        title="Create a merge request"
+        description="feature/refactor-auth is 3 commit(s) ahead of the default branch."
+      >
+        <template #actions>
+          <UButton size="xs">
+            Create merge request
+          </UButton>
+        </template>
+      </UAlert>
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-branches-settings"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Branches &amp; push rules settings
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Branches &amp; push rules
+          </h3>
+        </template>
+        <div class="space-y-3">
+          <div class="rounded border p-3" style="border-color: var(--ogb-border);">
+            <p class="font-mono text-sm">
+              @default
+            </p>
+            <p class="text-xs text-[var(--ogb-text-muted)]">
+              2 required approvals · Merge role: Maintainer
+            </p>
+          </div>
+          <div class="rounded border p-3" style="border-color: var(--ogb-border);">
+            <p class="font-mono text-sm">
+              release/*
+            </p>
+            <p class="text-xs text-[var(--ogb-text-muted)]">
+              1 required approval · Merge role: Writer
+            </p>
+          </div>
+        </div>
+      </UCard>
+    </section>
   </div>
 </template>

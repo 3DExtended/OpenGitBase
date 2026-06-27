@@ -6,6 +6,9 @@ const viewports = [
   { name: 'desktop', width: 1280, height: 720 },
 ] as const
 
+const playwrightPort = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
+const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${playwrightPort}`
+
 export default defineConfig({
   testDir: './tests/visual',
   fullyParallel: true,
@@ -14,7 +17,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: playwrightBaseUrl,
     trace: 'on-first-retry',
     colorScheme: 'light',
   },
@@ -31,8 +34,8 @@ export default defineConfig({
     },
   })),
   webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
+    command: `pnpm dev --port ${playwrightPort}`,
+    url: playwrightBaseUrl,
     reuseExistingServer: !process.env.CI,
     env: {
       NUXT_PUBLIC_MSW: 'true',

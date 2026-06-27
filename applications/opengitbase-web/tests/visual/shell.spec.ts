@@ -18,6 +18,15 @@ async function waitForApp(page: import('@playwright/test').Page) {
   })
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ogb-site-gate-unlocked', '1')
+    void navigator.serviceWorker.getRegistrations().then(registrations =>
+      Promise.all(registrations.map(registration => registration.unregister())),
+    )
+  })
+})
+
 test.describe('Shell components', () => {
   test('visual gallery', async ({ page }) => {
     await waitForApp(page)
