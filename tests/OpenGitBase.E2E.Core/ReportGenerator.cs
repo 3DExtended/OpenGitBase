@@ -52,6 +52,22 @@ public sealed class ReportGenerator
 
         sb.AppendLine("</table>");
 
+        var features = FeatureRollupBuilder.Build(tiers);
+        if (features.Count > 0)
+        {
+            sb.AppendLine("<h2>Feature Rollup</h2><table><tr><th>Feature</th><th>Name</th><th>Status</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Tiers</th></tr>");
+            foreach (var feature in features)
+            {
+                sb.AppendLine(
+                    $"<tr><td>{Escape(feature.FeatureCode)}</td><td>{Escape(feature.FeatureName)}</td>" +
+                    $"<td class=\"{feature.Status.ToLowerInvariant()}\">{Escape(feature.Status)}</td>" +
+                    $"<td>{feature.Passed}</td><td>{feature.Failed}</td><td>{feature.Skipped}</td>" +
+                    $"<td>{Escape(string.Join(", ", feature.TierIds))}</td></tr>");
+            }
+
+            sb.AppendLine("</table>");
+        }
+
         sb.AppendLine("<h2>Tests</h2>");
         foreach (var test in tests)
         {
