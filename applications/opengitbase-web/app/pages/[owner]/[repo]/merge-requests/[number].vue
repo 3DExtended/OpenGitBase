@@ -36,8 +36,6 @@ const commentBody = ref('')
 const replyError = ref<string | null>(null)
 const selectedLine = ref<MergeRequestCommentAnchor | null>(null)
 const lineCommentBody = ref('')
-const linkDiscussionNumber = ref<number | null>(null)
-const linkType = ref<MergeRequestLinkType>('related')
 
 function statusColor(status: MergeRequest['status']): 'neutral' | 'info' | 'success' | 'warning' {
   switch (status) {
@@ -216,20 +214,17 @@ async function unresolveComment(commentId: string): Promise<void> {
   await loadAll()
 }
 
-async function addDiscussionLink(): Promise<void> {
-  if (!linkDiscussionNumber.value) {
-    return
-  }
+async function addDiscussionLink(discussionNumber: number, relationshipType: MergeRequestLinkType): Promise<boolean> {
   const result = await api.mergeRequests.createDiscussionLink(owner.value, repoSlug.value, number.value, {
-    discussionNumber: linkDiscussionNumber.value,
-    relationshipType: linkType.value,
+    discussionNumber,
+    relationshipType,
   })
   if (result.error) {
     replyError.value = result.error
-    return
+    return false
   }
-  linkDiscussionNumber.value = null
   await loadAll()
+  return true
 }
 
 async function removeDiscussionLink(link: MergeRequestDiscussionLink): Promise<void> {
@@ -531,56 +526,13 @@ onMounted(() => {
         </main>
 
         <aside class="space-y-4">
-          <UCard>
-            <template #header>
-              <h3 class="font-semibold">
-                {{ t('repo.mergeRequests.linkedDiscussions') }}
-              </h3>
-            </template>
-            <div class="space-y-2">
-              <p
-                v-if="!linkedDiscussions.length"
-                class="text-xs text-[var(--ogb-text-muted)]"
-              >
-                {{ t('repo.mergeRequests.noLinkedDiscussions') }}
-              </p>
-              <div
-                v-for="link in linkedDiscussions"
-                :key="`${link.discussionNumber}-${link.relationshipType}`"
-                class="flex items-center justify-between gap-2 rounded border px-2 py-1 text-sm"
-                style="border-color: var(--ogb-border);"
-              >
-                <NuxtLink :to="`/${owner}/${repoSlug}/discussions/${link.discussionNumber}`">
-                  #{{ link.discussionNumber }} {{ link.discussionTitle }}
-                </NuxtLink>
-                <div class="flex items-center gap-1">
-                  <UBadge variant="subtle" size="sm">
-                    {{ link.relationshipType }}
-                  </UBadge>
-                  <UButton
-                    variant="ghost"
-                    size="xs"
-                    icon="i-lucide-x"
-                    @click="removeDiscussionLink(link)"
-                  />
-                </div>
-              </div>
-              <div class="grid grid-cols-[1fr_auto_auto] gap-2">
-                <UInput
-                  v-model.number="linkDiscussionNumber"
-                  type="number"
-                  :placeholder="t('repo.mergeRequests.discussionNumber')"
-                />
-                <USelect
-                  v-model="linkType"
-                  :items="['closes', 'related', 'implements']"
-                />
-                <UButton @click="addDiscussionLink">
-                  {{ t('repo.mergeRequests.addLink') }}
-                </UButton>
-              </div>
-            </div>
-          </UCard>
+          <MergeRequestLinkedDiscussions
+            :owner="owner"
+            :repo-slug="repoSlug"
+            :linked-discussions="linkedDiscussions"
+            :add-link="addDiscussionLink"
+            :remove-link="removeDiscussionLink"
+          />
         </aside>
       </div>
 

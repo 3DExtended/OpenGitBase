@@ -329,8 +329,24 @@
       "outdated": "Outdated",
       "linkedDiscussions": "Linked discussions",
       "noLinkedDiscussions": "No linked discussions.",
-      "discussionNumber": "Discussion #",
-      "addLink": "Add",
+      "linkAnotherDiscussion": "Link another discussion",
+      "filterOpenDiscussions": "Filter open discussions…",
+      "noDiscussionMatches": "No matches.",
+      "removeDiscussionLink": "Remove discussion link",
+      "linkTypes": {
+        "closes": {
+          "label": "Closes",
+          "hint": "Resolves the discussion when this MR merges"
+        },
+        "related": {
+          "label": "Related",
+          "hint": "Cross-reference only — no automatic status change"
+        },
+        "implements": {
+          "label": "Implements",
+          "hint": "This MR delivers the work tracked in the discussion"
+        }
+      },
       "fields": {
         "title": "Title",
         "source": "Source branch",
