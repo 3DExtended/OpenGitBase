@@ -44,7 +44,7 @@ public sealed class MergeRequestRefService
         CancellationToken cancellationToken
     )
     {
-        var context = await LoadStorageContextAsync(repository, cancellationToken).ConfigureAwait(false);
+        var context = await LoadStorageContextInternalAsync(repository, cancellationToken).ConfigureAwait(false);
         if (context is null)
         {
             return null;
@@ -88,7 +88,7 @@ public sealed class MergeRequestRefService
         CancellationToken cancellationToken
     )
     {
-        var context = await LoadStorageContextAsync(repository, cancellationToken).ConfigureAwait(false);
+        var context = await LoadStorageContextInternalAsync(repository, cancellationToken).ConfigureAwait(false);
         if (context is null)
         {
             return null;
@@ -114,7 +114,7 @@ public sealed class MergeRequestRefService
         CancellationToken cancellationToken
     )
     {
-        var context = await LoadStorageContextAsync(repository, cancellationToken).ConfigureAwait(false);
+        var context = await LoadStorageContextInternalAsync(repository, cancellationToken).ConfigureAwait(false);
         if (context is null)
         {
             return null;
@@ -174,7 +174,12 @@ public sealed class MergeRequestRefService
         };
     }
 
-    private async Task<StorageContentContext?> LoadStorageContextAsync(
+    public async Task<MergeRequestStorageContext?> LoadStorageContextAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    ) => await LoadStorageContextInternalAsync(repository, cancellationToken).ConfigureAwait(false);
+
+    private async Task<MergeRequestStorageContext?> LoadStorageContextInternalAsync(
         RepositoryDto repository,
         CancellationToken cancellationToken
     )
@@ -215,20 +220,20 @@ public sealed class MergeRequestRefService
             return null;
         }
 
-        return new StorageContentContext
+        return new MergeRequestStorageContext
         {
             Target = selection.Target,
             ApiToken = tokenResult.Get(),
             PhysicalPath = repository.PhysicalPath,
         };
     }
+}
 
-    private sealed class StorageContentContext
-    {
-        public required RepositoryRoutingTargetDto Target { get; init; }
+public sealed class MergeRequestStorageContext
+{
+    public required RepositoryRoutingTargetDto Target { get; init; }
 
-        public required string ApiToken { get; init; }
+    public required string ApiToken { get; init; }
 
-        public required string PhysicalPath { get; init; }
-    }
+    public required string PhysicalPath { get; init; }
 }

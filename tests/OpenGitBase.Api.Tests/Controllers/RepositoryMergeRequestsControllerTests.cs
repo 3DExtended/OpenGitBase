@@ -120,6 +120,35 @@ public class RepositoryMergeRequestsControllerTests
         Assert.NotNull(badRequest.Value);
     }
 
+    [Fact]
+    public async Task GetChanges_PublicRepositoryAnonymous_ReturnsOk()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, authenticatedUserId: null);
+
+        var result = await controller.GetChanges("owner", "repo", 1, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var changes = Assert.IsType<MergeRequestChangesResponse>(ok.Value);
+        Assert.Single(changes.Files);
+        Assert.Equal("README.md", changes.Files[0].FilePath);
+        Assert.Equal("remove", changes.Files[0].Hunks[0].Lines[0].Type);
+    }
+
+    [Fact]
+    public async Task ListCommits_PublicRepositoryAnonymous_ReturnsOk()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, authenticatedUserId: null);
+
+        var result = await controller.ListCommits("owner", "repo", 1, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var commits = Assert.IsAssignableFrom<IReadOnlyList<MergeRequestCommitResponse>>(ok.Value);
+        Assert.Single(commits);
+        Assert.Equal("feature commit", commits[0].Message);
+    }
+
     private static RepositoryMergeRequestsController CreateController(
         RepositoryDto repository,
         UserId? authenticatedUserId,
@@ -165,6 +194,25 @@ public class RepositoryMergeRequestsControllerTests
             )
             .Returns(Option.From<IReadOnlyList<MergeRequestDto>>([]));
 
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetMergeRequestByNumberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new MergeRequestDto
+                    {
+                        RepositoryId = repository.Id.Value,
+                        Number = 1,
+                        Title = "Test MR",
+                        Status = MergeRequestStatus.Open,
+                        CreatorUserId = authenticatedUserId ?? UserId.From(Guid.NewGuid()),
+                        SourceRef = "feature/a",
+                        TargetRef = "main",
+                        SourceHeadSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        TargetBaseSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    }
+                )
+            );
+
         var storageContentClient = Substitute.For<IStorageContentClient>();
         storageContentClient
             .ResolveRefAsync(
@@ -198,6 +246,78 @@ public class RepositoryMergeRequestsControllerTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(new StorageContentAheadCountPayload { AheadCount = aheadCount });
+        storageContentClient
+            .GetDiffAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new StorageContentDiffPayload
+                {
+                    Files =
+                    [
+                        new StorageContentDiffFilePayload
+                        {
+                            NewPath = "README.md",
+                            Status = "modified",
+                            Hunks =
+                            [
+                                new StorageContentDiffHunkPayload
+                                {
+                                    OldStart = 1,
+                                    OldLines = 1,
+                                    NewStart = 1,
+                                    NewLines = 2,
+                                    Lines =
+                                    [
+                                        new StorageContentDiffLinePayload
+                                        {
+                                            Type = "delete",
+                                            Content = "initial",
+                                            OldLineNumber = 1,
+                                        },
+                                        new StorageContentDiffLinePayload
+                                        {
+                                            Type = "add",
+                                            Content = "change",
+                                            NewLineNumber = 1,
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                }
+            );
+        storageContentClient
+            .ListCommitsSinceMergeBaseAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new StorageContentCommitsPayload
+                {
+                    Commits =
+                    [
+                        new StorageContentCommitPayload
+                        {
+                            Sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            ShortSha = "aaaaaaaa",
+                            Message = "feature commit",
+                            AuthorName = "owner",
+                            AuthoredAt = "2026-07-01T00:00:00+00:00",
+                        },
+                    ],
+                }
+            );
 
         var contentAuth = new RepositoryContentAuthorizationService(
             queryProcessor,
@@ -220,6 +340,7 @@ public class RepositoryMergeRequestsControllerTests
             refService,
             new PlatformMergeIdentityOptions { AccessToken = "platform-token" }
         );
+        var compareService = new MergeRequestCompareService(refService, storageContentClient);
 
         queryProcessor
             .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
@@ -234,6 +355,9 @@ public class RepositoryMergeRequestsControllerTests
                                 StorageNodeId = Guid.NewGuid(),
                                 InternalHost = "127.0.0.1",
                                 InternalHttpPort = 8081,
+                                IsHealthy = true,
+                                IsPrimary = true,
+                                IsInSync = true,
                             },
                         ],
                     }
@@ -247,6 +371,7 @@ public class RepositoryMergeRequestsControllerTests
             authorization,
             refService,
             mergeService,
+            compareService,
             queryProcessor
         )
         {

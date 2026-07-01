@@ -97,6 +97,15 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
+    Task<StorageContentCommitsPayload?> ListCommitsSinceMergeBaseAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string targetSha,
+        string sourceSha,
+        CancellationToken cancellationToken
+    );
+
     Task<bool?> IsAncestorAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

@@ -134,6 +134,7 @@ public class Startup
         services.AddScoped<DiscussionAuthorizationService>();
         services.AddScoped<MergeRequestAuthorizationService>();
         services.AddScoped<MergeRequestRefService>();
+        services.AddScoped<MergeRequestCompareService>();
         services.AddScoped<MergeRequestMergeService>();
         services.AddScoped<GitPushEnforcementService>();
         services.AddSingleton<WebReadReplicaSelector>();

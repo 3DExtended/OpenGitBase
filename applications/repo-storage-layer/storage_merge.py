@@ -38,6 +38,49 @@ def get_diff(git_dir: str, base_sha: str, head_sha: str) -> dict[str, Any]:
     }
 
 
+def list_commits(git_dir: str, base_sha: str, head_sha: str) -> dict[str, Any]:
+    _verify_object(git_dir, base_sha)
+    _verify_object(git_dir, head_sha)
+
+    output = _run_git(
+        git_dir,
+        "log",
+        "--reverse",
+        "--format=%H%x1f%an%x1f%aI%x1f%s",
+        f"{base_sha}..{head_sha}",
+    )
+    commits: list[dict[str, str]] = []
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\x1f", 3)
+        if len(parts) != 4:
+            continue
+        sha, author_name, authored_at, message = parts
+        commits.append(
+            {
+                "sha": sha,
+                "shortSha": sha[:8],
+                "message": message,
+                "authorName": author_name,
+                "authoredAt": authored_at,
+            }
+        )
+
+    return {
+        "baseSha": base_sha,
+        "headSha": head_sha,
+        "commits": commits,
+    }
+
+
+def list_commits_since_merge_base(git_dir: str, target_sha: str, source_sha: str) -> dict[str, Any]:
+    _verify_object(git_dir, target_sha)
+    _verify_object(git_dir, source_sha)
+    merge_base = _run_git(git_dir, "merge-base", target_sha, source_sha).strip()
+    return list_commits(git_dir, merge_base, source_sha)
+
+
 def check_mergeability(git_dir: str, target_sha: str, source_sha: str) -> dict[str, Any]:
     try:
         _verify_object(git_dir, target_sha)

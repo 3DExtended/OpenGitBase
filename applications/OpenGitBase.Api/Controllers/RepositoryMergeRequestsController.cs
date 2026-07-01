@@ -17,18 +17,21 @@ public sealed class RepositoryMergeRequestsController : ControllerBase
     private readonly MergeRequestAuthorizationService _authorization;
     private readonly MergeRequestRefService _refService;
     private readonly MergeRequestMergeService _mergeService;
+    private readonly MergeRequestCompareService _compareService;
     private readonly IQueryProcessor _queryProcessor;
 
     public RepositoryMergeRequestsController(
         MergeRequestAuthorizationService authorization,
         MergeRequestRefService refService,
         MergeRequestMergeService mergeService,
+        MergeRequestCompareService compareService,
         IQueryProcessor queryProcessor
     )
     {
         _authorization = authorization;
         _refService = refService;
         _mergeService = mergeService;
+        _compareService = compareService;
         _queryProcessor = queryProcessor;
     }
 
@@ -465,6 +468,84 @@ public sealed class RepositoryMergeRequestsController : ControllerBase
         return result.IsNone
             ? BadRequest(new { error = "Unable to approve merge request." })
             : Ok(result.Get());
+    }
+
+    [HttpGet("{number:int}/changes")]
+    public async Task<IActionResult> GetChanges(
+        string owner,
+        string slug,
+        int number,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeReadAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return ToReadResult(access);
+        }
+
+        ApplyPrivateCacheControl(access.Repository.IsPrivate);
+
+        var mergeRequest = await LoadWithRefreshedShasAsync(
+            access.Repository,
+            number,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (mergeRequest is null)
+        {
+            return NotFound();
+        }
+
+        var changes = await _compareService
+            .GetChangesAsync(access.Repository, mergeRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        return changes is null
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable)
+            : Ok(changes);
+    }
+
+    [HttpGet("{number:int}/commits")]
+    public async Task<IActionResult> ListCommits(
+        string owner,
+        string slug,
+        int number,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeReadAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return ToReadResult(access);
+        }
+
+        ApplyPrivateCacheControl(access.Repository.IsPrivate);
+
+        var mergeRequest = await LoadWithRefreshedShasAsync(
+            access.Repository,
+            number,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (mergeRequest is null)
+        {
+            return NotFound();
+        }
+
+        var commits = await _compareService
+            .ListCommitsAsync(access.Repository, mergeRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        return commits is null
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable)
+            : Ok(commits);
     }
 
     [HttpGet("{number:int}/mergeability")]

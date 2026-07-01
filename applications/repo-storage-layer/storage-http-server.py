@@ -26,7 +26,7 @@ from storage_content import (
     resolve_readme,
     resolve_ref,
 )
-from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit
+from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
 STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/api-token")
@@ -262,6 +262,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if parsed.path == "/internal/repos/content/diff":
             self._handle_get_diff()
             return
+        if parsed.path == "/internal/repos/content/commits":
+            self._handle_list_commits()
+            return
         if parsed.path == "/internal/repos/content/mergeability":
             self._handle_check_mergeability()
             return
@@ -480,6 +483,27 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         try:
             payload = get_diff(physical_path, base_sha, head_sha)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_list_commits(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        target_sha = params.get("targetSha", [""])[0]
+        source_sha = params.get("sourceSha", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not target_sha or not source_sha:
+            self._send_json(400, {"error": "targetSha and sourceSha are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = list_commits_since_merge_base(physical_path, target_sha, source_sha)
         except GitContentError as exc:
             self._handle_content_error(exc)
             return

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storage_merge import check_mergeability, execute_merge, get_diff
+from storage_merge import check_mergeability, execute_merge, get_diff, list_commits_since_merge_base
 
 
 class StorageMergeTests(unittest.TestCase):
@@ -107,6 +107,16 @@ class StorageMergeTests(unittest.TestCase):
             line for hunk in file_entry["hunks"] for line in hunk["lines"] if line["type"] == "add"
         ]
         self.assertTrue(any("feature" in line["content"] for line in added_lines))
+
+    def test_list_commits_since_merge_base_returns_feature_commits(self) -> None:
+        feature_sha = self._create_branch("feature", "feature.txt", "feature\n", "add feature")
+        result = list_commits_since_merge_base(self.repo_path, self.main_sha, feature_sha)
+        self.assertEqual(len(result["commits"]), 1)
+        commit = result["commits"][0]
+        self.assertEqual(commit["sha"], feature_sha)
+        self.assertEqual(commit["message"], "add feature")
+        self.assertEqual(commit["shortSha"], feature_sha[:8])
+        self.assertEqual(commit["authorName"], "Test User")
 
     def test_mergeability_linear_pair_is_mergeable(self) -> None:
         feature_sha = self._create_branch("feature", "feature.txt", "feature\n", "add feature")

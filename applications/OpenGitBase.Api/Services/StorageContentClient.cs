@@ -211,6 +211,20 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         };
     }
 
+    public Task<StorageContentCommitsPayload?> ListCommitsSinceMergeBaseAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string targetSha,
+        string sourceSha,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/commits?physicalPath={Uri.EscapeDataString(physicalPath)}&targetSha={Uri.EscapeDataString(targetSha)}&sourceSha={Uri.EscapeDataString(sourceSha)}";
+        return GetJsonAsync<StorageContentCommitsPayload>(uri, apiToken, cancellationToken);
+    }
+
     public async Task<bool?> IsAncestorAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
