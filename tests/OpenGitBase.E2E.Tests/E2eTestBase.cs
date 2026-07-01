@@ -81,3 +81,21 @@ public sealed class RequiresComposeTheoryAttribute : TheoryAttribute
         }
     }
 }
+
+public sealed class RequiresFullHaFactAttribute : FactAttribute
+{
+    public RequiresFullHaFactAttribute()
+    {
+        ComposeFullHaGate.Refresh();
+        if (!ComposeFullHaGate.IsFullHaProfile)
+        {
+            Skip = ComposeFullHaGate.SkipReason;
+        }
+
+        ComposeHealthGate.Refresh();
+        if (!ComposeHealthGate.IsHealthy)
+        {
+            Skip = ComposeHealthGate.SkipReason;
+        }
+    }
+}

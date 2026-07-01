@@ -4,11 +4,12 @@ namespace OpenGitBase.E2E.Tests.HaChaos;
 
 [Collection("Compose")]
 [Trait("Category", "HaChaos")]
+[Trait("Tag", "FullHa")]
 [Trait("RequiresCompose", "true")]
 [E2eTier(7)]
 public class HaStorageChaosTests : E2eTestBase
 {
-    [RequiresComposeFact]
+    [RequiresFullHaFact]
     public async Task StopStorageNodeStillAllowsHealthCheck()
     {
         BeginScenario();
