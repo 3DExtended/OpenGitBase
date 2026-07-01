@@ -35,6 +35,27 @@ public static class E2eScenarioHelpers
         return createResponse.Body.Trim('"');
     }
 
+    public static string ParseOrganizationId(HttpCapture createResponse)
+    {
+        using var doc = JsonDocument.Parse(createResponse.Body);
+        if (doc.RootElement.ValueKind == JsonValueKind.String)
+        {
+            return doc.RootElement.GetString() ?? string.Empty;
+        }
+
+        if (doc.RootElement.TryGetProperty("id", out var id))
+        {
+            return id.ValueKind == JsonValueKind.String ? id.GetString() ?? id.ToString() : id.ToString();
+        }
+
+        if (doc.RootElement.TryGetProperty("value", out var value))
+        {
+            return value.GetString() ?? value.ToString();
+        }
+
+        return createResponse.Body.Trim('"');
+    }
+
     public static string ParseVerificationCode(string htmlBody)
     {
         var match = Regex.Match(htmlBody, @"verification code is <strong>([^<]+)</strong>", RegexOptions.IgnoreCase);

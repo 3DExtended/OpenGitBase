@@ -1,4 +1,5 @@
 using OpenGitBase.E2E.Core;
+using OpenGitBase.E2E.Core.Fixtures;
 
 namespace OpenGitBase.E2E.Tests.Discussion;
 
@@ -81,48 +82,28 @@ public class DiscussionE2eTests : E2eTestBase
 
     private async Task<DiscussionSeed> SeedDiscussionUsersAsync()
     {
-        var owner = $"disc-owner-{Context.RunSuffix}";
-        var reader = $"disc-reader-{Context.RunSuffix}";
-        var outsider = $"disc-outsider-{Context.RunSuffix}";
-        var pass = "Password123!";
-        var publicRepo = $"disc-public-{Context.RunSuffix}";
-        var privateRepo = $"disc-private-{Context.RunSuffix}";
+        var identity = new IdentityFixture(Context, Transcript);
+        var repositories = new RepositoryFixture(Transcript, Context.Normalizer);
+        var suffix = Context.RunSuffix;
+        var publicRepo = $"disc-public-{suffix}";
+        var privateRepo = $"disc-private-{suffix}";
 
-        async Task<E2eApiClient> RegisterAsync(string user)
-        {
-            var c = new E2eApiClient(Transcript, Context.Normalizer);
-            await c.PostAsync("/register/register", new { username = user, email = $"{user}@example.com", password = pass }).ConfigureAwait(false);
-            var login = await c.PostAsync("/signin/login", new { username = user, password = pass }).ConfigureAwait(false);
-            var token = E2eScenarioHelpers.ParseJwtToken(login);
-            var authed = new E2eApiClient(Transcript, Context.Normalizer, token);
-            await authed.PostAsync("/account/debug/verify-email", null).ConfigureAwait(false);
-            return authed;
-        }
+        var owner = await identity.RegisterUserAsync($"disc-owner-{suffix}").ConfigureAwait(false);
+        var reader = await identity.RegisterUserAsync($"disc-reader-{suffix}").ConfigureAwait(false);
+        var outsider = await identity.RegisterUserAsync($"disc-outsider-{suffix}").ConfigureAwait(false);
 
-        var ownerClient = await RegisterAsync(owner).ConfigureAwait(false);
-        var readerClient = await RegisterAsync(reader).ConfigureAwait(false);
-        var outsiderClient = await RegisterAsync(outsider).ConfigureAwait(false);
+        await repositories.CreateAsync(owner, publicRepo, "Disc Public", isPrivate: false).ConfigureAwait(false);
+        var privateSeed = await repositories.CreateAsync(owner, privateRepo, "Disc Private", isPrivate: true)
+            .ConfigureAwait(false);
+        await repositories.AddMemberAsync(owner, privateSeed.RepositoryId, reader.UserId, role: 1).ConfigureAwait(false);
 
-        var readerLogin = await readerClient.PostAsync("/signin/login", new { username = reader, password = pass }).ConfigureAwait(false);
-        var readerId = E2eScenarioHelpers.ExtractUserIdFromJwt(E2eScenarioHelpers.ParseJwtToken(readerLogin));
-
-        var publicCreate = await ownerClient.PostAsync($"/repository/{publicRepo}", new { repositoryName = "Disc Public", isPrivate = false }).ConfigureAwait(false);
-        Assert.Equal(201, publicCreate.StatusCode);
-        var privateCreate = await ownerClient.PostAsync($"/repository/{privateRepo}", new { repositoryName = "Disc Private", isPrivate = true }).ConfigureAwait(false);
-        Assert.Equal(201, privateCreate.StatusCode);
-        var privateId = E2eScenarioHelpers.ParseRepositoryId(privateCreate);
-
-        await ownerClient.PostAsync("/repository-member", new
-        {
-            modelToCreate = new
-            {
-                repositoryId = new { value = privateId },
-                userId = new { value = readerId },
-                role = 1,
-            },
-        }).ConfigureAwait(false);
-
-        return new DiscussionSeed(owner, publicRepo, privateRepo, ownerClient, readerClient, outsiderClient);
+        return new DiscussionSeed(
+            owner.Username,
+            publicRepo,
+            privateRepo,
+            owner.Client,
+            reader.Client,
+            outsider.Client);
     }
 
     private sealed record DiscussionSeed(

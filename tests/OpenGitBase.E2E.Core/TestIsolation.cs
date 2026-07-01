@@ -98,12 +98,12 @@ public sealed class IdentityFixture : IIdentityFixture
     public async Task SeedCoreRolesAsync(CancellationToken cancellationToken = default)
     {
         _transcript.Describe("Seed core roles: admin, writer, outsider");
-        AsAdmin = await CreateUserAsync($"e2e-admin-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
-        AsWriter = await CreateUserAsync($"e2e-writer-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
-        AsOutsider = await CreateUserAsync($"e2e-outsider-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
+        AsAdmin = await RegisterUserAsync($"e2e-admin-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
+        AsWriter = await RegisterUserAsync($"e2e-writer-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
+        AsOutsider = await RegisterUserAsync($"e2e-outsider-{_context.RunSuffix}", cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<AuthenticatedClient> CreateUserAsync(string username, CancellationToken cancellationToken)
+    public async Task<AuthenticatedClient> RegisterUserAsync(string username, CancellationToken cancellationToken = default)
     {
         var anon = new E2eApiClient(_transcript, _context.Normalizer);
         await anon.PostAsync("/register/register", new
