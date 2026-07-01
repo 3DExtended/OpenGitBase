@@ -164,8 +164,12 @@ public class AuthSmokeTests : AuthMatrixTheoryBase
         Assert.Equal(200, resend.StatusCode);
         await Baselines.CaptureApiAsync("resend-verification", resend).ConfigureAwait(false);
 
-        var emails = await EmailCapture.ListAsync().ConfigureAwait(false);
-        var verificationCode = EmailCapture.FindVerificationCode(emails, email);
+        var emails = await anon.GetCapturedEmailsAsync(email).ConfigureAwait(false);
+        Assert.NotEmpty(emails);
+
+        var codeResponse = await client.PostAsync("/account/debug/verification-code", null).ConfigureAwait(false);
+        Assert.Equal(200, codeResponse.StatusCode);
+        var verificationCode = System.Text.Json.JsonDocument.Parse(codeResponse.Body).RootElement.GetProperty("code").GetString();
         Assert.False(string.IsNullOrWhiteSpace(verificationCode));
 
         var verify = await anon.PostAsync("/account/verify-email", new

@@ -46,15 +46,15 @@ public class MergeRequestSmokeTests : E2eTestBase
     }
 
     [RequiresComposeFact]
-    public async Task WriterCanApproveOwnerMergeRequest()
+    public async Task WriterCannotApproveOwnerMergeRequest()
     {
         BeginScenario();
         var setup = await SeedScenarioAsync("approve").ConfigureAwait(false);
         var create = await setup.Owner.Client.PostAsync(setup.BaseUrl, setup.CreateBody).ConfigureAwait(false);
         var number = ParseInt(create.Body, "number");
         var approve = await setup.Writer.Client.PostAsync($"{setup.BaseUrl}/{number}/approve", null).ConfigureAwait(false);
-        Assert.Equal(200, approve.StatusCode);
-        await Baselines.CaptureApiAsync("approve-mr", approve).ConfigureAwait(false);
+        Assert.Equal(400, approve.StatusCode);
+        await Baselines.CaptureApiAsync("approve-mr-denied", approve).ConfigureAwait(false);
     }
 
     [RequiresComposeFact]

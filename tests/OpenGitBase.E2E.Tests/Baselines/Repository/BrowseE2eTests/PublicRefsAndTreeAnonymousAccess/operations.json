@@ -4,12 +4,13 @@
 [HttpResponse] 200 OK | {{JWT}}
 [HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
 [HttpResponse] 200 OK | Email verified
-[HttpRequest] POST http://localhost:8089/api/repository/browse-public-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/browse-public-{{RUN_SUFFIX}}
+[Intent] Provision git testdata repository with known file tree
+[Intent] Create public repository gitdata-browse-{{RUN_SUFFIX}}
+[HttpRequest] POST http://localhost:8089/api/repository/gitdata-browse-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/gitdata-browse-{{RUN_SUFFIX}}
 [HttpResponse] 201 Created | {"value":"{{GUID}}"}
-[HttpRequest] POST http://localhost:8089/api/repository/browse-private-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/browse-private-{{RUN_SUFFIX}}
-[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Create write-scoped PAT
 [HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
-[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{GUID}}"},"name":"browse","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{USER_ID}}"},"name":"e2e-write","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
 [GitCommand] git init -b main | {{TEMP_DIR}}
 [GitOutput] git succeeded | Initialized empty Git repository in {{TEMP_DIR}}
 
@@ -17,25 +18,32 @@
 [GitOutput] git succeeded
 [GitCommand] git config user.name browse-owner-{{RUN_SUFFIX}} | {{TEMP_DIR}}
 [GitOutput] git succeeded
-[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitCommand] git add -A | {{TEMP_DIR}}
 [GitOutput] git succeeded
-[GitCommand] git commit -m initial | {{TEMP_DIR}}
-[GitOutput] git succeeded | [main (root-commit) {{SHA}}] initial
- 1 file changed, 1 insertion(+)
+[GitCommand] git commit -m seed git testdata tree | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main (root-commit) {{SHA}}] seed git testdata tree
+ 5 files changed, 5 insertions(+)
  create mode 100644 README.md
+ create mode 100644 assets/logo.svg
+ create mode 100644 data/large.bin
+ create mode 100644 docs/anchors.md
+ create mode 100644 src/foo/bar.txt
 
-[GitCommand] git remote add origin http://git:{{PAT}}@127.0.0.1:8089/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitCommand] git remote add origin http://git:{{WRITE_PAT}}@127.0.0.1:8089/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
 [GitOutput] git succeeded
 [GitCommand] git -c credential.helper= push -u origin main | {{TEMP_DIR}}
-[GitOutput] git succeeded | To http://127.0.0.1:8089/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}.git
+[GitOutput] git succeeded | To http://127.0.0.1:8089/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}.git
  * [new branch]      main -> main
 
+[Intent] Create private repository browse-private-{{RUN_SUFFIX}}
+[HttpRequest] POST http://localhost:8089/api/repository/browse-private-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/browse-private-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
 [Intent] Anonymous public refs returns 200
-[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/refs | GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/refs
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/refs | GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/refs
 [HttpResponse] 200 OK | {"branches":[{"name":"main","commitSha":"{{SHA}}"}],"tags":[],"defaultRef":"main","isEmpty":false,"replicationLag":{"behind":false,"message":null}}
 [Intent] Anonymous public tree returns 200
-[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/tree?refName=main&path= | GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/tree?refName=main&path=
-[HttpResponse] 200 OK | {"ref":"main","path":"","entries":[{"name":"README.md","path":"README.md","type":"blob","size":10}],"replicationLag":{"behind":false,"message":null}}
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path= | GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path=
+[HttpResponse] 200 OK | {"ref":"main","path":"","entries":[{"name":"assets","path":"assets","type":"tree","size":null},{"name":"data","path":"data","type":"tree","size":null},{"name":"docs","path":"docs","type":"tree","size":null},{"name":"src","path":"src","type":"tree","size":null},{"name":"README.md","path":"README.md","type":"blob","size":15}],"replicationLag":{"behind":false,"message":null}}
 [Intent] Anonymous private refs returns 404
 [HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-private-{{RUN_SUFFIX}}/content/refs | GET http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-private-{{RUN_SUFFIX}}/content/refs
 [HttpResponse] 404 Not Found | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"{{TRACE_ID}}"}

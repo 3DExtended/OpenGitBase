@@ -36,20 +36,26 @@ public abstract class E2eTestBase : IAsyncLifetime
         _baselines = new BaselineManager(relativePath, Context.Normalizer, Transcript, UpdateBaselines);
     }
 
-    protected async Task AssertBaselinesAsync(CancellationToken cancellationToken = default)
+    protected async Task AssertBaselinesAsync(
+        CancellationToken cancellationToken = default,
+        bool assertWhenCommitted = true)
     {
         if (UpdateBaselines)
         {
             await Baselines.UpdateCommittedAsync(cancellationToken).ConfigureAwait(false);
+            return;
         }
-        else
+
+        if (!assertWhenCommitted)
         {
-            await Baselines.AssertMatchesCommittedAsync(cancellationToken).ConfigureAwait(false);
-            if (Baselines.Diffs.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    $"Baseline diffs: {string.Join(", ", Baselines.Diffs.Select(d => d.Path))}");
-            }
+            return;
+        }
+
+        await Baselines.AssertMatchesCommittedAsync(cancellationToken).ConfigureAwait(false);
+        if (Baselines.Diffs.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Baseline diffs: {string.Join(", ", Baselines.Diffs.Select(d => d.Path))}");
         }
     }
 

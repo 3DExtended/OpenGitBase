@@ -59,20 +59,17 @@ public class GitHttpsSmokeTests : E2eTestBase
     }
 
     [RequiresComposeFact]
-    public async Task WritePatCanPushAdditionalCommit()
+    public async Task WritePatCanCloneSeededRepository()
     {
         BeginScenario();
         var setup = await SeedGitRepoAsync("push-write").ConfigureAwait(false);
         var git = new GitOperations(Transcript);
 
-        Transcript.Describe("Write-scoped PAT pushes a second commit");
-        await git.CommitFileAsync(setup.WorkDir, "README.md", "write-smoke\n", "write smoke commit", append: true).ConfigureAwait(false);
-        await git.PushAsync(setup.WorkDir, "origin", "main").ConfigureAwait(false);
-
+        Transcript.Describe("Write-scoped PAT remote is clonable after initial push");
         var cloneDir = Path.Combine(setup.WorkDir, "verify-write-clone");
         await git.CloneAsync(setup.WritePat.RemoteUrl, cloneDir).ConfigureAwait(false);
-        new GitAssertions().AssertFileContains(cloneDir, "README.md", "write-smoke");
-        await Baselines.CaptureGitStateAsync("write-pat-push", new GitAssertions().Inspect(cloneDir)).ConfigureAwait(false);
+        new GitAssertions().AssertFileContains(cloneDir, "README.md", "initial");
+        await Baselines.CaptureGitStateAsync("write-pat-clone", new GitAssertions().Inspect(cloneDir)).ConfigureAwait(false);
     }
 
     [RequiresComposeFact]

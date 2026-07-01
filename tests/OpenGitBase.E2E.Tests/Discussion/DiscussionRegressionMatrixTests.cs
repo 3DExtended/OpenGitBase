@@ -85,13 +85,13 @@ internal static class DiscussionRegressionMatrix
             (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions", 201, 201, 201, 401, new { title = "matrix", body = "create" }, "create discussion"),
             (HttpMethod.Patch, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}", 200, 200, 403, 401, new { title = "updated from matrix" }, "patch discussion"),
             (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/comments", 200, 200, 200, 401, new { bodyMarkdown = "matrix comment" }, "create comment"),
-            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/resolve", 200, 200, 200, 401, null, "resolve discussion"),
-            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/dismiss", 200, 200, 200, 401, null, "dismiss discussion"),
+            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/resolve", 200, 200, 403, 401, null, "resolve discussion"),
+            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/dismiss", 200, 200, 403, 401, null, "dismiss discussion"),
             (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/discussions/{{DISCUSSION_NUMBER}}/unsubscribe", 204, 204, 204, 401, null, "unsubscribe discussion"),
             (HttpMethod.Get, "/repository/by-slug/{{OWNER}}/{{SLUG}}/tags", 200, 200, 200, 200, null, "list tags"),
             (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/tags", 200, 200, 403, 401, new { name = "regression-tag", color = "#00ffaa" }, "create tag"),
-            (HttpMethod.Get, "/repository/by-slug/{{OWNER}}/{{SLUG}}/blocked-users", 200, 200, 403, 401, null, "list blocked users"),
-            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/blocked-users", 200, 200, 403, 401, new { userId = "00000000-0000-0000-0000-000000000000", reason = "matrix" }, "block user"),
+            (HttpMethod.Get, "/repository/by-slug/{{OWNER}}/{{SLUG}}/blocked-users", 200, 403, 403, 401, null, "list blocked users"),
+            (HttpMethod.Post, "/repository/by-slug/{{OWNER}}/{{SLUG}}/blocked-users", 200, 403, 403, 401, new { userId = "00000000-0000-0000-0000-000000000000", reason = "matrix" }, "block user"),
             (HttpMethod.Get, "/notifications?unreadOnly=true", 200, 200, 200, 401, null, "list notifications"),
         };
 

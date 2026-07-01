@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022ref\u0022:\u0022main\u0022,\u0022path\u0022:\u0022src/foo\u0022,\u0022entries\u0022:[{\u0022name\u0022:\u0022bar.txt\u0022,\u0022path\u0022:\u0022src/foo/bar.txt\u0022,\u0022type\u0022:\u0022blob\u0022,\u0022size\u0022:23}],\u0022replicationLag\u0022:{\u0022behind\u0022:false,\u0022message\u0022:null}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main\u0026path=src/foo"
+}

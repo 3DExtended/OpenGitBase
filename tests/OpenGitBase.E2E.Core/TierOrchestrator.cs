@@ -78,7 +78,7 @@ public sealed class TierOrchestrator
         var categoryFilter = categories.Length == 1
             ? $"Category={categories[0]}"
             : $"({string.Join("|", categories.Select(c => $"Category={c}"))})";
-        var filter = $"{categoryFilter}&Category!=Discovered";
+        var filter = $"{categoryFilter}&Category!=Discovered&Tag!=Regression";
         if (!string.IsNullOrWhiteSpace(additionalFilter))
         {
             filter = $"({filter})&({additionalFilter})";

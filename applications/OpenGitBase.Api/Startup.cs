@@ -48,6 +48,10 @@ public class Startup
         if (!env.IsEnvironment("E2ETest"))
         {
             app.UseMiddleware<InternalNetworkMiddleware>();
+        }
+
+        if (!env.IsEnvironment("E2ETest") && !Configuration.GetValue<bool>("E2E:CaptureEmail"))
+        {
             app.UseRateLimiter();
         }
 
@@ -188,7 +192,7 @@ public class Startup
             services.PostConfigure<InternalNetworkOptions>(options => options.Enabled = false);
         }
 
-        if (!Environment.IsEnvironment("E2ETest"))
+        if (!Environment.IsEnvironment("E2ETest") && !Configuration.GetValue<bool>("E2E:CaptureEmail"))
         {
             services.AddRateLimiter(options =>
             {

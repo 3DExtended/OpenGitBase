@@ -1,0 +1,52 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[Intent] Provision git testdata repository with known file tree
+[Intent] Create public repository gitdata-browse-{{RUN_SUFFIX}}
+[HttpRequest] POST http://localhost:8089/api/repository/gitdata-browse-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/gitdata-browse-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Create write-scoped PAT
+[HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{USER_ID}}"},"name":"e2e-write","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[GitCommand] git init -b main | {{TEMP_DIR}}
+[GitOutput] git succeeded | Initialized empty Git repository in {{TEMP_DIR}}
+
+[GitCommand] git config user.email browse-tree-{{RUN_SUFFIX}}@example.com | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git config user.name browse-tree-{{RUN_SUFFIX}} | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git add -A | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m seed git testdata tree | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main (root-commit) {{SHA}}] seed git testdata tree
+ 5 files changed, 5 insertions(+)
+ create mode 100644 README.md
+ create mode 100644 assets/logo.svg
+ create mode 100644 data/large.bin
+ create mode 100644 docs/anchors.md
+ create mode 100644 src/foo/bar.txt
+
+[GitCommand] git remote add origin http://git:{{WRITE_PAT}}@127.0.0.1:8089/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git -c credential.helper= push -u origin main | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}.git
+ * [new branch]      main -> main
+
+[Intent] Root tree lists README from git testdata fixture
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path= | GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path=
+[HttpResponse] 200 OK | {"ref":"main","path":"","entries":[{"name":"assets","path":"assets","type":"tree","size":null},{"name":"data","path":"data","type":"tree","size":null},{"name":"docs","path":"docs","type":"tree","size":null},{"name":"src","path":"src","type":"tree","size":null},{"name":"README.md","path":"README.md","type":"blob","size":15}],"replicationLag":{"behind":false,"message":null}}
+[Intent] Nested path tree exposes bar.txt
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path=src/foo | GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/tree?refName=main&path=src/foo
+[HttpResponse] 200 OK | {"ref":"main","path":"src/foo","entries":[{"name":"bar.txt","path":"src/foo/bar.txt","type":"blob","size":23}],"replicationLag":{"behind":false,"message":null}}
+[Intent] README blob matches fixture content
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=README.md | GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=README.md
+[HttpResponse] 200 OK | {"ref":"main","path":"README.md","size":15,"isBinary":false,"isTooLarge":false,"previewKind":"text","textContent":"browse-fixture\n","contentBase64":null,"replicationLag":{"behind":false,"message":null}}
+[Intent] SVG asset is classified with previewKind svg
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=assets/logo.svg | GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=assets/logo.svg
+[HttpResponse] 200 OK | {"ref":"main","path":"assets/logo.svg","size":95,"isBinary":false,"isTooLarge":false,"previewKind":"svg","textContent":null,"contentBase64":null,"replicationLag":{"behind":false,"message":null}}
+[Intent] Oversized blob is flagged isTooLarge
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=data/large.bin | GET http://localhost:8089/api/repository/by-slug/browse-tree-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/blob?refName=main&path=data/large.bin
+[HttpResponse] 200 OK | {"ref":"main","path":"data/large.bin","size":{{SHA}},"isBinary":true,"isTooLarge":true,"previewKind":"binary","textContent":null,"contentBase64":null,"replicationLag":{"behind":false,"message":null}}

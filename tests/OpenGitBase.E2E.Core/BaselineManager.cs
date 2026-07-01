@@ -53,6 +53,13 @@ public sealed class BaselineManager : IBaselineContext
 
     public IReadOnlyList<BaselineDiff> Diffs => _diffs;
 
+    public bool HasCommittedBundle()
+    {
+        var baselineRoot = Path.Combine(E2eEnvironment.BaselinesRoot, _baselineRelativePath);
+        return Directory.Exists(baselineRoot)
+            && Directory.EnumerateFiles(baselineRoot, "*", SearchOption.AllDirectories).Any();
+    }
+
     public Task CaptureApiAsync(string stepId, HttpCapture capture, CancellationToken cancellationToken = default)
     {
         var payload = JsonSerializer.Serialize(new

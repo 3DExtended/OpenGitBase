@@ -19,12 +19,20 @@ public class GitHttpsRegressionMatrixTests : AuthMatrixTheoryBase
     {
         var identity = new IdentityFixture(Context, Transcript);
         var repositories = new RepositoryFixture(Transcript, Context.Normalizer);
-        var owner = await identity.RegisterUserAsync($"https-reg-owner-{Context.RunSuffix}").ConfigureAwait(false);
-        var reader = await identity.RegisterUserAsync($"https-reg-reader-{Context.RunSuffix}").ConfigureAwait(false);
-        var outsider = await identity.RegisterUserAsync($"https-reg-outsider-{Context.RunSuffix}").ConfigureAwait(false);
-        var repository = await repositories.CreateAsync(owner, $"https-reg-{Context.RunSuffix}", "HTTPS Regression", isPrivate: false)
+        var pats = new PatFixture(Transcript, Context.Normalizer);
+        var git = new GitOperations(Transcript);
+        var caseSlug = matrixCase.CatalogId.Replace("E2E-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        var owner = await identity.RegisterUserAsync($"https-reg-owner-{caseSlug}-{Context.RunSuffix}").ConfigureAwait(false);
+        var reader = await identity.RegisterUserAsync($"https-reg-reader-{caseSlug}-{Context.RunSuffix}").ConfigureAwait(false);
+        var outsider = await identity.RegisterUserAsync($"https-reg-outsider-{caseSlug}-{Context.RunSuffix}").ConfigureAwait(false);
+        var repoSlug = $"https-reg-{caseSlug}-{Context.RunSuffix}";
+        var repository = await repositories.CreateAsync(owner, repoSlug, "HTTPS Regression", isPrivate: false)
             .ConfigureAwait(false);
         await repositories.AddMemberAsync(owner, repository.RepositoryId, reader.UserId, role: 1).ConfigureAwait(false);
+        if (GitHttpsRegressionMatrix.RequiresSeededContent(matrixCase))
+        {
+            await SeedReadmeAsync(git, pats, owner, repoSlug).ConfigureAwait(false);
+        }
 
         var resolved = matrixCase with
         {
@@ -42,6 +50,23 @@ public class GitHttpsRegressionMatrixTests : AuthMatrixTheoryBase
                 Reader = reader,
                 Outsider = outsider,
             }).ConfigureAwait(false);
+    }
+
+    private async Task SeedReadmeAsync(GitOperations git, PatFixture pats, AuthenticatedClient owner, string repoSlug)
+    {
+        await E2eScenarioHelpers.WaitForStorageProvisioningAsync().ConfigureAwait(false);
+        var writePat = await pats.CreateWritePatAsync(owner, owner.Username, repoSlug).ConfigureAwait(false);
+        var workDir = Path.Combine(Path.GetTempPath(), $"e2e-https-matrix-{repoSlug}");
+        if (Directory.Exists(workDir))
+        {
+            Directory.Delete(workDir, true);
+        }
+
+        await git.InitRepositoryAsync(workDir, "main", owner.Username, $"{owner.Username}@example.com").ConfigureAwait(false);
+        await git.CommitFileAsync(workDir, GitTestDataLayout.ReadmePath, GitTestDataLayout.ReadmeContent, "seed readme").ConfigureAwait(false);
+        await git.AddRemoteAsync(workDir, "origin", writePat.RemoteUrl).ConfigureAwait(false);
+        await git.PushAsync(workDir, "origin", "main").ConfigureAwait(false);
+        await E2eScenarioHelpers.WaitForStorageProvisioningAsync().ConfigureAwait(false);
     }
 }
 
@@ -68,7 +93,7 @@ internal static class GitHttpsRegressionMatrix
             (HttpMethod.Get, "/git-access-token", 200, 200, 200, 401, null, "list PAT"),
             (HttpMethod.Post, "/git-access-token", 201, 201, 201, 401, new { name = "matrix-read", scope = "read" }, "create read PAT"),
             (HttpMethod.Post, "/git-access-token", 400, 400, 400, 401, new { name = string.Empty, scope = "read" }, "create invalid PAT"),
-            (HttpMethod.Get, "/git-access-token/00000000-0000-0000-0000-000000000000", 200, 200, 200, 401, null, "get PAT by unknown id"),
+            (HttpMethod.Get, "/git-access-token/00000000-0000-0000-0000-000000000000", 404, 404, 404, 401, null, "get PAT by unknown id"),
             (HttpMethod.Delete, "/git-access-token/00000000-0000-0000-0000-000000000000", 404, 404, 404, 401, null, "delete unknown PAT"),
             (HttpMethod.Get, "/api/v1/git/config", 200, 200, 200, 200, null, "git config"),
             (HttpMethod.Get, "/repository/by-slug/{{OWNER}}/{{SLUG}}/content/refs", 200, 200, 200, 200, null, "refs for clone"),
@@ -122,6 +147,11 @@ internal static class GitHttpsRegressionMatrix
 
         return cases;
     }
+
+    public static bool RequiresSeededContent(AuthMatrixCase matrixCase) =>
+        matrixCase.RelativeUrl.Contains("/content/tree", StringComparison.Ordinal)
+        || matrixCase.RelativeUrl.Contains("/content/readme", StringComparison.Ordinal)
+        || matrixCase.RelativeUrl.Contains("/content/blob", StringComparison.Ordinal);
 
     private static AuthMatrixCase Row(
         string id,

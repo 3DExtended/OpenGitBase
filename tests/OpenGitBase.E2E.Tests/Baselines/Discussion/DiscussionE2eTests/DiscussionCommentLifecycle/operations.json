@@ -16,12 +16,13 @@
 [HttpResponse] 200 OK | {{JWT}}
 [HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
 [HttpResponse] 200 OK | Email verified
-[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
-[HttpResponse] 200 OK | {{JWT}}
+[Intent] Create public repository disc-public-{{RUN_SUFFIX}}
 [HttpRequest] POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}}
 [HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Create private repository disc-private-{{RUN_SUFFIX}}
 [HttpRequest] POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}}
 [HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Add repository member
 [HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
 [HttpResponse] 201 Created | {"value":"{{GUID}}"}
 [Intent] Owner creates discussion

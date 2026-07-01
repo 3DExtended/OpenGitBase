@@ -2,5 +2,5 @@
   "StatusCode": 200,
   "Body": "{\u0022branches\u0022:[{\u0022name\u0022:\u0022main\u0022,\u0022commitSha\u0022:\u0022{{SHA}}\u0022}],\u0022tags\u0022:[],\u0022defaultRef\u0022:\u0022main\u0022,\u0022isEmpty\u0022:false,\u0022replicationLag\u0022:{\u0022behind\u0022:false,\u0022message\u0022:null}}",
   "Method": "GET",
-  "Url": "http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/refs"
+  "Url": "http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/content/refs"
 }

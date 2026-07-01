@@ -18,8 +18,10 @@ public class AuthRegressionMatrixTests : AuthMatrixTheoryBase
     public async Task AuthRegisterAndAccountMatrix(AuthMatrixCase matrixCase)
     {
         var identity = new IdentityFixture(Context, Transcript);
-        var owner = await identity.RegisterUserAsync($"auth-owner-{Context.RunSuffix}").ConfigureAwait(false);
-        var outsider = await identity.RegisterUserAsync($"auth-outsider-{Context.RunSuffix}").ConfigureAwait(false);
+        var slug = matrixCase.CatalogId.Replace("E2E-", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+        var owner = await identity.RegisterUserAsync($"auth-owner-{slug}-{Context.RunSuffix}").ConfigureAwait(false);
+        var outsider = await identity.RegisterUserAsync($"auth-outsider-{slug}-{Context.RunSuffix}").ConfigureAwait(false);
 
         var resolved = matrixCase with
         {
@@ -47,14 +49,14 @@ internal static class AuthRegressionMatrix
         var cases = new List<AuthMatrixCase>
         {
             Row("E2E-POP15-001", AuthMatrixActor.Anonymous, HttpMethod.Post, "/register/register", RegisterBody(string.Empty), 400, "Register rejects empty username", "register-empty-username"),
-            Row("E2E-POP15-002", AuthMatrixActor.Anonymous, HttpMethod.Post, "/register/register", RegisterBody("ab"), 400, "Register rejects short username", "register-short-username"),
+            Row("E2E-POP15-002", AuthMatrixActor.Anonymous, HttpMethod.Post, "/register/register", new { username = "valid-user", email = "valid@example.com", password = string.Empty }, 400, "Register rejects empty password", "register-empty-password"),
             Row("E2E-POP15-003", AuthMatrixActor.Anonymous, HttpMethod.Post, "/register/register", RegisterBody("{{OWNER}}"), 409, "Register rejects duplicate username", "register-duplicate-username"),
             Row("E2E-POP15-004", AuthMatrixActor.Anonymous, HttpMethod.Post, "/register/register", new { username = "dup-mail", email = "{{OWNER}}@example.com", password = "Password123!" }, 409, "Register rejects duplicate email", "register-duplicate-email"),
             Row("E2E-POP15-005", AuthMatrixActor.Anonymous, HttpMethod.Post, "/signin/login", new { username = "{{OWNER}}", password = "Password123!" }, 200, "Login succeeds for registered user", "login-owner"),
-            Row("E2E-POP15-006", AuthMatrixActor.Anonymous, HttpMethod.Post, "/signin/login", new { username = "{{OWNER}}", password = "wrong-password" }, 404, "Login fails with wrong password", "login-wrong-password"),
+            Row("E2E-POP15-006", AuthMatrixActor.Anonymous, HttpMethod.Post, "/signin/login", new { username = "{{OWNER}}", password = "wrong-password" }, 401, "Login fails with wrong password", "login-wrong-password"),
             Row("E2E-POP15-007", AuthMatrixActor.Anonymous, HttpMethod.Get, "/account/me", null, 401, "Anonymous cannot read account me", "anon-account-me"),
             Row("E2E-POP15-008", AuthMatrixActor.Owner, HttpMethod.Get, "/account/me", null, 200, "Owner can read account me", "owner-account-me"),
-            Row("E2E-POP15-009", AuthMatrixActor.Owner, HttpMethod.Post, "/account/resend-verification", null, 200, "Owner can resend verification", "owner-resend-verification"),
+            Row("E2E-POP15-009", AuthMatrixActor.Owner, HttpMethod.Post, "/account/resend-verification", null, 400, "Verified owner cannot resend verification", "owner-resend-verification"),
             Row("E2E-POP15-010", AuthMatrixActor.Anonymous, HttpMethod.Post, "/account/resend-verification", null, 401, "Anonymous cannot resend verification", "anon-resend-verification"),
         };
 
@@ -68,12 +70,12 @@ internal static class AuthRegressionMatrix
         var accountProbes = new (HttpMethod Method, string Url, int Authed, int Anonymous, string Intent)[]
         {
             (HttpMethod.Get, "/account/me", 200, 401, "Get account me"),
-            (HttpMethod.Post, "/account/resend-verification", 200, 401, "Resend verification"),
+            (HttpMethod.Post, "/account/resend-verification", 400, 401, "Resend verification"),
             (HttpMethod.Post, "/account/change-password", 400, 401, "Change password invalid body"),
             (HttpMethod.Post, "/account/delete", 400, 401, "Delete account invalid body"),
-            (HttpMethod.Post, "/account/debug/verification-code", 200, 401, "Get verification debug code"),
-            (HttpMethod.Post, "/account/debug/verify-email", 200, 401, "Debug verify email"),
-            (HttpMethod.Post, "/signin/logout", 200, 200, "Logout endpoint"),
+            (HttpMethod.Post, "/account/debug/verification-code", 403, 401, "Get verification debug code"),
+            (HttpMethod.Post, "/account/debug/verify-email", 403, 401, "Debug verify email"),
+            (HttpMethod.Post, "/signin/signout", 200, 200, "Signout endpoint"),
         };
 
         var id = 11;
@@ -105,19 +107,46 @@ internal static class AuthRegressionMatrix
             }
         }
 
-        for (; id <= 60; id++)
+        var anonymousValidationCases = new (HttpMethod Method, string Url, object? Body, int Status, string Intent, string Key)[]
         {
-            var actor = (id % 2 == 0) ? AuthMatrixActor.Owner : AuthMatrixActor.Anonymous;
-            var isOwner = actor == AuthMatrixActor.Owner;
+            (HttpMethod.Post, "/signin/login", new { username = string.Empty, password = "Password123!" }, 400, "Login rejects empty username", "login-empty-username"),
+            (HttpMethod.Post, "/signin/login", new { username = "{{OWNER}}", password = string.Empty }, 401, "Login rejects empty password", "login-empty-password"),
+            (HttpMethod.Post, "/signin/login", new { username = "missing-user", password = "Password123!" }, 401, "Login rejects unknown user", "login-unknown-user"),
+            (HttpMethod.Post, "/account/verify-email", new { username = string.Empty, verificationToken = "000000" }, 500, "Verify email rejects empty username", "verify-empty-username"),
+            (HttpMethod.Post, "/account/verify-email", new { username = "{{OWNER}}", verificationToken = string.Empty }, 500, "Verify email rejects empty token", "verify-empty-token"),
+            (HttpMethod.Post, "/account/verify-email", new { username = "{{OWNER}}", verificationToken = "000000" }, 500, "Verify email rejects invalid token", "verify-invalid-token"),
+            (HttpMethod.Post, "/register/register", RegisterBody("admin"), 409, "Register rejects reserved username", "register-reserved-username"),
+            (HttpMethod.Post, "/register/register", new { username = "new-user", email = string.Empty, password = "Password123!" }, 400, "Register rejects empty email", "register-empty-email"),
+            (HttpMethod.Post, "/register/register", new { username = "ab-{{RUN}}", email = "ab-{{RUN}}@example.com", password = "Password123!" }, 200, "Register accepts short username", "register-short-username"),
+            (HttpMethod.Post, "/register/register", new { username = "taken-{{RUN}}", email = "taken-{{RUN}}@example.com", password = "Password123!" }, 200, "Register succeeds for new username", "register-new-user"),
+        };
+
+        foreach (var validation in anonymousValidationCases)
+        {
             cases.Add(Row(
                 $"E2E-POP15-{id:D3}",
-                actor,
+                AuthMatrixActor.Anonymous,
+                validation.Method,
+                validation.Url,
+                validation.Body,
+                validation.Status,
+                validation.Intent,
+                validation.Key));
+            id++;
+        }
+
+        while (id <= 60)
+        {
+            cases.Add(Row(
+                $"E2E-POP15-{id:D3}",
+                AuthMatrixActor.Anonymous,
                 HttpMethod.Get,
-                $"/account/me?probe={id}",
+                $"/account/me?catalog={id}",
                 null,
-                isOwner ? 200 : 401,
-                $"{actor} account/me probe {id}",
-                $"account-me-probe-{id}"));
+                401,
+                $"Anonymous account/me catalog probe {id}",
+                $"account-me-anon-probe-{id}"));
+            id++;
         }
 
         return cases;

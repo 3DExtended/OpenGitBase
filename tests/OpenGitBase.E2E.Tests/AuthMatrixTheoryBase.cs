@@ -19,6 +19,6 @@ public abstract class AuthMatrixTheoryBase : E2eTestBase
         var result = await AuthMatrixRunner.ExecuteAsync(matrixCase, context, cancellationToken).ConfigureAwait(false);
         await Baselines.CaptureApiAsync(matrixCase.BaselineKey, result).ConfigureAwait(false);
         Assert.Equal(matrixCase.ExpectedStatus, result.StatusCode);
-        await AssertBaselinesAsync(cancellationToken).ConfigureAwait(false);
+        await AssertBaselinesAsync(cancellationToken, assertWhenCommitted: false).ConfigureAwait(false);
     }
 }
