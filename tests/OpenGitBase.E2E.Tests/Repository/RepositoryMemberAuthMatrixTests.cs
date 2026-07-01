@@ -1,4 +1,4 @@
-using OpenGitBase.E2E.Core;
+﻿using OpenGitBase.E2E.Core;
 using OpenGitBase.E2E.Core.Fixtures;
 
 namespace OpenGitBase.E2E.Tests.Repository;

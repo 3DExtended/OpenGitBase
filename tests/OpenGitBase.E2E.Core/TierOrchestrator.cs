@@ -31,11 +31,11 @@ public sealed class DefaultTierRegistry : ITierRegistry
 {
     public IReadOnlyList<TierDefinition> Tiers { get; } =
     [
-        new() { Id = 0, Name = "Infrastructure", FailFast = true, Categories = ["Tier0"] },
+        new() { Id = 0, Name = "Infrastructure", FailFast = true, Categories = ["Tier0", "Admin"] },
         new() { Id = 1, Name = "Auth", FailFast = true, Categories = ["Auth"] },
-        new() { Id = 2, Name = "GitHttps", FailFast = false, Categories = ["GitHttps"] },
+        new() { Id = 2, Name = "GitHttps", FailFast = false, Categories = ["GitHttps", "GitSsh"] },
         new() { Id = 3, Name = "Security", FailFast = false, Categories = ["Security"] },
-        new() { Id = 4, Name = "Discussion", FailFast = false, Categories = ["Discussion"] },
+        new() { Id = 4, Name = "Discussion", FailFast = false, Categories = ["Discussion", "Discovery"] },
         new() { Id = 5, Name = "Repository", FailFast = false, Categories = ["Repository", "RepositoryMember", "Organization"] },
         new() { Id = 6, Name = "MergeRequest", FailFast = false, Categories = ["MergeRequest"] },
         new() { Id = 7, Name = "HaChaos", FailFast = false, Categories = ["HaChaos"] },

@@ -50,4 +50,6 @@ Living index for [E2E test population](../../prd/e2e-test-population.md). Update
 | F11 Admin fleet | 0 | 10 | 50 |
 | F12 Discovery | 0 | 10 | 50 |
 
+Matrix-backed scenarios use catalog IDs `E2E-POP##-###` in test case records; see `*RegressionMatrixTests` and `*SmokeTests` classes.
+
 Pending rows are added by work items pop-09 … pop-28.

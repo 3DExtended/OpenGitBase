@@ -74,7 +74,7 @@ On the fast profile, tier 7 is skipped in the runner report with reason `Require
 - `docker-compose.e2e-full-ha.yml` — full HA profile marker (uses main multi-node topology).
 - `docker-compose.override.yml` — **required** for storage fleet (auto-included when present). The runner calls `./scripts/bootstrap-fleet.sh` after API health is up to refresh enrollment tokens in this file. On first setup, copy from `docker-compose.override.example.yml`.
 
-## Reports
+- `docs/e2e/ci-strategy.md` — smoke vs regression CI job matrix (HITL sign-off section)
 
 Local only: `.e2e-reports/<timestamp>/index.html` with `latest/` copy. Playwright HTML report and screenshot artifacts are copied under `playwright/` in each run directory.
 
@@ -154,7 +154,12 @@ public Task RunMatrixCase(AuthMatrixCase matrixCase) =>
 
 See `RepositoryMemberAuthMatrixTests` for a ≥10-row reference implementation.
 
-### Promotion indexer
+### Playwright behavioral vs visual
+
+- **Visual** specs (`tests/visual/`) — pixel baselines in git; gallery fixtures.
+- **Behavioral** specs (`tests/behavioral/`) — DOM assertions with MSW; no snapshot PNGs.
+
+Both run under tier 8 via `@regression` grep.
 
 Scan handler integration tests for E2E candidacy:
 

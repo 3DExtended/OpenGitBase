@@ -1,4 +1,4 @@
-using OpenGitBase.E2E.Core;
+﻿using OpenGitBase.E2E.Core;
 
 namespace OpenGitBase.E2E.Tests.Fuzz;
 

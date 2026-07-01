@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using OpenGitBase.E2E.Core;
 using OpenGitBase.E2E.Core.Fixtures;
 
