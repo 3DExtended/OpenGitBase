@@ -73,6 +73,17 @@ public class ReportGeneratorTests
 }
 
 [Trait("Category", "E2EUnit")]
+public class ScenarioCatalogTests
+{
+    [Fact]
+    public void CatalogExistsWithMinimumDoneScenarios()
+    {
+        Assert.True(File.Exists(ScenarioCatalog.CatalogPath));
+        Assert.True(ScenarioCatalog.CountDoneScenarios() >= 12);
+    }
+}
+
+[Trait("Category", "E2EUnit")]
 public class UrlDiscoveryTests
 {
     [Fact]
