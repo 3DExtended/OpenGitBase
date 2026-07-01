@@ -27,6 +27,9 @@ public sealed record RunOptions
 
     public bool SkipCompose { get; init; }
 
+    /// <summary>When set, only the given tier id runs (e.g. 8 for Playwright UI).</summary>
+    public int? TierOnly { get; init; }
+
     public static RunOptions Parse(string[] args)
     {
         var options = new RunOptions();
@@ -62,6 +65,10 @@ public sealed record RunOptions
                     break;
                 case "--filter" when i + 1 < args.Length:
                     options = options with { Filter = args[++i] };
+                    break;
+                case "--tier" when i + 1 < args.Length && int.TryParse(args[i + 1], out var tierId):
+                    options = options with { TierOnly = tierId };
+                    i++;
                     break;
             }
         }

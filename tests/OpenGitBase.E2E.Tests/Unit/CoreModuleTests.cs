@@ -2,6 +2,7 @@ using OpenGitBase.E2E.Core;
 
 namespace OpenGitBase.E2E.Tests.Unit;
 
+[Trait("Category", "E2EUnit")]
 public class TranscriptTests
 {
     [Fact]
@@ -19,6 +20,7 @@ public class TranscriptTests
     }
 }
 
+[Trait("Category", "E2EUnit")]
 public class BaselineNormalizerTests
 {
     [Fact]
@@ -43,6 +45,7 @@ public class BaselineNormalizerTests
     }
 }
 
+[Trait("Category", "E2EUnit")]
 public class ReportGeneratorTests
 {
     [Fact]
@@ -69,6 +72,7 @@ public class ReportGeneratorTests
     }
 }
 
+[Trait("Category", "E2EUnit")]
 public class UrlDiscoveryTests
 {
     [Fact]

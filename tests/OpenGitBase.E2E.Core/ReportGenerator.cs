@@ -36,6 +36,8 @@ public sealed class ReportGenerator
         sb.AppendLine("pre{background:#f5f5f5;padding:1rem;overflow:auto}");
         sb.AppendLine(".diff del{background:#fdd}.diff ins{background:#dfd}");
         sb.AppendLine("table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:.5rem}");
+        sb.AppendLine(".pw-gallery{display:flex;flex-wrap:wrap;gap:1rem}.pw-gallery figure{margin:0;max-width:320px}");
+        sb.AppendLine(".pw-gallery img{max-width:100%;border:1px solid #ccc}");
         sb.AppendLine("</style></head><body>");
         sb.AppendLine("<h1>OpenGitBase E2E Regression Report</h1>");
         sb.AppendLine($"<p>Generated {DateTimeOffset.UtcNow:u}</p>");
@@ -85,13 +87,19 @@ public sealed class ReportGenerator
     public async Task<string> WriteReportAsync(
         IReadOnlyList<TierSummary> tiers,
         IReadOnlyList<TestResultRecord> tests,
-        string? playwrightSectionHtml = null,
+        PlaywrightRunResult? playwright = null,
         CancellationToken cancellationToken = default)
     {
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
         var reportDir = Path.Combine(E2eEnvironment.ReportsDirectory, runId);
         Directory.CreateDirectory(reportDir);
         var indexPath = Path.Combine(reportDir, "index.html");
+        string? playwrightSectionHtml = null;
+        if (playwright != null)
+        {
+            playwrightSectionHtml = await playwright.ArchiveIntoReportAsync(reportDir, cancellationToken).ConfigureAwait(false);
+        }
+
         var html = Generate(tiers, tests, playwrightSectionHtml);
         await File.WriteAllTextAsync(indexPath, html, cancellationToken).ConfigureAwait(false);
 

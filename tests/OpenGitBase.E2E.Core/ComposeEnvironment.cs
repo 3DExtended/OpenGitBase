@@ -12,6 +12,8 @@ public interface IComposeEnvironment
 
     ComposeProfile Profile { get; }
 
+    bool StartedByRunner { get; }
+
     Task StartAsync(ComposeProfile profile, CancellationToken cancellationToken = default);
 
     Task StopAsync(CancellationToken cancellationToken = default);
@@ -22,6 +24,8 @@ public interface IComposeEnvironment
 public sealed class ComposeEnvironment : IComposeEnvironment, IDisposable
 {
     private Process? _composeProcess;
+
+    public bool StartedByRunner { get; private set; }
 
     public Uri ApiBaseUrl => E2eEnvironment.ApiBaseUrl;
 
@@ -37,31 +41,31 @@ public sealed class ComposeEnvironment : IComposeEnvironment, IDisposable
         // docker-compose.e2e.yml enables E2E__CaptureEmail on API services for email capture
         // and internal /internal/e2e/* endpoints used by AuthJourneyTests and reset-database.
         var composeFiles = GetComposeFiles(profile);
-        var args = new List<string> { "compose" };
-        foreach (var file in composeFiles)
-        {
-            args.Add("-f");
-            args.Add(file);
-        }
+        var composeArgs = BuildComposeArgs(composeFiles);
 
-        args.Add("up");
-        args.Add("-d");
-        args.Add("--wait");
-
-        await RunDockerAsync(args, cancellationToken).ConfigureAwait(false);
+        // Phase 1: database + API + edge so bootstrap-fleet.sh can mint enrollment tokens.
+        await RunDockerAsync(
+            [..composeArgs, "up", "-d", "--wait", "postgres", "redis", "api-1", "api-2", "ssh-lb"],
+            cancellationToken).ConfigureAwait(false);
         await WaitHealthyAsync(cancellationToken).ConfigureAwait(false);
+        await FleetBootstrapper.BootstrapAsync(cancellationToken).ConfigureAwait(false);
+
+        // Phase 2: storage, dispatchers, web (override.yml tokens refreshed above).
+        await RunDockerAsync([..composeArgs, "up", "-d", "--wait"], cancellationToken).ConfigureAwait(false);
+        await WaitHealthyAsync(cancellationToken).ConfigureAwait(false);
+        StartedByRunner = true;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        var composeFiles = GetComposeFiles(Profile);
-        var args = new List<string> { "compose" };
-        foreach (var file in composeFiles)
+        if (!StartedByRunner)
         {
-            args.Add("-f");
-            args.Add(file);
+            return;
         }
 
+        StartedByRunner = false;
+        var composeFiles = GetComposeFiles(Profile);
+        var args = BuildComposeArgs(composeFiles);
         args.Add("down");
         await RunDockerAsync(args, cancellationToken).ConfigureAwait(false);
     }
@@ -115,6 +119,12 @@ public sealed class ComposeEnvironment : IComposeEnvironment, IDisposable
             files.Add(e2eOverride);
         }
 
+        var localOverride = Path.Combine(root, "docker-compose.override.yml");
+        if (File.Exists(localOverride))
+        {
+            files.Add(localOverride);
+        }
+
         if (profile == ComposeProfile.FullHa)
         {
             var fullHa = Path.Combine(root, "docker-compose.e2e-full-ha.yml");
@@ -125,6 +135,18 @@ public sealed class ComposeEnvironment : IComposeEnvironment, IDisposable
         }
 
         return files;
+    }
+
+    private static List<string> BuildComposeArgs(IReadOnlyList<string> composeFiles)
+    {
+        var args = new List<string> { "compose" };
+        foreach (var file in composeFiles)
+        {
+            args.Add("-f");
+            args.Add(file);
+        }
+
+        return args;
     }
 
     private async Task RunDockerAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
@@ -151,8 +173,11 @@ public sealed class ComposeEnvironment : IComposeEnvironment, IDisposable
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         if (process.ExitCode != 0)
         {
+            var hint = File.Exists(Path.Combine(E2eEnvironment.RepoRoot, "docker-compose.override.yml"))
+                ? string.Empty
+                : "\nHint: copy docker-compose.override.example.yml to docker-compose.override.yml and run ./scripts/bootstrap-fleet.sh";
             throw new InvalidOperationException(
-                $"docker {string.Join(' ', args)} failed with exit code {process.ExitCode}.\n{stdout}\n{stderr}");
+                $"docker {string.Join(' ', args)} failed with exit code {process.ExitCode}.\n{stdout}\n{stderr}{hint}");
         }
     }
 }

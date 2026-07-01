@@ -2,16 +2,26 @@
 
 Branch: `main`
 
-## 2026-07-01 — Full implementation (e2e-01 … e2e-20)
+## 2026-07-01 — Stabilization + remaining tasks
 
-Implemented unified C# E2E regression framework on `main` in one cohesive pass (prior uncommitted WIP consolidated and stabilized).
+### Fixes
+
+- **Fleet bootstrap:** `ComposeEnvironment` staged startup (postgres/redis/API/HAProxy → `bootstrap-fleet.sh` → full stack) so enrollment tokens match a fresh database.
+- **bootstrap-fleet.sh:** Admin API calls use `/api/...` prefix (required behind unified HAProxy on `:8089`).
+- **Compose health gate:** `RequiresComposeFact` / `RequiresComposeTheory` skip compose-backed tests when `http://localhost:8089/health` is down.
+- **Playwright:** Regenerated `@regression` snapshots; runner archives Playwright HTML report + artifacts into unified report.
+- **Solution test isolation:** `OpenGitBase.E2E.Tests` defaults to `Category=E2EUnit` for plain `dotnet test`.
 
 ### Verification
 
-- `OPENGITBASE_E2E_SKIP_COMPOSE=1 dotnet test tests/OpenGitBase.E2E.Tests --filter "Category!=Discovered"` — 19 passed (two consecutive runs)
-- `dotnet build tests/OpenGitBase.E2E.Runner` — succeeded
-- `tests/OpenGitBase.Common.Tests/SendGrid/CapturingSendGridEmailSenderTests.cs` — included in solution
-- Compose API healthy at `http://localhost:8089/health` with `docker-compose.e2e.yml` overlay
+- `dotnet test tests/OpenGitBase.E2E.Tests` — 4 unit tests pass (compose scenarios not run)
+- `dotnet test tests/OpenGitBase.E2E.Tests --filter "Category!=Discovered"` with stack up — 19/19 pass
+- `npx playwright test --grep @regression` — 9/9 pass
+- `dotnet run --project tests/OpenGitBase.E2E.Runner -- --tier 8 --no-open-report` — Playwright tier green
+
+## 2026-07-01 — Full implementation (e2e-01 … e2e-20)
+
+Implemented unified C# E2E regression framework on `main` in one cohesive pass (prior uncommitted WIP consolidated and stabilized).
 
 ### Deliverables by work item
 
@@ -26,7 +36,7 @@ Implemented unified C# E2E regression framework on `main` in one cohesive pass (
 | e2e-07 | done | CapturingSendGridEmailSender + `/internal/e2e/*` |
 | e2e-08 | done | Identity seed + auth journey |
 | e2e-09 | done | Git facade + HTTPS PAT scenario |
-| e2e-10 | done | Playwright invoker + `@regression` tag on shell spec |
+| e2e-10 | done | Playwright invoker + `@regression` tag + report embed |
 | e2e-11 | done | URL discovery + TestGenerator + unit test |
 | e2e-12 | done | Security auth matrix |
 | e2e-13 | done | Fuzz tier + `--fuzz` flag |
@@ -36,10 +46,3 @@ Implemented unified C# E2E regression framework on `main` in one cohesive pass (
 | e2e-18 | done | Discussion E2E (3 scenarios) |
 | e2e-19 | done | Repository browse E2E |
 | e2e-20 | done | README docs + retired shell e2e scripts |
-
-### Key fixes during stabilization
-
-- Per-test-method baseline paths via `BeginScenario()`
-- Baseline normalizer: durations, PATs, traceIds, temp dirs, git errors
-- FuzzRunner maps `ExpectedOutcome` to HTTP status codes
-- `OPENGITBASE_E2E_SKIP_COMPOSE` no longer skips compose-backed tests when stack is up

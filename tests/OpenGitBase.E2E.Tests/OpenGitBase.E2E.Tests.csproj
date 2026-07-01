@@ -5,6 +5,8 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);SA1402;SA1412;SA1201;SA1204</NoWarn>
+    <!-- Compose scenarios require the E2E runner; plain `dotnet test` on this project runs unit/meta only. -->
+    <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">Category=E2EUnit</VSTestTestCaseFilter>
   </PropertyGroup>
 
   <ItemGroup>

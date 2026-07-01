@@ -58,6 +58,26 @@ public abstract class E2eTestBase : IAsyncLifetime
         ?? GetType().Name;
 }
 
-public sealed class RequiresComposeFactAttribute : FactAttribute;
+public sealed class RequiresComposeFactAttribute : FactAttribute
+{
+    public RequiresComposeFactAttribute()
+    {
+        ComposeHealthGate.Refresh();
+        if (!ComposeHealthGate.IsHealthy)
+        {
+            Skip = ComposeHealthGate.SkipReason;
+        }
+    }
+}
 
-public sealed class RequiresComposeTheoryAttribute : TheoryAttribute;
+public sealed class RequiresComposeTheoryAttribute : TheoryAttribute
+{
+    public RequiresComposeTheoryAttribute()
+    {
+        ComposeHealthGate.Refresh();
+        if (!ComposeHealthGate.IsHealthy)
+        {
+            Skip = ComposeHealthGate.SkipReason;
+        }
+    }
+}

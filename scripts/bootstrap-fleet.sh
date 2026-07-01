@@ -28,7 +28,7 @@ fi
 
 login() {
   local response http_code
-  response=$(curl -sS -w "\n%{http_code}" -X POST "${API_URL}/signin/login" \
+  response=$(curl -sS -w "\n%{http_code}" -X POST "${API_URL}/api/signin/login" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")
   http_code="${response##*$'\n'}"
@@ -51,14 +51,14 @@ echo "==> Signing in as admin"
 TOKEN=$(login | tr -d '\n\r"')
 
 echo "==> Generating dispatcher SSH keys"
-FLEET_JSON=$(curl -fsS -X POST "${API_URL}/admin/fleet/dispatcher-ssh-keys/generate" \
+FLEET_JSON=$(curl -fsS -X POST "${API_URL}/api/admin/fleet/dispatcher-ssh-keys/generate" \
   -H "Authorization: Bearer ${TOKEN}")
 FLEET_BOOTSTRAP_TOKEN=$(echo "${FLEET_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["fleetBootstrapToken"])')
 DISPATCHER_SSH_PUBLIC_KEY=$(echo "${FLEET_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["dispatcherSshPublicKey"])')
 
 create_enrollment() {
   local node_id="$1"
-  curl -fsS -X POST "${API_URL}/admin/storage-enrollments" \
+  curl -fsS -X POST "${API_URL}/api/admin/storage-enrollments" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
     -d "{\"nodeId\":\"${node_id}\"}" \

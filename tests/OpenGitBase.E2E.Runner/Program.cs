@@ -11,17 +11,23 @@ var browser = new BrowserLauncher();
 var tierSummaries = new List<TierSummary>();
 var failedTier = -1;
 var exitCode = 0;
+PlaywrightRunResult? playwrightResult = null;
 
 try
 {
-    if (!options.SkipCompose)
+    var tierSkipsCompose = options.TierOnly == 8;
+    if (!options.SkipCompose && !tierSkipsCompose)
     {
         Console.WriteLine($"Starting compose profile: {options.Profile}");
         await compose.StartAsync(options.Profile).ConfigureAwait(false);
     }
-    else
+    else if (options.SkipCompose)
     {
         Console.WriteLine("Skipping compose (--skip-compose).");
+    }
+    else
+    {
+        Console.WriteLine("Skipping compose (Playwright-only --tier 8).");
     }
 
     if (options.UpdateBaselines)
@@ -31,6 +37,18 @@ try
 
     foreach (var tier in orchestrator.Tiers)
     {
+        if (options.TierOnly is int onlyTier && tier.Id != onlyTier)
+        {
+            tierSummaries.Add(new TierSummary
+            {
+                Id = tier.Id,
+                Name = tier.Name,
+                Status = "Skipped",
+                SkipReason = $"Not selected (--tier {onlyTier})",
+            });
+            continue;
+        }
+
         if (failedTier >= 0)
         {
             tierSummaries.Add(new TierSummary
@@ -52,7 +70,7 @@ try
         if (tier.Id == 8)
         {
             var pw = new PlaywrightInvoker();
-            var playwrightResult = await pw.RunRegressionAsync().ConfigureAwait(false);
+            playwrightResult = await pw.RunRegressionAsync().ConfigureAwait(false);
             tierSummaries.Add(new TierSummary
             {
                 Id = tier.Id,
@@ -105,7 +123,7 @@ catch (Exception ex)
 }
 finally
 {
-    if (!options.SkipCompose)
+    if (!options.SkipCompose && compose.StartedByRunner)
     {
         try
         {
@@ -118,7 +136,7 @@ finally
     }
 }
 
-var reportPath = await reportGenerator.WriteReportAsync(tierSummaries, [], null).ConfigureAwait(false);
+var reportPath = await reportGenerator.WriteReportAsync(tierSummaries, [], playwrightResult).ConfigureAwait(false);
 Console.WriteLine($"Report: {reportPath}");
 
 var shouldOpen = options.OpenReport switch

@@ -140,12 +140,14 @@ public sealed class PlaywrightInvoker
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
         var reportDir = Path.Combine(webRoot, "playwright-report");
+        var testResultsDir = Path.Combine(webRoot, "test-results");
         return new PlaywrightRunResult
         {
             ExitCode = process.ExitCode,
             StdOut = stdout,
             StdErr = stderr,
             ReportDirectory = Directory.Exists(reportDir) ? reportDir : null,
+            TestResultsDirectory = Directory.Exists(testResultsDir) ? testResultsDir : null,
         };
     }
 }
@@ -160,14 +162,79 @@ public sealed class PlaywrightRunResult
 
     public string? ReportDirectory { get; init; }
 
-    public string ToEmbedHtml()
+    public string? TestResultsDirectory { get; init; }
+
+    public async Task<string> ArchiveIntoReportAsync(string e2eReportDir, CancellationToken cancellationToken = default)
     {
-        if (ReportDirectory == null)
+        var archiveRoot = Path.Combine(e2eReportDir, "playwright");
+        Directory.CreateDirectory(archiveRoot);
+
+        if (ReportDirectory != null)
         {
-            return "<p>No Playwright report directory found.</p>";
+            CopyDirectory(ReportDirectory, Path.Combine(archiveRoot, "html-report"));
         }
 
-        return $"<p>Playwright report: {ReportDirectory}</p><pre>{StdOut}</pre>";
+        var images = new List<string>();
+        if (TestResultsDirectory != null)
+        {
+            foreach (var image in Directory.EnumerateFiles(TestResultsDirectory, "*.png", SearchOption.AllDirectories))
+            {
+                var name = image.Replace(TestResultsDirectory, string.Empty).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var dest = Path.Combine(archiveRoot, "artifacts", name);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(image, dest, overwrite: true);
+                images.Add($"playwright/artifacts/{name.Replace('\\', '/')}");
+            }
+        }
+
+        await File.WriteAllTextAsync(
+            Path.Combine(archiveRoot, "stdout.txt"),
+            string.IsNullOrWhiteSpace(StdErr) ? StdOut : $"{StdOut}\n\n--- stderr ---\n{StdErr}",
+            cancellationToken).ConfigureAwait(false);
+
+        return BuildEmbedHtml(images);
+    }
+
+    public string BuildEmbedHtml(IReadOnlyList<string> archivedImagePaths)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<p>Playwright <code>@regression</code> specs (MSW visual gallery).</p>");
+        if (ReportDirectory != null)
+        {
+            sb.Append("<p><a href=\"playwright/html-report/index.html\">Open Playwright HTML report</a></p>");
+        }
+
+        if (archivedImagePaths.Count > 0)
+        {
+            sb.Append("<h3>Screenshots &amp; diffs</h3><div class=\"pw-gallery\">");
+            foreach (var relative in archivedImagePaths)
+            {
+                sb.Append($"<figure><img src=\"{relative}\" alt=\"{relative}\" loading=\"lazy\"/><figcaption>{relative}</figcaption></figure>");
+            }
+
+            sb.Append("</div>");
+        }
+
+        if (!string.IsNullOrWhiteSpace(StdOut))
+        {
+            sb.Append("<h3>Console</h3><pre>");
+            sb.Append(System.Net.WebUtility.HtmlEncode(StdOut));
+            sb.Append("</pre>");
+        }
+
+        return sb.ToString();
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(source, file);
+            var dest = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(file, dest, overwrite: true);
+        }
     }
 }
 

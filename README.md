@@ -171,6 +171,8 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --forc
 dotnet test OpenGitBase.sln
 ```
 
+Compose-backed E2E scenarios are **not** part of solution-wide `dotnet test` by default — they run via `dotnet run --project tests/OpenGitBase.E2E.Runner` (see [tests/OpenGitBase.E2E/README.md](tests/OpenGitBase.E2E/README.md)).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). All commits in PRs must include DCO
