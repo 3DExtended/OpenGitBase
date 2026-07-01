@@ -11,11 +11,11 @@ Branch strategy: **main** (all work items committed sequentially on default bran
 
 | Order | ID | Title | Status | Blocked by |
 |------:|-----|-------|--------|------------|
-| 1 | pop-01 | Scenario catalog + authoring checklist | in_progress | — |
-| 2 | pop-02 | Shared fixture library | pending | — |
-| 3 | pop-05 | Runner tag and feature filters | pending | — |
-| 4 | pop-08 | Full-HA tier gating | pending | — |
-| 5 | pop-03 | Git testdata provisioning | pending | pop-02 |
+| 1 | pop-01 | Scenario catalog + authoring checklist | done | — |
+| 2 | pop-02 | Shared fixture library | done | — |
+| 3 | pop-05 | Runner tag and feature filters | done | — |
+| 4 | pop-08 | Full-HA tier gating | done | — |
+| 5 | pop-03 | Git testdata provisioning | in_progress | pop-02 |
 | 6 | pop-04 | Auth matrix theory runner | pending | pop-02 |
 | 7 | pop-06 | Report feature rollup | pending | pop-01 |
 | 8 | pop-07 | Integration test promotion indexer | pending | pop-01 |

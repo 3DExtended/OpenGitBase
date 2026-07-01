@@ -136,6 +136,13 @@ public class FixtureHelperTests
         var html = "Your verification code is <strong>123456</strong>";
         Assert.Equal("123456", EmailCapture.TryParseVerificationCode(html));
     }
+
+    [Fact]
+    public void GitTestDataLayoutDefinesOversizedBlob()
+    {
+        Assert.True(GitTestDataLayout.LargeBlobSizeBytes > 1_048_576);
+        Assert.Contains("anchor", GitTestDataLayout.AnchorBody, StringComparison.Ordinal);
+    }
 }
 
 [Trait("Category", "E2EUnit")]

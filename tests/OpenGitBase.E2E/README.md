@@ -113,6 +113,20 @@ var owner = await identity.RegisterUserAsync($"disc-owner-{Context.RunSuffix}");
 var publicRepo = await repos.CreateAsync(owner, $"disc-public-{Context.RunSuffix}", "Disc Public", isPrivate: false);
 ```
 
+### Git testdata repos
+
+`GitTestDataFixture` seeds a **known file tree** via PAT push (not committed as large baselines):
+
+| Path | Purpose |
+|------|---------|
+| `README.md` | Browse smoke content |
+| `src/foo/bar.txt` | Nested tree navigation |
+| `assets/logo.svg` | SVG content-type classification |
+| `data/large.bin` | Blob &gt;1MB for size-cap scenarios |
+| `docs/anchors.md` | Discussion code-anchor target |
+
+Call `GetBrowsePublicRepoAsync` or `GetAnchorRepoAsync` once per test class; provisioning waits for storage fleet via `WaitForStorageProvisioningAsync`.
+
 ## Authoring checklist
 
 When adding a scenario:

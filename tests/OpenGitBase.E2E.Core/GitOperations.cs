@@ -50,6 +50,8 @@ public interface IGitOperations
 
     Task CommitFileAsync(string workingDirectory, string relativePath, string content, string commitMessage, bool append = false, CancellationToken cancellationToken = default);
 
+    Task CommitPathsAsync(string workingDirectory, string commitMessage, CancellationToken cancellationToken = default);
+
     Task AddRemoteAsync(string workingDirectory, string remoteName, string remoteUrl, CancellationToken cancellationToken = default);
 
     Task PushAsync(string workingDirectory, string remoteName, string refSpec, CancellationToken cancellationToken = default);
@@ -102,6 +104,12 @@ public sealed class GitOperations : IGitOperations
 
         await File.WriteAllTextAsync(fullPath, content, cancellationToken).ConfigureAwait(false);
         await RunGitAsync(workingDirectory, ["add", relativePath], cancellationToken).ConfigureAwait(false);
+        await RunGitAsync(workingDirectory, ["commit", "-m", commitMessage], cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task CommitPathsAsync(string workingDirectory, string commitMessage, CancellationToken cancellationToken = default)
+    {
+        await RunGitAsync(workingDirectory, ["add", "-A"], cancellationToken).ConfigureAwait(false);
         await RunGitAsync(workingDirectory, ["commit", "-m", commitMessage], cancellationToken).ConfigureAwait(false);
     }
 
