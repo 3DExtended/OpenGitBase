@@ -4,6 +4,15 @@ using OpenGitBase.E2E.Core;
 var options = RunOptions.Parse(args);
 Directory.SetCurrentDirectory(E2eEnvironment.RepoRoot);
 
+if (args.Length > 0 && args[0] == "promote-index")
+{
+    var candidates = PromotionIndexer.Scan(E2eEnvironment.RepoRoot);
+    var output = Path.Combine(E2eEnvironment.RepoRoot, "docs", "e2e", "promotion-candidates.md");
+    await PromotionIndexer.WriteMarkdownAsync(candidates, output).ConfigureAwait(false);
+    Console.WriteLine($"Wrote {candidates.Count} promotion candidates to {output}");
+    return candidates.Count >= 20 ? 0 : 1;
+}
+
 var compose = new ComposeEnvironment();
 var orchestrator = new TierOrchestrator();
 var reportGenerator = new ReportGenerator();
