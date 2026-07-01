@@ -61,6 +61,18 @@ try
             continue;
         }
 
+        if (tier.Id == 7 && options.Profile != ComposeProfile.FullHa)
+        {
+            tierSummaries.Add(new TierSummary
+            {
+                Id = tier.Id,
+                Name = tier.Name,
+                Status = "Skipped",
+                SkipReason = "Requires --profile full-ha",
+            });
+            continue;
+        }
+
         if (tier.Id == 9 && !options.Fuzz)
         {
             tierSummaries.Add(new TierSummary { Id = tier.Id, Name = tier.Name, Status = "Skipped", SkipReason = "--fuzz not set" });
@@ -92,8 +104,8 @@ try
             continue;
         }
 
-        var filter = orchestrator.BuildDotnetTestFilter(tier.Id, options.Filter);
-        var testExit = await RunDotnetTestAsync(filter).ConfigureAwait(false);
+        var filter = options.BuildTestFilter(orchestrator.BuildDotnetTestFilter(tier.Id, null));
+        var testExit = await RunDotnetTestAsync(filter, options).ConfigureAwait(false);
         tierSummaries.Add(new TierSummary
         {
             Id = tier.Id,
@@ -153,8 +165,9 @@ if (shouldOpen)
 
 return exitCode;
 
-static async Task<int> RunDotnetTestAsync(string filter)
+static async Task<int> RunDotnetTestAsync(string filter, RunOptions options)
 {
+    Environment.SetEnvironmentVariable(ComposeFullHaGate.ProfileEnvironmentVariable, options.Profile.ToString());
     var testsProject = Path.Combine(E2eEnvironment.RepoRoot, "tests", "OpenGitBase.E2E.Tests", "OpenGitBase.E2E.Tests.csproj");
     var startInfo = new ProcessStartInfo
     {

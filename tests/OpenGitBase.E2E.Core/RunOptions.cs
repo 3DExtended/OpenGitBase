@@ -30,6 +30,31 @@ public sealed record RunOptions
     /// <summary>When set, only the given tier id runs (e.g. 8 for Playwright UI).</summary>
     public int? TierOnly { get; init; }
 
+    public string? Tag { get; init; }
+
+    public string? Feature { get; init; }
+
+    public string BuildTestFilter(string tierFilter)
+    {
+        var parts = new List<string> { $"({tierFilter})" };
+        if (!string.IsNullOrWhiteSpace(Tag))
+        {
+            parts.Add($"(Tag={Tag})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Feature))
+        {
+            parts.Add($"(Category={Feature})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Filter))
+        {
+            parts.Add(Filter.Contains('&', StringComparison.Ordinal) ? $"({Filter})" : Filter);
+        }
+
+        return string.Join("&", parts);
+    }
+
     public static RunOptions Parse(string[] args)
     {
         var options = new RunOptions();
@@ -69,6 +94,12 @@ public sealed record RunOptions
                 case "--tier" when i + 1 < args.Length && int.TryParse(args[i + 1], out var tierId):
                     options = options with { TierOnly = tierId };
                     i++;
+                    break;
+                case "--tag" when i + 1 < args.Length:
+                    options = options with { Tag = args[++i] };
+                    break;
+                case "--feature" when i + 1 < args.Length:
+                    options = options with { Feature = args[++i] };
                     break;
             }
         }

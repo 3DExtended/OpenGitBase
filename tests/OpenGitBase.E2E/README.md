@@ -42,7 +42,31 @@ dotnet run --project tests/OpenGitBase.E2E.Runner
 | `--no-open-report` | Never open browser. |
 | `--fuzz` | Run optional fuzz tier. |
 | `--tier <n>` | Run a single tier only (e.g. `8` = Playwright UI). |
-| `--filter <expr>` | Pass xUnit filter to tier test runs. |
+| `--tag <name>` | Filter tests by `Tag` trait (e.g. `Smoke`, `Regression`, `FullHa`). |
+| `--feature <category>` | Filter tests by xUnit `Category` (e.g. `Discussion`, `MergeRequest`). |
+| `--filter <expr>` | Pass additional xUnit filter to tier test runs. |
+
+### Smoke and feature iteration
+
+```bash
+# Daily smoke subset (once scenarios are tagged Smoke)
+dotnet run --project tests/OpenGitBase.E2E.Runner -- --skip-compose --tag Smoke --no-open-report
+
+# Single feature domain while authoring
+dotnet run --project tests/OpenGitBase.E2E.Runner -- --skip-compose --feature Discussion --no-open-report
+
+# Combine tag, feature, and tier
+dotnet run --project tests/OpenGitBase.E2E.Runner -- --tier 4 --feature Discussion --tag Regression --no-open-report
+```
+
+## Compose profiles
+
+| Profile | Flag | Use |
+|---------|------|-----|
+| **fast** (default) | `--profile fast` | Daily local runs; skips HA chaos tier 7. |
+| **full-ha** | `--profile full-ha` | Nightly / pre-release; runs tier 7 and `[Trait("Tag","FullHa")]` scenarios. |
+
+On the fast profile, tier 7 is skipped in the runner report with reason `Requires --profile full-ha`. Individual tests tagged `FullHa` use `RequiresFullHaFact` and skip with the same guidance when the profile env var is not set.
 
 ## Compose overlays
 
@@ -65,6 +89,29 @@ dotnet run --project tests/OpenGitBase.E2E.Runner
 ## Scenario catalog
 
 All compose-backed scenarios are indexed in [docs/e2e/scenario-catalog.md](../../docs/e2e/scenario-catalog.md). Add or update a catalog row in the **same PR** as new tests.
+
+## Fixture library
+
+Reusable setup lives in `tests/OpenGitBase.E2E.Core/Fixtures/` (and `IdentityFixture` in `TestIsolation.cs`). All fixtures use per-test `RunSuffix` isolation — no shared mutable state between tests.
+
+| Fixture | Purpose |
+|---------|---------|
+| `IdentityFixture` | Register verified users; `SeedCoreRolesAsync` for admin/writer/outsider. |
+| `RepositoryFixture` | Create public/private repos; add members. |
+| `OrganizationFixture` | Create org; add members by username. |
+| `MergeRequestFixture` | Repo with `main` + feature branch pushed (MR-ready). |
+| `PatFixture` | Create read/write PATs; build HTTPS remote URLs. |
+| `EmailCapture` | Poll/clear `/internal/e2e/emails`; parse verification codes. |
+| `GitOperations` | Init, commit, push, clone, branch helpers (`GitOperations.cs`). |
+
+Example (discussion seed):
+
+```csharp
+var identity = new IdentityFixture(Context, Transcript);
+var repos = new RepositoryFixture(Transcript, Context.Normalizer);
+var owner = await identity.RegisterUserAsync($"disc-owner-{Context.RunSuffix}");
+var publicRepo = await repos.CreateAsync(owner, $"disc-public-{Context.RunSuffix}", "Disc Public", isPrivate: false);
+```
 
 ## Authoring checklist
 

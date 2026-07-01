@@ -1,4 +1,5 @@
 using OpenGitBase.E2E.Core;
+using OpenGitBase.E2E.Core.Fixtures;
 
 namespace OpenGitBase.E2E.Tests.Unit;
 
@@ -69,6 +70,71 @@ public class ReportGeneratorTests
         Assert.Contains("<h1>OpenGitBase E2E Regression Report</h1>", html);
         Assert.Contains("InfrastructureSmokeTests.Smoke", html);
         Assert.Contains("[Intent] health check", html);
+    }
+}
+
+[Trait("Category", "E2EUnit")]
+public class RunOptionsTests
+{
+    [Fact]
+    public void BuildTestFilterCombinesTagAndFeature()
+    {
+        var options = new RunOptions { Tag = "Smoke", Feature = "Auth" };
+        var filter = options.BuildTestFilter("Category=Auth&Category!=Discovered");
+        Assert.Contains("Tag=Smoke", filter);
+        Assert.Contains("Category=Auth", filter);
+    }
+
+    [Fact]
+    public void ParseTagAndFeatureFlags()
+    {
+        var options = RunOptions.Parse(["--tag", "Regression", "--feature", "Discussion"]);
+        Assert.Equal("Regression", options.Tag);
+        Assert.Equal("Discussion", options.Feature);
+    }
+}
+
+[Trait("Category", "E2EUnit")]
+public class ComposeFullHaGateTests
+{
+    [Fact]
+    public void RefreshDetectsFullHaProfile()
+    {
+        var previous = Environment.GetEnvironmentVariable(ComposeFullHaGate.ProfileEnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(ComposeFullHaGate.ProfileEnvironmentVariable, nameof(ComposeProfile.FullHa));
+            ComposeFullHaGate.Refresh();
+            Assert.True(ComposeFullHaGate.IsFullHaProfile);
+
+            Environment.SetEnvironmentVariable(ComposeFullHaGate.ProfileEnvironmentVariable, "fast");
+            ComposeFullHaGate.Refresh();
+            Assert.False(ComposeFullHaGate.IsFullHaProfile);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ComposeFullHaGate.ProfileEnvironmentVariable, previous);
+        }
+    }
+}
+
+[Trait("Category", "E2EUnit")]
+public class FixtureHelperTests
+{
+    [Fact]
+    public void PatFixtureBuildsRemoteUrl()
+    {
+        var fixture = new PatFixture(new OperationTranscript(), new BaselineNormalizer("unit"));
+        var url = fixture.BuildRemoteUrl("alice", "my-repo", "pat-token");
+        Assert.Contains("alice", url);
+        Assert.Contains("my-repo", url);
+    }
+
+    [Fact]
+    public void EmailCaptureParsesVerificationCode()
+    {
+        var html = "Your verification code is <strong>123456</strong>";
+        Assert.Equal("123456", EmailCapture.TryParseVerificationCode(html));
     }
 }
 
