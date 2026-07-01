@@ -25,7 +25,7 @@ public class EmailSendQueryHandler : IQueryHandler<EmailSendQuery, Unit>
         CancellationToken cancellationToken
     )
     {
-        if (_options.IsDisabled)
+        if (_options.IsDisabled && !IsE2eCaptureMode())
         {
             _logger?.LogInformation(
                 "SendGrid disabled; skipping email to {Recipient} with subject {Subject}",
@@ -60,4 +60,8 @@ public class EmailSendQueryHandler : IQueryHandler<EmailSendQuery, Unit>
             .ConfigureAwait(false);
         return Unit.Value;
     }
+
+    private bool IsE2eCaptureMode() =>
+        string.Equals(_options.ApiKey, "e2e-capture", StringComparison.Ordinal)
+        || string.Equals(Environment.GetEnvironmentVariable("E2E__CaptureEmail"), "true", StringComparison.OrdinalIgnoreCase);
 }

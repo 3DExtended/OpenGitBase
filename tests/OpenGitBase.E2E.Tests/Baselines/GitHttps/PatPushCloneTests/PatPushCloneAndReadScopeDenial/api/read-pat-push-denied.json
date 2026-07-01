@@ -1,0 +1,6 @@
+{
+  "StatusCode": 128,
+  "Body": "fatal: {{GIT_FATAL}}\n",
+  "Method": "GIT",
+  "Url": "push"
+}

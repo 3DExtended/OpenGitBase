@@ -1,0 +1,3 @@
+[Intent] Stop storage-2 and verify API health remains
+[ClusterAction] Stopped container for 'storage-2'
+[ClusterAction] Started container for 'storage-2'

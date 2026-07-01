@@ -1,0 +1,6 @@
+{
+  "StatusCode": 401,
+  "Body": "{\u0022error\u0022:\u0022Sign in required.\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions"
+}

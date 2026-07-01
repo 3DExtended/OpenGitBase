@@ -1,0 +1,3 @@
+[Intent] Anonymous POST /repository/protected-slug should return 401
+[HttpRequest] POST http://localhost:8089/api/repository/protected-slug | POST http://localhost:8089/api/repository/protected-slug
+[HttpResponse] 401 Unauthorized

@@ -139,7 +139,13 @@ public class Startup
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
-        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+        var e2eCaptureEmail = string.Equals(Configuration["E2E:CaptureEmail"], "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Configuration["E2E__CaptureEmail"], "true", StringComparison.OrdinalIgnoreCase);
+        if (!e2eCaptureEmail)
+        {
+            services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+        }
+
         var jwtOptions = Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
         services.AddSingleton(jwtOptions);
         services.AddSingleton(

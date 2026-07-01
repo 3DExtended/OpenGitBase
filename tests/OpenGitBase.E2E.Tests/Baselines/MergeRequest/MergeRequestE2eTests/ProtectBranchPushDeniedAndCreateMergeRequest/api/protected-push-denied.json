@@ -1,0 +1,6 @@
+{
+  "StatusCode": 1,
+  "Body": "error: {{GIT_RPC_ERROR}}\nsend-pack: unexpected disconnect while reading sideband packet\nfatal: {{GIT_FATAL}}\nEverything up-to-date\n",
+  "Method": "GIT",
+  "Url": "push main"
+}

@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022ref\u0022:\u0022main\u0022,\u0022path\u0022:\u0022\u0022,\u0022entries\u0022:[{\u0022name\u0022:\u0022README.md\u0022,\u0022path\u0022:\u0022README.md\u0022,\u0022type\u0022:\u0022blob\u0022,\u0022size\u0022:10}],\u0022replicationLag\u0022:{\u0022behind\u0022:false,\u0022message\u0022:null}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/by-slug/browse-owner-{{RUN_SUFFIX}}/browse-public-{{RUN_SUFFIX}}/content/tree?refName=main\u0026path="
+}

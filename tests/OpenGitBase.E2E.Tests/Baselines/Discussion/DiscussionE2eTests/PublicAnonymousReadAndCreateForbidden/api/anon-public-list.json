@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "[]",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions"
+}

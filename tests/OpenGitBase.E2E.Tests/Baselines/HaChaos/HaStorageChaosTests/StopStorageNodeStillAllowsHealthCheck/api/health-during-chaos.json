@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022status\u0022:\u0022Healthy\u0022,\u0022totalDurationMs\u0022:{{DURATION_MS}},\u0022results\u0022:[{\u0022name\u0022:\u0022Application\u0022,\u0022status\u0022:\u0022Healthy\u0022,\u0022description\u0022:\u0022Application is running\u0022,\u0022durationMs\u0022:{{DURATION_MS}},\u0022data\u0022:{},\u0022exception\u0022:null,\u0022timestamp\u0022:\u0022{{TIMESTAMP}}\u0022},{\u0022name\u0022:\u0022DatabaseConnectivity\u0022,\u0022status\u0022:\u0022Healthy\u0022,\u0022description\u0022:\u0022Database connection successful\u0022,\u0022durationMs\u0022:{{DURATION_MS}},\u0022data\u0022:{\u0022CanConnect\u0022:true,\u0022DatabaseProvider\u0022:\u0022Npgsql.EntityFrameworkCore.PostgreSQL\u0022},\u0022exception\u0022:null,\u0022timestamp\u0022:\u0022{{TIMESTAMP}}\u0022}],\u0022timestamp\u0022:\u0022{{TIMESTAMP}}\u0022}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/health"
+}

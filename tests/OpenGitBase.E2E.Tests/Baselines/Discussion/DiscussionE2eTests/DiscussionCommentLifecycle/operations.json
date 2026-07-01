@@ -1,0 +1,37 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[HttpRequest] POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Owner creates discussion
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions | POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 201 Created | {"repositoryId":"{{GUID}}","number":1,"title":"E2E discussion","body":"seed","status":0,"hasEverBeenEngaged":false,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"disc-owner-{{RUN_SUFFIX}}","assigneeUserId":null,"assigneeUsername":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","tags":[],"comments":null,"viewerEffectiveRole":null,"id":{"value":"{{GUID}}"}}
+[Intent] Reader comment engages discussion
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1/comments | POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1/comments
+[HttpResponse] 200 OK | {"discussionId":{"value":"{{GUID}}"},"authorUserId":{"value":"{{GUID}}"},"authorUsername":"disc-reader-{{RUN_SUFFIX}}","bodyMarkdown":"reader engages","createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","editedAt":null,"deletedAt":null,"deletedByUserId":null,"isDeleted":false,"parentCommentId":null,"isResolved":false,"resolvedAt":null,"resolvedByUserId":null,"replyCount":0,"lastReplyAt":null,"orphanedFromDeletedRoot":false,"replies":[],"anchor":null,"id":{"value":"{{GUID}}"}}
+[Intent] Owner resolves discussion
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1/resolve | POST http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1/resolve
+[HttpResponse] 200 OK | {"repositoryId":"{{GUID}}","number":1,"title":"E2E discussion","body":"seed","status":2,"hasEverBeenEngaged":true,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":null,"assigneeUserId":null,"assigneeUsername":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","tags":[],"comments":null,"viewerEffectiveRole":null,"id":{"value":"{{GUID}}"}}
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1 | GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-public-{{RUN_SUFFIX}}/discussions/1
+[HttpResponse] 200 OK | {"repositoryId":"{{GUID}}","number":1,"title":"E2E discussion","body":"seed","status":2,"hasEverBeenEngaged":true,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"disc-owner-{{RUN_SUFFIX}}","assigneeUserId":null,"assigneeUsername":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","tags":[],"comments":null,"viewerEffectiveRole":"Owner","id":{"value":"{{GUID}}"}}

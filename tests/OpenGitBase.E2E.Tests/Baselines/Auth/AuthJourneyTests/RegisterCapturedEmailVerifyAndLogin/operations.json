@@ -1,0 +1,13 @@
+[Intent] Register new user via public API
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[Intent] Fetch verification email from E2E capture endpoint
+[HttpRequest] GET http://localhost:8089/api/internal/e2e/emails?to=journey-{{RUN_SUFFIX}}%40example.com | GET http://localhost:8089/api/internal/e2e/emails?to=journey-{{RUN_SUFFIX}}%40example.com
+[HttpResponse] 200 OK | [{"to":"journey-{{RUN_SUFFIX}}@example.com","subject":"Verify your email","htmlBody":"Hello journey-{{RUN_SUFFIX}},<br><br>Your email verification code is <strong>{{VERIFY_TOKEN}}</strong>. It expires in 24 hours.","sentAt":"{{TIMESTAMP}}"}]
+[EmailCaptured] Email captured to journey-{{RUN_SUFFIX}}@example.com: Verify your email | Hello journey-{{RUN_SUFFIX}},<br><br>Your email verification code is <strong>{{VERIFY_TOKEN}}</strong>. It expires in 24 hours.
+[Intent] Verify email using captured code (no debug shortcut)
+[HttpRequest] POST http://localhost:8089/api/account/verify-email | POST http://localhost:8089/api/account/verify-email
+[HttpResponse] 200 OK | Email verified
+[Intent] Login with verified credentials
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}

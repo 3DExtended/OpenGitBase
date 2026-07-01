@@ -1,0 +1,4 @@
+{
+  "Subject": "Verify your email",
+  "Body": "Hello journey-{{RUN_SUFFIX}},\u003Cbr\u003E\u003Cbr\u003EYour email verification code is \u003Cstrong\u003E{{VERIFY_TOKEN}}\u003C/strong\u003E. It expires in 24 hours."
+}

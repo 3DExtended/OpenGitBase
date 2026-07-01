@@ -27,7 +27,7 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test.describe('Shell components', () => {
+test.describe('Shell components @regression', () => {
   test('visual gallery', async ({ page }) => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-gallery')).toHaveScreenshot('visual-gallery.png', {

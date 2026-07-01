@@ -1,0 +1,6 @@
+refs:
+  refs/heads/main {{SHA}}
+  refs/remotes/origin/HEAD refs/remotes/origin/main
+  refs/remotes/origin/main {{SHA}}
+commits:
+  {{SHA}} initial

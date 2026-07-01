@@ -161,10 +161,32 @@ public static class DependencyInjectionHelpers
 
     private static void ConfigureSendGrid(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+        services.AddSingleton<CapturingEmailStore>();
 
-        var sendGridOptions = configuration.GetSection("SendGrid").Get<SendGridOptions>();
-        if (sendGridOptions == null)
+        var captureEmail = string.Equals(configuration["E2E:CaptureEmail"], "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(configuration["E2E__CaptureEmail"], "true", StringComparison.OrdinalIgnoreCase);
+
+        if (captureEmail)
+        {
+            services.AddSingleton<ISendGridEmailSender, CapturingSendGridEmailSender>();
+        }
+        else
+        {
+            services.AddSingleton<ISendGridEmailSender, SendGridEmailSender>();
+        }
+
+        var sendGridOptions = configuration.GetSection("SendGrid").Get<SendGridOptions>() ?? new SendGridOptions();
+        if (captureEmail)
+        {
+            sendGridOptions.IsDisabled = false;
+            sendGridOptions.ApiKey ??= "e2e-capture";
+            sendGridOptions.FromEmailAddress ??= "noreply@e2e.opengitbase.local";
+            sendGridOptions.FromSenderName ??= "OpenGitBase E2E";
+        }
+
+        if (string.IsNullOrWhiteSpace(sendGridOptions.ApiKey)
+            && string.IsNullOrWhiteSpace(sendGridOptions.FromEmailAddress)
+            && !captureEmail)
         {
             return;
         }

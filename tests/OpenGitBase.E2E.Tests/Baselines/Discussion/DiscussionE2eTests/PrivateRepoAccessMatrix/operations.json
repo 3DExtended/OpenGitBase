@@ -1,0 +1,35 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-public-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[HttpRequest] POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/disc-private-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Anonymous private list returns 404
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions | GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 404 Not Found | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"{{TRACE_ID}}"}
+[Intent] Outsider private list returns 403 or 404
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions | GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 403 Forbidden
+[Intent] Member can list private discussions
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions | GET http://localhost:8089/api/repository/by-slug/disc-owner-{{RUN_SUFFIX}}/disc-private-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 200 OK | []

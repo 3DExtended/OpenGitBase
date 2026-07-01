@@ -1,0 +1,25 @@
+# E2E overlay — enables in-memory email capture and internal E2E endpoints on API services.
+services:
+  api-1:
+    environment:
+      E2E__CaptureEmail: "true"
+      E2E__SharedEmailStorePath: "/shared/e2e-emails.json"
+      SendGrid__IsDisabled: "false"
+      SendGrid__ApiKey: "e2e-capture"
+      SendGrid__FromEmailAddress: "noreply@e2e.opengitbase.local"
+      SendGrid__FromSenderName: "OpenGitBase E2E"
+    volumes:
+      - opengitbase_e2e_shared:/shared
+  api-2:
+    environment:
+      E2E__CaptureEmail: "true"
+      E2E__SharedEmailStorePath: "/shared/e2e-emails.json"
+      SendGrid__IsDisabled: "false"
+      SendGrid__ApiKey: "e2e-capture"
+      SendGrid__FromEmailAddress: "noreply@e2e.opengitbase.local"
+      SendGrid__FromSenderName: "OpenGitBase E2E"
+    volumes:
+      - opengitbase_e2e_shared:/shared
+
+volumes:
+  opengitbase_e2e_shared:

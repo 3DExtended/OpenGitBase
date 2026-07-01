@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "Email verified",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/account/verify-email"
+}

@@ -116,14 +116,15 @@ Then repeat the first-time startup steps.
 git clone http://git:YOUR_TOKEN@localhost:8089/OWNER/REPO.git
 ```
 
-Run the end-to-end script against a running stack:
+Run the unified E2E regression suite against a running stack:
 
 ```bash
-./scripts/e2e-https-git-test.sh
-./scripts/test-discussions-e2e.sh
+dotnet run --project tests/OpenGitBase.E2E.Runner
+# Or with compose already up:
+dotnet run --project tests/OpenGitBase.E2E.Runner -- --skip-compose
 ```
 
-The discussions script bootstraps its own users and repositories; it only requires a healthy Compose API (`curl -fsS http://localhost:8089/health`).
+See [tests/OpenGitBase.E2E/README.md](tests/OpenGitBase.E2E/README.md) for profiles, baselines, and flags. Requires a healthy Compose API (`curl -fsS http://localhost:8089/health`).
 
 ### SSH git (optional)
 

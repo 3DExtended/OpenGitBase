@@ -1,0 +1,6 @@
+{
+  "StatusCode": 201,
+  "Body": "{\u0022repositoryId\u0022:\u0022{{GUID}}\u0022,\u0022number\u0022:1,\u0022title\u0022:\u0022E2E merge request\u0022,\u0022body\u0022:\u0022Related work for branch protection\u0022,\u0022status\u0022:2,\u0022isDraft\u0022:false,\u0022creatorUserId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022creatorUsername\u0022:\u0022mr-owner-{{RUN_SUFFIX}}\u0022,\u0022sourceRef\u0022:\u0022feature/mr-e2e\u0022,\u0022targetRef\u0022:\u0022main\u0022,\u0022sourceHeadSha\u0022:\u0022{{SHA}}\u0022,\u0022targetBaseSha\u0022:\u0022{{SHA}}\u0022,\u0022mergeCommitSha\u0022:null,\u0022createdAt\u0022:\u0022{{TIMESTAMP}}\u0022,\u0022updatedAt\u0022:\u0022{{TIMESTAMP}}\u0022,\u0022approvals\u0022:[],\u0022requiredApprovalCount\u0022:0,\u0022approvalCountAtHead\u0022:0,\u0022id\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022}}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/repository/by-slug/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}/merge-requests"
+}

@@ -23,7 +23,7 @@ Implement in dependency order on a feature branch (e.g. `feat/merge-requests`); 
 | 15 | `mr-15` | [Linked discussions sidebar](./15-linked-discussions-sidebar.md) | AFK | ready | 6, 8 |
 | 16 | `mr-16` | [End-to-end merge request integration tests](./16-e2e-merge-request-integration-tests.md) | AFK | ready | 8, 11, 14 |
 
-Run MR e2e locally (docker compose required): `./scripts/test-merge-requests-e2e.sh`
+Run MR e2e locally (docker compose required): `dotnet run --project tests/OpenGitBase.E2E.Runner -- --filter "Category=MergeRequest"`
 
 **First demo milestone:** complete **mr-08** — protect `main`, push a feature branch, open an MR, approve, and merge (diff review lands in **mr-11**).
 

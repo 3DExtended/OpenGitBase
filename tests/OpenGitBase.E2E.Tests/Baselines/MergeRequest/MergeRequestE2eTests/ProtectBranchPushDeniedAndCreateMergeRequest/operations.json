@@ -1,0 +1,79 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[Intent] Create repository and add writer member
+[HttpRequest] POST http://localhost:8089/api/repository/mr-e2e-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/mr-e2e-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Push main and feature branch via git
+[HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{GUID}}"},"name":"mr-e2e","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[GitCommand] git init -b main | {{TEMP_DIR}}
+[GitOutput] git succeeded | Initialized empty Git repository in {{TEMP_DIR}}
+
+[GitCommand] git config user.email mr-owner-{{RUN_SUFFIX}}@example.com | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git config user.name mr-owner-{{RUN_SUFFIX}} | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m initial commit | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main (root-commit) {{SHA}}] initial commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 README.md
+
+[GitCommand] git remote add origin http://git:{{PAT}}@127.0.0.1:8089/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git -c credential.helper= push -u origin main | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}.git
+ * [new branch]      main -> main
+
+[GitCommand] git checkout -b feature/mr-e2e | {{TEMP_DIR}}
+[GitOutput] git succeeded | Switched to a new branch 'feature/mr-e2e'
+
+[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m feature commit | {{TEMP_DIR}}
+[GitOutput] git succeeded | [feature/mr-e2e {{SHA}}] feature commit
+ 1 file changed, 1 insertion(+)
+
+[GitCommand] git -c credential.helper= push -u origin feature/mr-e2e | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}.git
+ * [new branch]      feature/mr-e2e -> feature/mr-e2e
+
+[Intent] Create merge request
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}/merge-requests | POST http://localhost:8089/api/repository/by-slug/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}/merge-requests
+[HttpResponse] 201 Created | {"repositoryId":"{{GUID}}","number":1,"title":"E2E merge request","body":"Related work for branch protection","status":2,"isDraft":false,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"mr-owner-{{RUN_SUFFIX}}","sourceRef":"feature/mr-e2e","targetRef":"main","sourceHeadSha":"{{SHA}}","targetBaseSha":"{{SHA}}","mergeCommitSha":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","approvals":[],"requiredApprovalCount":0,"approvalCountAtHead":0,"id":{"value":"{{GUID}}"}}
+[Intent] Protect main branch and deny writer direct push
+[HttpRequest] POST http://localhost:8089/api/repository/{{GUID}}/protected-branch-rules | POST http://localhost:8089/api/repository/{{GUID}}/protected-branch-rules
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[GitCommand] git checkout main | {{TEMP_DIR}}
+[GitOutput] git succeeded | Switched to branch 'main'
+
+[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m direct change on main | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main {{SHA}}] direct change on main
+ 1 file changed, 1 insertion(+)
+
+[HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{GUID}}"},"name":"writer","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[GitCommand] git remote set-url origin http://git:{{PAT}}@127.0.0.1:8089/mr-owner-{{RUN_SUFFIX}}/mr-e2e-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git -c credential.helper= push origin main | {{TEMP_DIR}}
+[GitOutput] git failed (1) | error: {{GIT_RPC_ERROR}}
+send-pack: unexpected disconnect while reading sideband packet
+fatal: {{GIT_FATAL}}
+Everything up-to-date
