@@ -2,6 +2,8 @@
 
 Self-hosted Git platform (early stage).
 
+Manual merge-request smoke fixtures live under [`test/fixtures/mr-smoke/`](test/fixtures/mr-smoke/).
+
 ## Licensing
 
 OpenGitBase is **source-available**, not OSI-approved open source. Source code

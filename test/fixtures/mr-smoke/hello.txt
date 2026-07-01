@@ -1,0 +1,3 @@
+OpenGitBase MR smoke test — 2026-07-01
+
+This file exists only to produce a visible diff in a merge request.
