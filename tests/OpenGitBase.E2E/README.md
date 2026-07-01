@@ -141,6 +141,29 @@ When adding a scenario:
 8. Commit baseline bundles under `tests/OpenGitBase.E2E.Tests/Baselines/`.
 9. Map to at least one PRD user story or parity issue in the catalog row.
 
+### Auth matrix pattern
+
+For table-driven access-control scenarios, define `AuthMatrixCase` rows and execute via `AuthMatrixTheoryBase`:
+
+```csharp
+[RequiresComposeTheory]
+[MemberData(nameof(Cases))]
+public Task RunMatrixCase(AuthMatrixCase matrixCase) =>
+    RunMatrixCaseAsync(matrixCase, context);
+```
+
+See `RepositoryMemberAuthMatrixTests` for a ≥10-row reference implementation.
+
+### Promotion indexer
+
+Scan handler integration tests for E2E candidacy:
+
+```bash
+dotnet run --project tests/OpenGitBase.E2E.Runner -- promote-index
+```
+
+Output: `docs/e2e/promotion-candidates.md`
+
 ## Quality gates
 
 **Include** scenarios that:

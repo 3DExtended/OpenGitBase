@@ -36,7 +36,7 @@ public sealed class DefaultTierRegistry : ITierRegistry
         new() { Id = 2, Name = "GitHttps", FailFast = false, Categories = ["GitHttps"] },
         new() { Id = 3, Name = "Security", FailFast = false, Categories = ["Security"] },
         new() { Id = 4, Name = "Discussion", FailFast = false, Categories = ["Discussion"] },
-        new() { Id = 5, Name = "Repository", FailFast = false, Categories = ["Repository"] },
+        new() { Id = 5, Name = "Repository", FailFast = false, Categories = ["Repository", "RepositoryMember", "Organization"] },
         new() { Id = 6, Name = "MergeRequest", FailFast = false, Categories = ["MergeRequest"] },
         new() { Id = 7, Name = "HaChaos", FailFast = false, Categories = ["HaChaos"] },
         new() { Id = 8, Name = "UI", FailFast = false, Categories = ["UI"] },
@@ -72,8 +72,13 @@ public sealed class TierOrchestrator
     public string BuildDotnetTestFilter(int tierId, string? additionalFilter)
     {
         var tier = _registry.Tiers.FirstOrDefault(t => t.Id == tierId);
-        var category = tier?.Categories.FirstOrDefault() ?? $"Tier{tierId}";
-        var filter = $"Category={category}&Category!=Discovered";
+        var categories = tier?.Categories is { Length: > 0 } cats
+            ? cats
+            : [$"Tier{tierId}"];
+        var categoryFilter = categories.Length == 1
+            ? $"Category={categories[0]}"
+            : $"({string.Join("|", categories.Select(c => $"Category={c}"))})";
+        var filter = $"{categoryFilter}&Category!=Discovered";
         if (!string.IsNullOrWhiteSpace(additionalFilter))
         {
             filter = $"({filter})&({additionalFilter})";

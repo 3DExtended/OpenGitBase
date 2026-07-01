@@ -56,6 +56,7 @@ public class ReportGeneratorTests
         var html = generator.Generate(
         [
             new TierSummary { Id = 0, Name = "Infrastructure", Status = "Passed", Passed = 1 },
+            new TierSummary { Id = 5, Name = "Repository", Status = "Passed", Passed = 2 },
         ],
         [
             new TestResultRecord
@@ -70,6 +71,35 @@ public class ReportGeneratorTests
         Assert.Contains("<h1>OpenGitBase E2E Regression Report</h1>", html);
         Assert.Contains("InfrastructureSmokeTests.Smoke", html);
         Assert.Contains("[Intent] health check", html);
+        Assert.Contains("Feature Rollup", html);
+        Assert.Contains("F05", html);
+    }
+}
+
+[Trait("Category", "E2EUnit")]
+public class FeatureRollupBuilderTests
+{
+    [Fact]
+    public void BuildAggregatesTierSummariesByFeature()
+    {
+        var rollup = FeatureRollupBuilder.Build(
+        [
+            new TierSummary { Id = 1, Name = "Auth", Status = "Passed", Passed = 3 },
+            new TierSummary { Id = 5, Name = "Repository", Status = "Failed", Failed = 1 },
+        ]);
+        Assert.Contains(rollup, r => r.FeatureCode == "F01" && r.Passed == 3);
+        Assert.Contains(rollup, r => r.FeatureCode == "F05" && r.Failed == 1);
+    }
+}
+
+[Trait("Category", "E2EUnit")]
+public class PromotionIndexerTests
+{
+    [Fact]
+    public void ScanFindsAtLeastTwentyCandidates()
+    {
+        var candidates = PromotionIndexer.Scan(E2eEnvironment.RepoRoot);
+        Assert.True(candidates.Count >= 20, $"Expected >=20 candidates, got {candidates.Count}");
     }
 }
 
