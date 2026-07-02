@@ -18,40 +18,22 @@ async function disableAnimations(page: import('@playwright/test').Page) {
   })
 }
 
+async function waitForMergeRequestPage(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: 'Refactor branch policy editor' })).toBeVisible()
+  await expect(page.getByTestId('mr-linked-discussions')).toBeVisible()
+}
+
 async function installMergeRequestRoutes(page: import('@playwright/test').Page) {
-  await page.route('**/api/repository/by-slug/demo-user/hello-world', async (route) => {
-    await route.fulfill({
-      json: {
-        id: '11111111-1111-1111-1111-111111111111',
-        name: 'Hello World',
-        slug: 'hello-world',
-        ownerUserId: '22222222-2222-2222-2222-222222222222',
-        ownerSlug: 'demo-user',
-        isPrivate: false,
-        updatedAt: '2026-06-01T12:00:00Z',
-      },
-    })
+  await page.route('**/api/account/me**', async (route) => {
+    await route.fulfill({ status: 401, body: '' })
   })
 
-  await page.route('**/api/repository/by-slug/demo-user/hello-world/merge-requests/7', async (route) => {
+  await page.route('**/api/repository/by-slug/demo-user/hello-world/merge-requests/7/discussion-links**', async (route) => {
     await route.fulfill({
-      json: {
-        id: 'mr-7',
-        repositoryId: '11111111-1111-1111-1111-111111111111',
-        number: 7,
-        title: 'Refactor branch policy editor',
-        body: 'This merge request adds reusable policy controls.',
-        status: 'Open',
-        isDraft: false,
-        creatorUserId: '22222222-2222-2222-2222-222222222222',
-        creatorUsername: 'demo-user',
-        sourceRef: 'feature/branch-rules',
-        targetRef: 'main',
-        sourceHeadSha: 'abc123def456',
-        targetBaseSha: 'fff000',
-        createdAt: '2026-06-27T08:00:00.000Z',
-        updatedAt: '2026-06-27T09:00:00.000Z',
-      },
+      json: [
+        { discussionNumber: 12, relationshipType: 'closes', discussionTitle: 'Protect default branch', discussionStatus: 'Open' },
+        { discussionNumber: 5, relationshipType: 'implements', discussionTitle: 'Policy matcher refactor', discussionStatus: 'Open' },
+      ],
     })
   })
 
@@ -161,12 +143,51 @@ async function installMergeRequestRoutes(page: import('@playwright/test').Page) 
     })
   })
 
-  await page.route('**/api/repository/by-slug/demo-user/hello-world/merge-requests/7/discussion-links', async (route) => {
+  await page.route('**/api/repository/by-slug/demo-user/hello-world/merge-requests/7', async (route) => {
     await route.fulfill({
-      json: [
-        { discussionNumber: 12, relationshipType: 'closes', discussionTitle: 'Protect default branch', discussionStatus: 'Open' },
-      ],
+      json: {
+        id: 'mr-7',
+        repositoryId: '11111111-1111-1111-1111-111111111111',
+        number: 7,
+        title: 'Refactor branch policy editor',
+        body: 'This merge request adds reusable policy controls.',
+        status: 'Open',
+        isDraft: false,
+        creatorUserId: '22222222-2222-2222-2222-222222222222',
+        creatorUsername: 'demo-user',
+        sourceRef: 'feature/branch-rules',
+        targetRef: 'main',
+        sourceHeadSha: 'abc123def456',
+        targetBaseSha: 'fff000',
+        createdAt: '2026-06-27T08:00:00.000Z',
+        updatedAt: '2026-06-27T09:00:00.000Z',
+      },
     })
+  })
+
+  await page.route('**/api/repository/by-slug/demo-user/hello-world', async (route) => {
+    await route.fulfill({
+      json: {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Hello World',
+        slug: 'hello-world',
+        ownerUserId: '22222222-2222-2222-2222-222222222222',
+        ownerSlug: 'demo-user',
+        isPrivate: false,
+        updatedAt: '2026-06-01T12:00:00Z',
+      },
+    })
+  })
+
+  await page.route('**/api/repository-member/**', async (route) => {
+    await route.fulfill({ json: [] })
+  })
+}
+
+async function installLinkedDiscussionsSidebarRoutes(page: import('@playwright/test').Page) {
+  await installMergeRequestRoutes(page)
+  await page.route('**/api/repository/by-slug/demo-user/hello-world/discussions?*', async (route) => {
+    await route.fulfill({ json: [] })
   })
 }
 
@@ -190,12 +211,26 @@ test.describe('Merge request visuals', () => {
         Promise.all(registrations.map(registration => registration.unregister())),
       )
     })
-    await installMergeRequestRoutes(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`)
-    await page.waitForLoadState('networkidle')
+    await installLinkedDiscussionsSidebarRoutes(page)
+    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await waitForMergeRequestPage(page)
     await disableAnimations(page)
     await expect(page.locator('body')).toHaveScreenshot('merge-request-detail-overview.png', {
       fullPage: true,
     })
+  })
+
+  test('linked discussions sidebar', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('ogb-site-gate-unlocked', '1')
+      void navigator.serviceWorker.getRegistrations().then(registrations =>
+        Promise.all(registrations.map(registration => registration.unregister())),
+      )
+    })
+    await installLinkedDiscussionsSidebarRoutes(page)
+    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await waitForMergeRequestPage(page)
+    await disableAnimations(page)
+    await expect(page.getByTestId('mr-linked-discussions')).toHaveScreenshot('merge-request-linked-discussions.png')
   })
 })

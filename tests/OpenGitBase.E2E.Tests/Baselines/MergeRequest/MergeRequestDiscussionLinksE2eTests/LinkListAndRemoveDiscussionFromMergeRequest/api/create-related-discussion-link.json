@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022discussionNumber\u0022:2,\u0022relationshipType\u0022:1,\u0022discussionTitle\u0022:\u0022Follow-up docs\u0022,\u0022discussionStatus\u0022:\u0022Open\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links"
+}

@@ -149,6 +149,198 @@ public class RepositoryMergeRequestsControllerTests
         Assert.Equal("feature commit", commits[0].Message);
     }
 
+    [Fact]
+    public async Task ListDiscussionLinks_PublicRepository_ReturnsOk()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, authenticatedUserId: null);
+        var queryProcessor = GetQueryProcessor(controller);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListMergeRequestDiscussionLinksQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From<IReadOnlyList<MergeRequestDiscussionLinkDto>>(
+                    [
+                        new MergeRequestDiscussionLinkDto
+                        {
+                            DiscussionNumber = 3,
+                            RelationshipType = MergeRequestRelationshipType.Closes,
+                            DiscussionTitle = "Fix login",
+                            DiscussionStatus = "Open",
+                        },
+                    ]
+                )
+            );
+
+        var result = await controller.ListDiscussionLinks("owner", "repo", 1, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var links = Assert.IsAssignableFrom<IReadOnlyList<MergeRequestDiscussionLinkDto>>(ok.Value);
+        Assert.Single(links);
+        Assert.Equal(3, links[0].DiscussionNumber);
+    }
+
+    [Fact]
+    public async Task CreateDiscussionLink_Writer_ReturnsOk()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, userId, memberRole: RepositoryRole.Writer);
+        var queryProcessor = GetQueryProcessor(controller);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<CreateMergeRequestDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new MergeRequestDiscussionLinkDto
+                    {
+                        DiscussionNumber = 5,
+                        RelationshipType = MergeRequestRelationshipType.Implements,
+                        DiscussionTitle = "API cleanup",
+                        DiscussionStatus = "Open",
+                    }
+                )
+            );
+
+        var result = await controller.CreateDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            new CreateMergeRequestDiscussionLinkRequest
+            {
+                DiscussionNumber = 5,
+                RelationshipType = "implements",
+            },
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var link = Assert.IsType<MergeRequestDiscussionLinkDto>(ok.Value);
+        Assert.Equal(5, link.DiscussionNumber);
+    }
+
+    [Fact]
+    public async Task CreateDiscussionLink_InvalidRelationship_ReturnsBadRequest()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, userId, memberRole: RepositoryRole.Writer);
+
+        var result = await controller.CreateDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            new CreateMergeRequestDiscussionLinkRequest
+            {
+                DiscussionNumber = 5,
+                RelationshipType = "invalid-type",
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteDiscussionLink_MissingLink_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, userId, memberRole: RepositoryRole.Writer);
+        var queryProcessor = GetQueryProcessor(controller);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<DeleteMergeRequestDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<Unit>.None);
+
+        var result = await controller.DeleteDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            9,
+            "related",
+            CancellationToken.None
+        );
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task CreateDiscussionLink_NotFound_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, userId, memberRole: RepositoryRole.Writer);
+        var queryProcessor = GetQueryProcessor(controller);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<CreateMergeRequestDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<MergeRequestDiscussionLinkDto>.None);
+
+        var result = await controller.CreateDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            new CreateMergeRequestDiscussionLinkRequest
+            {
+                DiscussionNumber = 404,
+                RelationshipType = "related",
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task CreateDiscussionLink_Anonymous_ReturnsUnauthorized()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, authenticatedUserId: null);
+
+        var result = await controller.CreateDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            new CreateMergeRequestDiscussionLinkRequest
+            {
+                DiscussionNumber = 5,
+                RelationshipType = "related",
+            },
+            CancellationToken.None
+        );
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteDiscussionLink_ExistingLink_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(repository, userId, memberRole: RepositoryRole.Writer);
+        var queryProcessor = GetQueryProcessor(controller);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<DeleteMergeRequestDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(Unit.Value));
+
+        var result = await controller.DeleteDiscussionLink(
+            "owner",
+            "repo",
+            1,
+            9,
+            "closes",
+            CancellationToken.None
+        );
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    private static IQueryProcessor GetQueryProcessor(RepositoryMergeRequestsController controller)
+    {
+        var field = typeof(RepositoryMergeRequestsController).GetField(
+            "_queryProcessor",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
+        );
+        return (IQueryProcessor)field!.GetValue(controller)!;
+    }
+
     private static RepositoryMergeRequestsController CreateController(
         RepositoryDto repository,
         UserId? authenticatedUserId,

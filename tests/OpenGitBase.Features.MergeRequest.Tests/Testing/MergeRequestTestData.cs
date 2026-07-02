@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Features.Discussion.Contracts;
+using OpenGitBase.Features.Discussion.Entities;
 using OpenGitBase.Features.MergeRequest;
 using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.MergeRequest.Entities;
@@ -146,5 +148,31 @@ public static class MergeRequestTestData
             }
         );
         await context.SaveChangesAsync().ConfigureAwait(false);
+    }
+
+    public static async Task<DiscussionEntity> SeedDiscussionAsync(
+        OpenGitBaseDbContext context,
+        int number = 1,
+        string title = "Linked discussion",
+        DiscussionStatus status = DiscussionStatus.Open
+    )
+    {
+        await SeedRepositoryAsync(context).ConfigureAwait(false);
+        var entity = new DiscussionEntity
+        {
+            Id = Guid.NewGuid(),
+            RepositoryId = RepositoryId,
+            Number = number,
+            Title = title,
+            Body = "Discussion body",
+            Status = (int)status,
+            HasEverBeenEngaged = false,
+            CreatorUserId = CreatorUserId.Value,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        context.Set<DiscussionEntity>().Add(entity);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+        return entity;
     }
 }

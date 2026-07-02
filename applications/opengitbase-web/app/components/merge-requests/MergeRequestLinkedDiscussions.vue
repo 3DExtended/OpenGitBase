@@ -4,6 +4,11 @@ import type {
   MergeRequestDiscussionLink,
   MergeRequestLinkType,
 } from '~/utils/api'
+import {
+  DISCUSSION_LINK_GROUP_ORDER,
+  filterLinkableDiscussions,
+  groupMergeRequestDiscussionLinks,
+} from '~/utils/mergeRequestDiscussionLinks'
 
 const props = defineProps<{
   owner: string
@@ -48,25 +53,15 @@ const linkTypeMeta = computed(() => ({
 }))
 
 const groups = computed(() => {
-  const order: MergeRequestLinkType[] = ['closes', 'implements', 'related']
-  return order.map(type => ({
-    type,
-    meta: linkTypeMeta.value[type],
-    links: props.linkedDiscussions.filter(l => l.relationshipType === type),
-  })).filter(g => g.links.length > 0)
+  return groupMergeRequestDiscussionLinks(props.linkedDiscussions, DISCUSSION_LINK_GROUP_ORDER)
+    .map(group => ({
+      ...group,
+      meta: linkTypeMeta.value[group.type],
+    }))
 })
 
 const filteredDiscussions = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  const linked = new Set(props.linkedDiscussions.map(l => l.discussionNumber))
-  return discussions.value
-    .filter(d => !linked.has(d.number))
-    .filter((d) => {
-      if (!q) {
-        return true
-      }
-      return d.title.toLowerCase().includes(q) || String(d.number).includes(q)
-    })
+  return filterLinkableDiscussions(discussions.value, props.linkedDiscussions, search.value)
 })
 
 async function toggleExpand(): Promise<void> {
@@ -92,7 +87,8 @@ async function linkDiscussion(number: number): Promise<void> {
 </script>
 
 <template>
-  <UCard>
+  <div data-testid="mr-linked-discussions">
+    <UCard>
     <template #header>
       <h3 class="font-semibold">
         {{ t('repo.mergeRequests.linkedDiscussions') }}
@@ -111,6 +107,7 @@ async function linkDiscussion(number: number): Promise<void> {
         v-for="group in groups"
         :key="group.type"
         class="space-y-2"
+        :data-testid="`mr-linked-discussion-group-${group.type}`"
       >
         <div class="flex items-center gap-2">
           <UBadge
@@ -161,6 +158,7 @@ async function linkDiscussion(number: number): Promise<void> {
         <button
           type="button"
           class="flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
+          data-testid="mr-link-discussion-expand"
           @click="toggleExpand"
         >
           <span class="flex items-center gap-2">
@@ -192,6 +190,7 @@ async function linkDiscussion(number: number): Promise<void> {
           <div
             class="max-h-40 overflow-y-auto rounded border"
             style="border-color: var(--ogb-border);"
+            data-testid="mr-discussion-link-picker"
           >
             <p
               v-if="loadingDiscussions"
@@ -221,5 +220,6 @@ async function linkDiscussion(number: number): Promise<void> {
         </div>
       </div>
     </div>
-  </UCard>
+    </UCard>
+  </div>
 </template>

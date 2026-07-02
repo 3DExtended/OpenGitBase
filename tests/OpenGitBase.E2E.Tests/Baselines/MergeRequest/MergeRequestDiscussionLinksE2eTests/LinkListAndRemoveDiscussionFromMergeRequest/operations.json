@@ -1,0 +1,80 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[Intent] Seed merge-request-ready repository with main and feature branches
+[Intent] Create public repository mr-link-{{RUN_SUFFIX}}
+[HttpRequest] POST http://localhost:8089/api/repository/mr-link-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/mr-link-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Add repository member
+[HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] Create write-scoped PAT
+[HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{GUID}}"},"name":"e2e-write","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[GitCommand] git init -b main | {{TEMP_DIR}}
+[GitOutput] git succeeded | Initialized empty Git repository in {{TEMP_DIR}}
+
+[GitCommand] git config user.email mr-link-owner-{{RUN_SUFFIX}}@example.com | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git config user.name mr-link-owner-{{RUN_SUFFIX}} | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m initial commit | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main (root-commit) {{SHA}}] initial commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 README.md
+
+[GitCommand] git remote add origin http://git:{{WRITE_PAT}}@127.0.0.1:8089/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git -c credential.helper= push -u origin main | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}.git
+ * [new branch]      main -> main
+
+[GitCommand] git checkout -b feature/mr-e2e | {{TEMP_DIR}}
+[GitOutput] git succeeded | Switched to a new branch 'feature/mr-e2e'
+
+[GitCommand] git add README.md | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m feature commit | {{TEMP_DIR}}
+[GitOutput] git succeeded | [feature/mr-e2e {{SHA}}] feature commit
+ 1 file changed, 1 insertion(+)
+
+[GitCommand] git -c credential.helper= push -u origin feature/mr-e2e | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}.git
+ * [new branch]      feature/mr-e2e -> feature/mr-e2e
+
+[Intent] Create discussions to link from merge request
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/discussions | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 201 Created | {"repositoryId":"{{GUID}}","number":1,"title":"Refactor auth module","body":"Track MR work here.","status":0,"hasEverBeenEngaged":false,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"mr-link-owner-{{RUN_SUFFIX}}","assigneeUserId":null,"assigneeUsername":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","tags":[],"comments":null,"viewerEffectiveRole":null,"id":{"value":"{{GUID}}"}}
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/discussions | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/discussions
+[HttpResponse] 201 Created | {"repositoryId":"{{GUID}}","number":2,"title":"Follow-up docs","body":"Informational only.","status":0,"hasEverBeenEngaged":false,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"mr-link-owner-{{RUN_SUFFIX}}","assigneeUserId":null,"assigneeUsername":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","tags":[],"comments":null,"viewerEffectiveRole":null,"id":{"value":"{{GUID}}"}}
+[Intent] Create merge request
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests
+[HttpResponse] 201 Created | {"repositoryId":"{{GUID}}","number":1,"title":"Implement auth refactor","body":"Closes discussion tracking.","status":2,"isDraft":false,"creatorUserId":{"value":"{{GUID}}"},"creatorUsername":"mr-link-owner-{{RUN_SUFFIX}}","sourceRef":"feature/mr-e2e","targetRef":"main","sourceHeadSha":"{{SHA}}","targetBaseSha":"{{SHA}}","mergeCommitSha":null,"createdAt":"{{TIMESTAMP}}","updatedAt":"{{TIMESTAMP}}","approvals":[],"requiredApprovalCount":0,"approvalCountAtHead":0,"id":{"value":"{{GUID}}"}}
+[Intent] Link discussion with closes relationship
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links
+[HttpResponse] 200 OK | {"discussionNumber":1,"relationshipType":0,"discussionTitle":"Refactor auth module","discussionStatus":"Open"}
+[Intent] Link second discussion as related
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links
+[HttpResponse] 200 OK | {"discussionNumber":2,"relationshipType":1,"discussionTitle":"Follow-up docs","discussionStatus":"Open"}
+[Intent] List linked discussions on merge request
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links | GET http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links
+[HttpResponse] 200 OK | [{"discussionNumber":1,"relationshipType":0,"discussionTitle":"Refactor auth module","discussionStatus":"Open"},{"discussionNumber":2,"relationshipType":1,"discussionTitle":"Follow-up docs","discussionStatus":"Open"}]
+[Intent] Invalid discussion number is rejected
+[HttpRequest] POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links | POST http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links
+[HttpResponse] 404 Not Found | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"{{TRACE_ID}}"}
+[Intent] Remove linked discussion
+[HttpRequest] DELETE http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links/1?relationshipType=closes | DELETE http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links/1?relationshipType=closes
+[HttpResponse] 204 No Content
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links | GET http://localhost:8089/api/repository/by-slug/mr-link-owner-{{RUN_SUFFIX}}/mr-link-{{RUN_SUFFIX}}/merge-requests/1/discussion-links
+[HttpResponse] 200 OK | [{"discussionNumber":2,"relationshipType":1,"discussionTitle":"Follow-up docs","discussionStatus":"Open"}]
