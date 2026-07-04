@@ -1,4 +1,7 @@
-﻿using OpenGitBase.Api.Models;
+﻿#pragma warning disable SA1204 // Static members should appear before non-static members
+#pragma warning disable SA1412 // Store files as UTF-8 with byte order mark
+using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Models.StorageContent;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
@@ -407,6 +410,62 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
         );
     }
 
+    public async Task<(RepositoryContentAccessResult Access, RepositoryCommitResponse? Data)> GetCommitAsync(
+        string owner,
+        string slug,
+        string sha,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(sha))
+        {
+            return (RepositoryContentAccessResult.NotFound(), null);
+        }
+
+        var access = await _authorization.AuthorizeReadAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return (access, null);
+        }
+
+        var cacheKey = RepositoryContentCacheKeys.Build(
+            access.Repository.Id.Value,
+            "commit",
+            sha.Trim(),
+            "-"
+        );
+        var cached = await _cache
+            .GetAsync<RepositoryCommitResponse>(cacheKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (cached is not null)
+        {
+            return (access, cached);
+        }
+
+        var context = await LoadStorageContextAsync(access.Repository, cancellationToken)
+            .ConfigureAwait(false);
+        if (context is null)
+        {
+            return (RepositoryContentAccessResult.Unavailable(), null);
+        }
+
+        var payload = await _storageContentClient
+            .GetCommitAsync(context.Target, context.ApiToken, context.PhysicalPath, sha, cancellationToken)
+            .ConfigureAwait(false);
+        if (payload is null)
+        {
+            return (access, null);
+        }
+
+        var response = MapCommitResponse(payload, context.ReplicationLag);
+        await _cache
+            .SetAsync(cacheKey, response, RepositoryContentCacheTtl.Default, cancellationToken)
+            .ConfigureAwait(false);
+
+        return (access, response);
+    }
+
     public async Task<IReadOnlyList<string>> ListBranchNamesAsync(
         RepositoryDto repository,
         CancellationToken cancellationToken
@@ -473,6 +532,55 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             ApiToken = tokenResult.Get(),
             PhysicalPath = repository.PhysicalPath,
             ReplicationLag = selection.ReplicationLag,
+        };
+    }
+
+    private static RepositoryCommitResponse MapCommitResponse(
+        StorageContentCommitDetailPayload payload,
+        RepositoryReplicationLagDto? replicationLag
+    )
+    {
+        var isRoot = string.Equals(payload.Kind, "root", StringComparison.OrdinalIgnoreCase);
+        return new RepositoryCommitResponse
+        {
+            Sha = payload.Sha,
+            ShortSha = string.IsNullOrWhiteSpace(payload.ShortSha)
+                ? payload.Sha[..Math.Min(8, payload.Sha.Length)]
+                : payload.ShortSha,
+            Message = payload.Message,
+            AuthorName = payload.AuthorName,
+            AuthoredAt = payload.AuthoredAt,
+            Parents = payload.Parents
+                .Select(parent => new RepositoryCommitParentResponse
+                {
+                    Sha = parent.Sha,
+                    ShortSha = string.IsNullOrWhiteSpace(parent.ShortSha)
+                        ? parent.Sha[..Math.Min(8, parent.Sha.Length)]
+                        : parent.ShortSha,
+                })
+                .ToList(),
+            Stats = payload.Stats is null
+                ? null
+                : new RepositoryCommitStatsResponse
+                {
+                    FilesChanged = payload.Stats.FilesChanged,
+                    Insertions = payload.Stats.Insertions,
+                    Deletions = payload.Stats.Deletions,
+                },
+            Kind = payload.Kind,
+            DiffFiles = isRoot
+                ? []
+                : payload.Files.Select(RepositoryDiffMapper.MapCommitFile).ToList(),
+            RootFiles = isRoot
+                ? payload.Files
+                    .Select(file => new RepositoryCommitRootFileResponse
+                    {
+                        Path = file.Path ?? string.Empty,
+                        ChangeType = file.ChangeType ?? "added",
+                    })
+                    .ToList()
+                : [],
+            ReplicationLag = replicationLag,
         };
     }
 

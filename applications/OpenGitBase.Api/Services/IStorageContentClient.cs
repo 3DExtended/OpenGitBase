@@ -106,6 +106,14 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
+    Task<StorageContentCommitDetailPayload?> GetCommitAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string sha,
+        CancellationToken cancellationToken
+    );
+
     Task<bool?> IsAncestorAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

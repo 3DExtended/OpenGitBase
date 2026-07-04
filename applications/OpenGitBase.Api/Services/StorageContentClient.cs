@@ -225,6 +225,19 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         return GetJsonAsync<StorageContentCommitsPayload>(uri, apiToken, cancellationToken);
     }
 
+    public Task<StorageContentCommitDetailPayload?> GetCommitAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string sha,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/commit?physicalPath={Uri.EscapeDataString(physicalPath)}&sha={Uri.EscapeDataString(sha)}";
+        return GetJsonAsync<StorageContentCommitDetailPayload>(uri, apiToken, cancellationToken);
+    }
+
     public async Task<bool?> IsAncestorAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

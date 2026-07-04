@@ -129,38 +129,7 @@ public sealed class MergeRequestCompareService
     private static MergeRequestChangesResponse MapChanges(StorageContentDiffPayload payload) =>
         new()
         {
-            Files = payload.Files.Select(MapFile).ToList(),
-        };
-
-    private static MergeRequestDiffFileResponse MapFile(StorageContentDiffFilePayload file)
-    {
-        var filePath = file.NewPath ?? file.OldPath ?? string.Empty;
-        return new MergeRequestDiffFileResponse
-        {
-            FilePath = filePath,
-            OldPath = file.OldPath,
-            ChangeType = file.Status,
-            Hunks = file.Hunks.Select(MapHunk).ToList(),
-        };
-    }
-
-    private static MergeRequestDiffHunkResponse MapHunk(StorageContentDiffHunkPayload hunk) =>
-        new()
-        {
-            Header =
-                $"@@ -{hunk.OldStart},{hunk.OldLines} +{hunk.NewStart},{hunk.NewLines} @@",
-            Lines = hunk.Lines.Select(MapLine).ToList(),
-        };
-
-    private static MergeRequestDiffLineResponse MapLine(StorageContentDiffLinePayload line) =>
-        new()
-        {
-            OldLineNumber = line.OldLineNumber,
-            NewLineNumber = line.NewLineNumber,
-            Type = string.Equals(line.Type, "delete", StringComparison.OrdinalIgnoreCase)
-                ? "remove"
-                : line.Type,
-            Content = line.Content,
+            Files = payload.Files.Select(RepositoryDiffMapper.MapFile).ToList(),
         };
 
     private static MergeRequestCommitResponse MapCommit(StorageContentCommitPayload commit) =>
