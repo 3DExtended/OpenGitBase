@@ -8,13 +8,13 @@
 
 | Order | ID | Title | Type | Status | Blocked by |
 |-------|-----|-------|------|--------|------------|
-| 1 | cv-01 | Storage commit read helpers | AFK | pending | git-storage-proxy |
-| 2 | cv-02 | Commit read API | AFK | pending | cv-01 |
-| 3 | cv-03 | Shared unified diff viewer | AFK | pending | — (parallel with cv-02) |
-| 4 | cv-04 | Commit page shell | AFK | pending | cv-02, cv-03 |
-| 5 | cv-05 | RepoCommitLink and MR Commits tab | AFK | pending | cv-04 |
-| 6 | cv-06 | Anchor commit SHA links | AFK | pending | cv-05 |
-| 7 | cv-07 | Ref picker commit SHA chip | AFK | pending | cv-05 |
+| 1 | cv-01 | Storage commit read helpers | AFK | completed | git-storage-proxy |
+| 2 | cv-02 | Commit read API | AFK | completed | cv-01 |
+| 3 | cv-03 | Shared unified diff viewer | AFK | completed | — (parallel with cv-02) |
+| 4 | cv-04 | Commit page shell | AFK | completed | cv-02, cv-03 |
+| 5 | cv-05 | RepoCommitLink and MR Commits tab | AFK | completed | cv-04 |
+| 6 | cv-06 | Anchor commit SHA links | AFK | completed | cv-05 |
+| 7 | cv-07 | Ref picker commit SHA chip | AFK | completed | cv-05 |
 
 ## Dependency graph
 
