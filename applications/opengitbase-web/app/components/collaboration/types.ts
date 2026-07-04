@@ -38,6 +38,7 @@ export interface CollaborationThreadProps {
   resolvedLabel?: string
   outdatedLabel?: string
   replyCountLabel?: (count: number) => string
+  commitLinkFrom?: string
 }
 
 /** Flat comment card for overview-style threads without resolve/reply chrome. */

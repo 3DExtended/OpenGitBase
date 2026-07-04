@@ -238,6 +238,34 @@ function toggleTheme() {
 
     <section
       class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-commit-unified-diff"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Commit unified diff
+      </h2>
+      <RepoUnifiedDiff
+        :files="[
+          {
+            filePath: 'src/policy.ts',
+            changeType: 'modified',
+            hunks: [
+              {
+                header: '@@ -1,3 +1,4 @@',
+                lines: [
+                  { oldLineNumber: 1, newLineNumber: 1, type: 'context', content: 'export function matches(ref: string) {' },
+                  { oldLineNumber: null, newLineNumber: 2, type: 'add', content: '  return ref.startsWith(\'release/\')' },
+                  { oldLineNumber: 2, newLineNumber: 3, type: 'context', content: '}' },
+                ],
+              },
+            ],
+          },
+        ]"
+        read-only
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
       data-testid="visual-merge-request-banner"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">

@@ -39,6 +39,15 @@ export function repoHomePath(owner: string, repo: string): string {
   return `/${owner}/${repo}`
 }
 
+export function repoCommitPath(owner: string, repo: string, sha: string, from?: string): string {
+  const base = `/${owner}/${repo}/commit/${encodeURIComponent(sha)}`
+  if (!from) {
+    return base
+  }
+  const query = new URLSearchParams({ from })
+  return `${base}?${query.toString()}`
+}
+
 export function formatEntrySize(size: number | null | undefined): string {
   if (size == null) {
     return '—'

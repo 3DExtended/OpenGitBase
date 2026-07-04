@@ -489,6 +489,17 @@
         "manageLink": "Manage blocked users"
       }
     },
+    "commit": {
+      "notFound": "Commit not found.",
+      "browseFiles": "Browse files",
+      "copySha": "Copy SHA",
+      "copiedSha": "Copied commit SHA.",
+      "stats": "{files} files changed, +{insertions} −{deletions}",
+      "emptyDiff": "No file changes in this commit.",
+      "parents": "Parents",
+      "backToMr": "Back to merge request !{number}",
+      "backToDiscussion": "Back to discussion #{number}"
+    },
     "browse": {
       "syncing": "Syncing… content may be slightly behind the primary.",
       "branchesTab": "Branches",

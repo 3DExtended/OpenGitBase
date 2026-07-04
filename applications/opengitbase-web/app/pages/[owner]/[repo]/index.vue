@@ -164,6 +164,8 @@ onMounted(async () => {
             <div class="space-y-4">
               <RepoRefPicker
                 v-model="selectedRef"
+                :owner="owner"
+                :repo="repoSlug"
                 :branches="contentRefs.branches"
                 :tags="contentRefs.tags"
               />

@@ -216,6 +216,8 @@ onMounted(async () => {
           <RepoRefPicker
             v-if="contentRefs"
             :model-value="refName"
+            :owner="owner"
+            :repo="repoSlug"
             :branches="contentRefs.branches"
             :tags="contentRefs.tags"
             @update:model-value="onRefChange"

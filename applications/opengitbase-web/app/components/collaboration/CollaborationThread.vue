@@ -157,6 +157,7 @@ async function submitReply(): Promise<void> {
         :owner="owner"
         :repo-slug="repoSlug"
         :anchor="thread.anchor"
+        :commit-link-from="commitLinkFrom"
       />
       <CollaborationRenderedBody :source="thread.bodyMarkdown" />
 
@@ -181,6 +182,7 @@ async function submitReply(): Promise<void> {
             :owner="owner"
             :repo-slug="repoSlug"
             :anchor="reply.anchor"
+            :commit-link-from="commitLinkFrom"
           />
           <CollaborationRenderedBody :source="reply.bodyMarkdown" />
         </li>

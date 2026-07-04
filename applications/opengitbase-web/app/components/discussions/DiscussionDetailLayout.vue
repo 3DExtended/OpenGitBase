@@ -117,6 +117,7 @@ defineProps<{
                   :members="ctx.members"
                   :can-resolve="ctx.canResolveSubThread(comment)"
                   :can-reply="ctx.auth.isAuthenticated"
+                  :commit-link-from="`discussions/${ctx.discussion.number}`"
                   @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
                   @resolve="ctx.resolveSubThread(comment.id)"
                   @unresolve="ctx.unresolveSubThread(comment.id)"

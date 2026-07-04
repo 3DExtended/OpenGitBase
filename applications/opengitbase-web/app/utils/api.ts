@@ -409,6 +409,35 @@ export interface MergeRequestCommit {
   authoredAt: string
 }
 
+export interface RepositoryCommitParent {
+  sha: string
+  shortSha: string
+}
+
+export interface RepositoryCommitStats {
+  filesChanged: number
+  insertions: number
+  deletions: number
+}
+
+export interface RepositoryCommitRootFile {
+  path: string
+  changeType: string
+}
+
+export interface RepositoryCommit {
+  sha: string
+  shortSha: string
+  message: string
+  authorName: string
+  authoredAt: string
+  parents: RepositoryCommitParent[]
+  stats: RepositoryCommitStats | null
+  kind: 'diff' | 'root'
+  diffFiles: MergeRequestDiffFile[]
+  rootFiles: RepositoryCommitRootFile[]
+}
+
 export interface MergeRequestDiscussionLink {
   discussionNumber: number
   relationshipType: MergeRequestLinkType
@@ -896,6 +925,46 @@ function normalizeMergeRequestCommit(raw: Record<string, unknown>): MergeRequest
     message: String(raw.message ?? ''),
     authorName: String(raw.authorName ?? ''),
     authoredAt: String(raw.authoredAt ?? raw.createdAt ?? ''),
+  }
+}
+
+function normalizeRepositoryCommit(raw: Record<string, unknown>): RepositoryCommit {
+  const sha = String(raw.sha ?? '')
+  const diffFilesRaw = Array.isArray(raw.diffFiles) ? raw.diffFiles : []
+  const rootFilesRaw = Array.isArray(raw.rootFiles) ? raw.rootFiles : []
+  const statsRaw = raw.stats as Record<string, unknown> | null | undefined
+  const parentsRaw = Array.isArray(raw.parents) ? raw.parents : []
+
+  return {
+    sha,
+    shortSha: String(raw.shortSha ?? sha.slice(0, 8)),
+    message: String(raw.message ?? ''),
+    authorName: String(raw.authorName ?? ''),
+    authoredAt: String(raw.authoredAt ?? ''),
+    parents: parentsRaw.map((item) => {
+      const parent = item as Record<string, unknown>
+      const parentSha = String(parent.sha ?? '')
+      return {
+        sha: parentSha,
+        shortSha: String(parent.shortSha ?? parentSha.slice(0, 8)),
+      }
+    }),
+    stats: statsRaw
+      ? {
+          filesChanged: Number(statsRaw.filesChanged ?? 0),
+          insertions: Number(statsRaw.insertions ?? 0),
+          deletions: Number(statsRaw.deletions ?? 0),
+        }
+      : null,
+    kind: String(raw.kind ?? 'diff') === 'root' ? 'root' : 'diff',
+    diffFiles: normalizeMergeRequestChanges({ files: diffFilesRaw }).files,
+    rootFiles: rootFilesRaw.map((item) => {
+      const file = item as Record<string, unknown>
+      return {
+        path: String(file.path ?? ''),
+        changeType: String(file.changeType ?? 'added'),
+      }
+    }),
   }
 }
 
@@ -1689,6 +1758,16 @@ export function createApi(baseUrl: string) {
       getRawBlobUrl: (owner: string, slug: string, refName: string, path: string) => {
         const query = new URLSearchParams({ refName, path })
         return `${baseUrl}/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/content/blob/raw?${query.toString()}`
+      },
+
+      getCommit: async (owner: string, slug: string, sha: string) => {
+        const result = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/commits/${encodeURIComponent(sha)}`,
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeRepositoryCommit(result.data) : null,
+        }
       },
     },
 

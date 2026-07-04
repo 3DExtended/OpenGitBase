@@ -6,6 +6,7 @@ const props = defineProps<{
   owner: string
   repoSlug: string
   anchor: CommentAnchor
+  commitLinkFrom?: string
 }>()
 
 const api = useApi()
@@ -72,6 +73,14 @@ watch(expanded, (isExpanded) => {
     >
       <span class="min-w-0 truncate font-mono text-xs text-[var(--ogb-text-muted)]">
         {{ anchor.filePath }}:{{ lineRange }}
+        <RepoCommitLink
+          v-if="anchor.commitSha"
+          :owner="owner"
+          :repo="repoSlug"
+          :sha="anchor.commitSha"
+          :from="commitLinkFrom"
+          class="ml-1"
+        />
         <UBadge
           v-if="isOutdated"
           color="warning"

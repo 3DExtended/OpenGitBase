@@ -120,4 +120,41 @@ public class BrowseE2eTests : E2eTestBase
             }
         }
     }
+
+    [RequiresComposeFact]
+    public async Task PublicCommitReadReturnsRootTreeForInitialCommit()
+    {
+        BeginScenario();
+        var workDir = Path.Combine(Path.GetTempPath(), $"e2e-commit-read-{Context.RunSuffix}");
+        var identity = new IdentityFixture(Context, Transcript);
+        var owner = await identity.RegisterUserAsync($"browse-commit-{Context.RunSuffix}").ConfigureAwait(false);
+        var browse = await _gitData.GetBrowsePublicRepoAsync(owner, Context.RunSuffix, workDir).ConfigureAwait(false);
+        var anon = new E2eApiClient(Transcript, Context.Normalizer);
+
+        try
+        {
+            Transcript.Describe("Resolve main branch commit SHA from refs");
+            var refs = await anon.GetAsync($"/repository/by-slug/{browse.OwnerUsername}/{browse.Slug}/content/refs").ConfigureAwait(false);
+            Assert.Equal(200, refs.StatusCode);
+            using var refsDoc = JsonDocument.Parse(refs.Body);
+            var mainSha = refsDoc.RootElement.GetProperty("branches")[0].GetProperty("commitSha").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(mainSha));
+
+            Transcript.Describe("Anonymous commit read returns metadata and root or diff payload");
+            var commit = await anon.GetAsync($"/repository/by-slug/{browse.OwnerUsername}/{browse.Slug}/commits/{mainSha}").ConfigureAwait(false);
+            Assert.Equal(200, commit.StatusCode);
+            using var commitDoc = JsonDocument.Parse(commit.Body);
+            Assert.Equal(mainSha, commitDoc.RootElement.GetProperty("sha").GetString());
+            Assert.True(commitDoc.RootElement.TryGetProperty("kind", out _));
+            await Baselines.CaptureApiAsync("public-commit-read", commit).ConfigureAwait(false);
+            await AssertBaselinesAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            if (Directory.Exists(workDir))
+            {
+                Directory.Delete(workDir, true);
+            }
+        }
+    }
 }

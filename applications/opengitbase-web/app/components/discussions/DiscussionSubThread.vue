@@ -12,6 +12,7 @@ const props = withDefaults(
     canResolve: boolean
     canReply: boolean
     defaultRef?: string | null
+    commitLinkFrom?: string
   }>(),
   {
     members: () => [],
@@ -67,6 +68,7 @@ function onReply(body: string, anchor: CommentAnchorInput | null): void {
     :can-resolve="canResolve"
     :can-reply="canReply"
     :default-ref="defaultRef"
+    :commit-link-from="commitLinkFrom"
     :resolved-label="t('repo.discussions.subThreadResolved')"
     :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
     @reply="onReply"

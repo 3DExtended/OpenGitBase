@@ -11,6 +11,7 @@ import type {
   RepositoryMember,
 } from '~/utils/api'
 import type { CollaborationThread } from '~/components/collaboration/types'
+import { repoCommitPath } from '~/utils/repoBrowse'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -377,102 +378,53 @@ onMounted(() => {
           </section>
 
           <section v-else-if="activeTab === 'changes'" class="space-y-4">
-            <UCard v-if="!changes?.files?.length">
-              <p class="text-sm text-[var(--ogb-text-muted)]">
-                {{ t('repo.mergeRequests.noChanges') }}
-              </p>
-            </UCard>
-            <UCard
-              v-for="file in changes?.files ?? []"
-              :key="file.filePath"
-              class="overflow-hidden"
+            <RepoUnifiedDiff
+              :files="changes?.files ?? []"
+              :empty-label="t('repo.mergeRequests.noChanges')"
+              @line-select="(payload) => {
+                if (!mr) {
+                  return
+                }
+                selectedLine = {
+                  headCommitSha: mr.sourceHeadSha,
+                  filePath: payload.filePath,
+                  lineNumber: payload.lineNumber,
+                  diffSide: payload.diffSide,
+                }
+              }"
             >
-              <template #header>
-                <div class="flex items-center justify-between gap-3">
-                  <p class="font-mono text-sm">
-                    {{ file.filePath }}
-                  </p>
-                  <UBadge
-                    variant="subtle"
-                    color="neutral"
-                  >
-                    {{ file.changeType }}
-                  </UBadge>
-                </div>
-              </template>
-              <div class="space-y-4">
+              <template #line-threads="{ file, lineNumber, diffSide }">
                 <div
-                  v-for="hunk in file.hunks"
-                  :key="hunk.header"
-                  class="overflow-hidden rounded border"
+                  v-if="reviewThreadsForLine(file.filePath, lineNumber, diffSide).length"
+                  class="mt-2 space-y-2 border-l pl-2"
                   style="border-color: var(--ogb-border);"
                 >
-                  <p class="border-b px-3 py-2 font-mono text-xs text-[var(--ogb-text-muted)]" style="border-color: var(--ogb-border);">
-                    {{ hunk.header }}
-                  </p>
-                  <div class="font-mono text-xs">
-                    <div
-                      v-for="(line, idx) in hunk.lines"
-                      :key="`${hunk.header}-${idx}`"
-                      class="border-b px-3 py-1"
-                      style="border-color: color-mix(in srgb, var(--ogb-border) 50%, transparent);"
-                      :class="{
-                        'bg-emerald-500/10': line.type === 'add',
-                        'bg-rose-500/10': line.type === 'remove',
-                      }"
-                    >
-                      <div class="flex items-start gap-2">
-                        <button
-                          v-if="line.newLineNumber || line.oldLineNumber"
-                          type="button"
-                          class="text-[10px] text-[var(--ogb-text-muted)] hover:text-[var(--ogb-text)]"
-                          @click="selectedLine = {
-                            headCommitSha: mr.sourceHeadSha,
-                            filePath: file.filePath,
-                            lineNumber: line.newLineNumber ?? line.oldLineNumber ?? 0,
-                            diffSide: line.type === 'remove' ? 'old' : 'new',
-                          }"
-                        >
-                          +
-                        </button>
-                        <span class="w-8 text-right text-[var(--ogb-text-muted)]">{{ line.oldLineNumber ?? '' }}</span>
-                        <span class="w-8 text-right text-[var(--ogb-text-muted)]">{{ line.newLineNumber ?? '' }}</span>
-                        <span class="min-w-0 flex-1 whitespace-pre-wrap">{{ line.content }}</span>
-                      </div>
-
-                      <div
-                        v-if="reviewThreadsForLine(file.filePath, line.newLineNumber ?? line.oldLineNumber ?? -1, line.type === 'remove' ? 'old' : 'new').length"
-                        class="mt-2 space-y-2 border-l pl-2"
-                        style="border-color: var(--ogb-border);"
-                      >
-                        <CollaborationThread
-                          v-for="comment in reviewThreadsForLine(file.filePath, line.newLineNumber ?? line.oldLineNumber ?? -1, line.type === 'remove' ? 'old' : 'new')"
-                          :key="comment.id"
-                          :thread="asThread(comment)"
-                          :owner="owner"
-                          :repo-slug="repoSlug"
-                          :member-label="memberLabel"
-                          :members="members"
-                          :can-resolve="auth.isAuthenticated"
-                          :can-reply="auth.isAuthenticated"
-                          :resolved-label="t('repo.discussions.subThreadResolved')"
-                          :outdated-label="t('repo.mergeRequests.outdated')"
-                          :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
-                          @reply="(body, anchor) => replyToComment(comment.id, body, anchor ? {
-                            headCommitSha: anchor.commitSha,
-                            filePath: anchor.filePath,
-                            lineNumber: anchor.line,
-                            diffSide: 'new',
-                          } : null)"
-                          @resolve="resolveComment(comment.id)"
-                          @unresolve="unresolveComment(comment.id)"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <CollaborationThread
+                    v-for="comment in reviewThreadsForLine(file.filePath, lineNumber, diffSide)"
+                    :key="comment.id"
+                    :thread="asThread(comment)"
+                    :owner="owner"
+                    :repo-slug="repoSlug"
+                    :member-label="memberLabel"
+                    :members="members"
+                    :can-resolve="auth.isAuthenticated"
+                    :can-reply="auth.isAuthenticated"
+                    :commit-link-from="`mr/${number}`"
+                    :resolved-label="t('repo.discussions.subThreadResolved')"
+                    :outdated-label="t('repo.mergeRequests.outdated')"
+                    :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
+                    @reply="(body, anchor) => replyToComment(comment.id, body, anchor ? {
+                      headCommitSha: anchor.commitSha,
+                      filePath: anchor.filePath,
+                      lineNumber: anchor.line,
+                      diffSide: 'new',
+                    } : null)"
+                    @resolve="resolveComment(comment.id)"
+                    @unresolve="unresolveComment(comment.id)"
+                  />
                 </div>
-              </div>
-            </UCard>
+              </template>
+            </RepoUnifiedDiff>
 
             <UCard v-if="selectedLine">
               <template #header>
@@ -511,17 +463,21 @@ onMounted(() => {
                 {{ t('repo.mergeRequests.noCommits') }}
               </p>
             </UCard>
-            <UCard
+            <NuxtLink
               v-for="commit in commits"
               :key="commit.sha"
+              :to="repoCommitPath(owner, repoSlug, commit.sha, `mr/${number}`)"
+              class="block rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--ogb-surface)_80%,var(--ogb-accent)_20%)]"
             >
-              <p class="font-medium">
-                {{ commit.message }}
-              </p>
-              <p class="mt-1 font-mono text-xs text-[var(--ogb-text-muted)]">
-                {{ commit.shortSha }} · {{ commit.authorName }} · <RelativeTime :iso="commit.authoredAt" />
-              </p>
-            </UCard>
+              <UCard>
+                <p class="font-medium">
+                  {{ commit.message }}
+                </p>
+                <p class="mt-1 font-mono text-xs text-[var(--ogb-text-muted)]">
+                  {{ commit.shortSha }} · {{ commit.authorName }} · <RelativeTime :iso="commit.authoredAt" />
+                </p>
+              </UCard>
+            </NuxtLink>
           </section>
         </main>
 

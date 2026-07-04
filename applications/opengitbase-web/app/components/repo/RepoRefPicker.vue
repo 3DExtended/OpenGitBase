@@ -2,6 +2,8 @@
 import type { RepositoryContentRef } from '~/utils/api'
 
 const props = defineProps<{
+  owner?: string
+  repo?: string
   branches: RepositoryContentRef[]
   tags: RepositoryContentRef[]
   modelValue: string
@@ -18,6 +20,14 @@ const activeTab = ref<'branches' | 'tags'>('branches')
 const currentRefs = computed(() =>
   activeTab.value === 'branches' ? props.branches : props.tags,
 )
+
+const selectedCommitSha = computed(() => {
+  const branch = props.branches.find(item => item.name === props.modelValue)
+  if (branch) {
+    return branch.commitSha
+  }
+  return props.tags.find(item => item.name === props.modelValue)?.commitSha ?? ''
+})
 
 function selectRef(name: string) {
   emit('update:modelValue', name)
@@ -93,5 +103,12 @@ watch(
         </option>
       </select>
     </label>
+
+    <RepoCommitLink
+      v-if="owner && repo && selectedCommitSha"
+      :owner="owner"
+      :repo="repo"
+      :sha="selectedCommitSha"
+    />
   </div>
 </template>
