@@ -26,6 +26,7 @@ from storage_content import (
     resolve_readme,
     resolve_ref,
 )
+from storage_commit import get_commit
 from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
@@ -212,7 +213,7 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         return values[0] if values else None
 
     def _handle_content_error(self, exc: GitContentError) -> None:
-        if exc.code in {"not_found", "invalid_ref"}:
+        if exc.code in {"not_found", "invalid_ref", "ambiguous_sha"}:
             self._send_json(404, {"error": exc.message})
             return
         if exc.code == "invalid_path":
@@ -264,6 +265,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/internal/repos/content/commits":
             self._handle_list_commits()
+            return
+        if parsed.path == "/internal/repos/content/commit":
+            self._handle_get_commit()
             return
         if parsed.path == "/internal/repos/content/mergeability":
             self._handle_check_mergeability()
@@ -504,6 +508,26 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         try:
             payload = list_commits_since_merge_base(physical_path, target_sha, source_sha)
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self._send_json(200, payload)
+
+    def _handle_get_commit(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        sha = params.get("sha", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not sha:
+            self._send_json(400, {"error": "sha is required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            payload = get_commit(physical_path, sha)
         except GitContentError as exc:
             self._handle_content_error(exc)
             return
