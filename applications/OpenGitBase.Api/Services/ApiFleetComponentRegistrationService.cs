@@ -74,7 +74,7 @@ public sealed class ApiFleetComponentRegistrationService : BackgroundService
                 {
                     ComponentType = FleetComponentType.Api,
                     InstanceId = instanceId,
-                    ProbeUrl = _options.ProbeUrl,
+                    ProbeUrl = ResolveProbeUrl(instanceId),
                 },
                 cancellationToken
             )
@@ -92,8 +92,23 @@ public sealed class ApiFleetComponentRegistrationService : BackgroundService
         _logger.LogInformation(
             "Registered API fleet component {InstanceId} with probe URL {ProbeUrl}",
             instanceId,
-            _options.ProbeUrl
+            ResolveProbeUrl(instanceId)
         );
+    }
+
+    private string ResolveProbeUrl(string instanceId)
+    {
+        var configured = _options.ProbeUrl?.Trim();
+        if (
+            !string.IsNullOrWhiteSpace(configured)
+            && !configured.Contains("127.0.0.1", StringComparison.Ordinal)
+            && !configured.Contains("localhost", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return configured;
+        }
+
+        return $"http://{instanceId}:8080/health";
     }
 
     private async Task SendHeartbeatAsync(string instanceId, CancellationToken cancellationToken)

@@ -32,7 +32,8 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
 
         var instanceId = _options.DispatcherId;
         var probeUrl =
-            _options.FleetProbeUrl ?? $"http://127.0.0.1:{_options.HttpPort}/health";
+            _options.FleetProbeUrl
+            ?? $"http://{instanceId}:{_options.HttpPort}/health";
 
         await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
 

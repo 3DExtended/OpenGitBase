@@ -62,7 +62,6 @@ x-web-common: &web-common
     start_period: 10s
   environment:
     FLEET_API_URL: "http://api-lb:8080"
-    FleetComponent__ProbeUrl: "http://127.0.0.1:8080/health"
     FleetComponent__SelfRegistrationEnabled: "true"
     FleetComponent__HeartbeatIntervalSeconds: "30"
 
@@ -221,7 +220,6 @@ services:
       Dispatcher__DispatcherId: "dispatcher-1"
       Dispatcher__HttpPort: "8082"
       Dispatcher__FleetSelfRegistrationEnabled: "true"
-      Dispatcher__FleetProbeUrl: "http://127.0.0.1:8082/health"
       Dispatcher__FleetHeartbeatIntervalSeconds: "30"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
@@ -237,7 +235,6 @@ services:
       Dispatcher__DispatcherId: "dispatcher-2"
       Dispatcher__HttpPort: "8082"
       Dispatcher__FleetSelfRegistrationEnabled: "true"
-      Dispatcher__FleetProbeUrl: "http://127.0.0.1:8082/health"
       Dispatcher__FleetHeartbeatIntervalSeconds: "30"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
@@ -274,14 +271,12 @@ services:
     container_name: opengitbase_api_1
     environment:
       FleetComponent__InstanceId: api-1
-      FleetComponent__ProbeUrl: http://127.0.0.1:8080/health
 
   api-2:
     <<: *api-common
     container_name: opengitbase_api_2
     environment:
       FleetComponent__InstanceId: api-2
-      FleetComponent__ProbeUrl: http://127.0.0.1:8080/health
 
   api-migrate:
     <<: *api-image

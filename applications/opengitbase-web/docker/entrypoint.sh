@@ -3,7 +3,7 @@ set -eu
 
 API_URL="${FLEET_API_URL:-http://api-lb:8080}"
 INSTANCE_ID="${FleetComponent__InstanceId:-${HOSTNAME:-web}}"
-PROBE_URL="${FleetComponent__ProbeUrl:-http://127.0.0.1:8080/health}"
+PROBE_URL="${FleetComponent__ProbeUrl:-http://${INSTANCE_ID}:8080/health}"
 HEARTBEAT_INTERVAL="${FleetComponent__HeartbeatIntervalSeconds:-30}"
 
 register_component() {
