@@ -12,5 +12,21 @@ public class InternalNetworkOptions
         "/api/v1/storage-nodes/bootstrap",
         "/api/v1/fleet/bootstrap",
         "/api/v1/internal/repositories/push-validation",
+        "/internal/e2e",
     ];
+
+    /// <summary>
+    /// CIDR ranges for reverse proxies allowed to set X-Forwarded-For (Docker/HAProxy private networks).
+    /// </summary>
+    public string[] TrustedProxyNetworks { get; set; } =
+    [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+    ];
+
+    /// <summary>
+    /// Individual proxy IP addresses (in addition to <see cref="TrustedProxyNetworks"/>).
+    /// </summary>
+    public string[] TrustedProxyAddresses { get; set; } = [];
 }

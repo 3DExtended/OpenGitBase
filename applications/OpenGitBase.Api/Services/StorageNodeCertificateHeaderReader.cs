@@ -10,15 +10,6 @@ public static class StorageNodeCertificateHeaderReader
 
     public static string? ReadThumbprint(HttpRequest request)
     {
-        if (request.Headers.TryGetValue(ThumbprintHeaderName, out var headerValues))
-        {
-            var headerValue = headerValues.ToString();
-            if (!string.IsNullOrWhiteSpace(headerValue))
-            {
-                return headerValue;
-            }
-        }
-
         var certificate = request.HttpContext.Connection.ClientCertificate;
         if (certificate is null)
         {

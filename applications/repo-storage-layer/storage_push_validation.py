@@ -113,7 +113,9 @@ def collect_commits(git_dir: str, updates: list[tuple[str, str, str]]) -> list[d
 def validate_push(git_dir: str, updates: list[tuple[str, str, str]]) -> None:
     api_url = _read_api_url()
     if not api_url:
-        return
+        raise RuntimeError(
+            "Push validation unavailable: OPENGITBASE_API_URL is not configured."
+        )
 
     commits = collect_commits(git_dir, updates)
     if not commits:

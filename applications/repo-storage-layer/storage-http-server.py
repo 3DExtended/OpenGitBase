@@ -38,6 +38,17 @@ REPOS_ROOT = Path("/srv/git")
 CA_CERT = Path("/etc/opengitbase/ca.crt")
 NODE_CERT = Path("/etc/opengitbase/node.crt")
 NODE_KEY = Path("/etc/opengitbase/node.key")
+DEFAULT_SYNC_ALLOWED_HOSTS = (
+    "storage-1",
+    "storage-2",
+    "dispatcher-1",
+    "dispatcher-2",
+)
+SYNC_ALLOWED_HOSTS = {
+    host.strip().lower()
+    for host in os.environ.get("STORAGE_SYNC_ALLOWED_HOSTS", ",".join(DEFAULT_SYNC_ALLOWED_HOSTS)).split(",")
+    if host.strip()
+}
 
 
 def _is_valid_physical_path(physical_path: str) -> bool:
@@ -51,6 +62,30 @@ def _is_valid_physical_path(physical_path: str) -> bool:
         return False
 
     return resolved == repos_root or repos_root in resolved.parents
+
+
+def _is_deletable_repo_path(physical_path: str) -> bool:
+    if not physical_path:
+        return False
+
+    try:
+        resolved = Path(physical_path).resolve()
+        repos_root = REPOS_ROOT.resolve()
+    except OSError:
+        return False
+
+    return resolved != repos_root and repos_root in resolved.parents
+
+
+def _is_allowed_sync_host(source_host: str) -> bool:
+    normalized = source_host.strip().lower()
+    if not normalized or "://" in normalized or "/" in normalized:
+        return False
+    if normalized in SYNC_ALLOWED_HOSTS:
+        return True
+    if normalized.startswith("storage-") or normalized.startswith("dispatcher-"):
+        return True
+    return False
 
 
 def _git_mtls_env() -> dict[str, str]:
@@ -115,6 +150,9 @@ def sync_from_peer(
     source_physical_path: str | None = None,
     source_port: int | None = None,
 ) -> None:
+    if not _is_allowed_sync_host(source_host):
+        raise ValueError("sourceHost is not an allowed storage peer.")
+
     if not _is_valid_physical_path(physical_path):
         raise ValueError("Invalid physicalPath.")
 
@@ -218,6 +256,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if exc.code == "invalid_path":
             self._send_json(400, {"error": exc.message})
+            return
+        if exc.code == "too_large":
+            self._send_json(413, {"error": exc.message, "code": exc.code})
             return
         if exc.code == "invalid_strategy":
             self._send_json(400, {"error": exc.message, "code": exc.code})
@@ -651,6 +692,10 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "sourceHost is required."})
             return
 
+        if not _is_allowed_sync_host(source_host):
+            self._send_json(400, {"error": "sourceHost is not an allowed storage peer."})
+            return
+
         if not _is_valid_physical_path(physical_path):
             self._send_json(400, {"error": "Invalid physicalPath."})
             return
@@ -739,7 +784,7 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
         data = self._read_json()
         physical_path = data.get("physicalPath", "")
-        if not _is_valid_physical_path(physical_path):
+        if not _is_deletable_repo_path(physical_path):
             self._send_json(400, {"error": "Invalid physicalPath."})
             return
 

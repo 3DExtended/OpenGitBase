@@ -11,6 +11,7 @@ from pathlib import Path
 
 from storage_content import (
     INLINE_MAX_BYTES,
+    GitContentError,
     get_blob,
     get_disk_usage,
     get_raw_bytes,
@@ -87,6 +88,23 @@ class StorageContentTests(unittest.TestCase):
         raw, path = get_raw_bytes(self.repo_path, "main", "README.md")
         self.assertEqual(path, "README.md")
         self.assertIn(b"# Hello", raw)
+
+    def test_get_raw_bytes_rejects_oversized_blob(self) -> None:
+        work = Path(self.temp_dir) / "work"
+        large = work / "large.bin"
+        large.write_bytes(b"\0" * (INLINE_MAX_BYTES + 1))
+        subprocess.run(["git", "add", "large.bin"], cwd=work, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "commit", "-m", "large"], cwd=work, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["git", "push", self.repo_path, "main"],
+            cwd=work,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        with self.assertRaises(GitContentError) as ctx:
+            get_raw_bytes(self.repo_path, "main", "large.bin")
+        self.assertEqual(ctx.exception.code, "too_large")
 
     def test_oversized_blob_flag(self) -> None:
         work = Path(self.temp_dir) / "work"

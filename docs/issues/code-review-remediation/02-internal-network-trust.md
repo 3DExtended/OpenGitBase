@@ -46,3 +46,9 @@ Fix the internal-network security model so fleet, push-validation, and storage-r
 ## Notes
 
 `InternalNetworkMiddleware` currently uses `context.Connection.RemoteIpAddress` only. Docker/HAProxy traffic appears as `172.x.x.x` and is treated as internal. This slice unblocks **sec-04** push-validation hardening that depends on a trustworthy internal boundary.
+
+### Trust model decision (Jul 2026)
+
+**Primary approach:** trusted forwarded headers (`X-Forwarded-For`) from an explicit proxy allowlist configured via `InternalNetwork:TrustedProxyNetworks` and `InternalNetwork:TrustedProxyAddresses`. HAProxy already sets `option forwardfor`; the API enables `UseForwardedHeaders()` so `RemoteIpAddress` reflects the original client when the immediate peer is a trusted proxy. Storage node identity uses mTLS client certificates only — the `X-Storage-Node-Certificate-Thumbprint` header is ignored without a validated TLS client cert.
+
+**E2ETest:** `InternalNetworkMiddleware` is disabled intentionally in the `E2ETest` environment only; production and development keep it enabled with forwarded-header trust.

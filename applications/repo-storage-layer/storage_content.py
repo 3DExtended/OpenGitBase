@@ -19,6 +19,8 @@ README_CANDIDATES = (
     "README.txt",
 )
 
+RAW_MAX_BYTES = INLINE_MAX_BYTES
+
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 
@@ -188,7 +190,7 @@ def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
     return payload
 
 
-def get_raw_bytes(git_dir: str, ref: str, path: str) -> tuple[bytes, str]:
+def get_raw_bytes(git_dir: str, ref: str, path: str, *, max_bytes: int = RAW_MAX_BYTES) -> tuple[bytes, str]:
     normalized_path = _normalize_repo_path(unquote(path))
     if not normalized_path:
         raise GitContentError("invalid_path", "Blob path is required.")
@@ -196,6 +198,12 @@ def get_raw_bytes(git_dir: str, ref: str, path: str) -> tuple[bytes, str]:
     object_type = _run_git(git_dir, "cat-file", "-t", object_ref).strip()
     if object_type != "blob":
         raise GitContentError("not_found", "Path is not a file.")
+    size = int(_run_git(git_dir, "cat-file", "-s", object_ref).strip())
+    if size > max_bytes:
+        raise GitContentError(
+            "too_large",
+            f"Blob exceeds maximum download size of {max_bytes} bytes.",
+        )
     raw = subprocess.run(
         ["git", "--git-dir", git_dir, "cat-file", "-p", object_ref],
         check=True,

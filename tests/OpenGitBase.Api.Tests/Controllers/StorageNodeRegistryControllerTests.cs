@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
@@ -28,15 +30,21 @@ public class StorageNodeRegistryControllerTests
                 )
             );
 
+        using var certificate = CreateSelfSignedCertificate();
+        var httpContext = new DefaultHttpContext
+        {
+            Connection =
+            {
+                ClientCertificate = certificate,
+            },
+        };
         var controller = new StorageNodeRegistryController(queryProcessor)
         {
             ControllerContext = new ControllerContext
             {
-                HttpContext = new DefaultHttpContext(),
+                HttpContext = httpContext,
             },
         };
-        controller.Request.Headers["X-Storage-Node-Certificate-Thumbprint"] =
-            "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
 
         var result = await controller.Register(
             new RegisterStorageNodeRequest
@@ -52,5 +60,17 @@ public class StorageNodeRegistryControllerTests
         var response = Assert.IsType<RegisterStorageNodeResponse>(ok.Value);
         Assert.Equal(storageNodeId.Value, response.StorageNodeId);
         Assert.Equal("token", response.ApiToken);
+    }
+
+    private static X509Certificate2 CreateSelfSignedCertificate()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=storage-test",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1
+        );
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
     }
 }
