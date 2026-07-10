@@ -212,6 +212,21 @@ abort() {
   exit 1
 }
 
+format_elapsed() {
+  local total="${1}"
+  local hours=$((total / 3600))
+  local minutes=$(((total % 3600) / 60))
+  local seconds=$((total % 60))
+
+  if [ "${hours}" -gt 0 ]; then
+    printf '%dh %dm %ds' "${hours}" "${minutes}" "${seconds}"
+  elif [ "${minutes}" -gt 0 ]; then
+    printf '%dm %ds' "${minutes}" "${seconds}"
+  else
+    printf '%ds' "${seconds}"
+  fi
+}
+
 run_step() {
   local name="$1"
   shift
@@ -302,6 +317,8 @@ verify_lb_web() {
   lb_http_check "http://api-lb:8080/" "${WEB_URL}/"
 }
 
+SECONDS=0
+
 echo "==> Zero-downtime rolling Docker Compose update"
 echo "    Repo: ${REPO_ROOT}"
 if [ "${ROLL_FLEET}" = true ]; then
@@ -378,3 +395,4 @@ fi
 
 echo ""
 echo "Rolling update completed successfully."
+echo "Elapsed time: $(format_elapsed "${SECONDS}")"
