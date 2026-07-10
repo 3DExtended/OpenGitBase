@@ -43,10 +43,4 @@ Phase 1 only — platform four-copy encryption through E2E tests. Phase 2/3 (iss
 | ers-03 | 0bbbe80 |
 | ers-04 | 68af814 |
 | infra | e36c65f |
-| ers-05 | (pending commit) |
-| ers-06 | |
-| ers-07 | |
-| ers-08 | |
-| ers-09 | |
-| ers-10 | |
-| ers-11 | |
+| ers-05–11 | db9f4c7 |
