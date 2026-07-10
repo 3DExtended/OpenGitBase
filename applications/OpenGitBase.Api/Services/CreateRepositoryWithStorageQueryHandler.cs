@@ -14,6 +14,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
+    private readonly IRepositoryKeyService _repositoryKeyService;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IMapper _mapper;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
@@ -21,6 +22,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
     public CreateRepositoryWithStorageQueryHandler(
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
+        IRepositoryKeyService repositoryKeyService,
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IMapper mapper,
         RepositoryStorageQuotaOptions quotaOptions
@@ -28,6 +30,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
+        _repositoryKeyService = repositoryKeyService;
         _contextFactory = contextFactory;
         _mapper = mapper;
         _quotaOptions = quotaOptions;
@@ -76,9 +79,9 @@ public sealed class CreateRepositoryWithStorageQueryHandler
         var repositoryId = Guid.NewGuid();
         var physicalPath = $"/srv/git/{repositoryId}.git";
         var receiveMaxBytes = _quotaOptions.Enabled ? _quotaOptions.MaxFileBytes : 0L;
-        var provisionedNodes = new List<StorageNodeDto>();
+        var provisionedNodes = new List<(StorageNodeDto Node, RepositoryReplicaRole Role)>();
 
-        foreach (var node in replicaSet.AllNodes)
+        foreach (var (node, role) in replicaSet.ProvisionTargets)
         {
             var provisionResult = await _storageProvisionerClient
                 .ProvisionRepositoryAsync(
@@ -86,6 +89,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
                     nodeTokens[node.Id],
                     physicalPath,
                     receiveMaxBytes,
+                    role.ToString(),
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -104,7 +108,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
                 );
             }
 
-            provisionedNodes.Add(node);
+            provisionedNodes.Add((node, role));
         }
 
         try
@@ -121,9 +125,10 @@ public sealed class CreateRepositoryWithStorageQueryHandler
             entity.Id = repositoryId;
             entity.StorageNodeId = replicaSet.Primary.Id.Value;
             entity.PrimaryStorageNodeId = replicaSet.Primary.Id.Value;
+            entity.ReadReplicaStorageNodeId = replicaSet.ReadReplica.Id.Value;
             entity.ReplicationEpoch = 1;
             entity.PrimaryWatermark = 0;
-            entity.ReplicationState = ReplicationState.Rf3Healthy;
+            entity.ReplicationState = ReplicationState.Rf4Healthy;
             entity.Replicas =
             [
                 new RepositoryReplicaEntity
@@ -135,18 +140,27 @@ public sealed class CreateRepositoryWithStorageQueryHandler
                 new RepositoryReplicaEntity
                 {
                     RepositoryId = repositoryId,
-                    StorageNodeId = replicaSet.ReplicaA.Id.Value,
-                    Role = RepositoryReplicaRole.Replica,
+                    StorageNodeId = replicaSet.ReadReplica.Id.Value,
+                    Role = RepositoryReplicaRole.ReadReplica,
                 },
                 new RepositoryReplicaEntity
                 {
                     RepositoryId = repositoryId,
-                    StorageNodeId = replicaSet.ReplicaB.Id.Value,
-                    Role = RepositoryReplicaRole.Replica,
+                    StorageNodeId = replicaSet.EncryptedReplicaA.Id.Value,
+                    Role = RepositoryReplicaRole.EncryptedReplica,
+                },
+                new RepositoryReplicaEntity
+                {
+                    RepositoryId = repositoryId,
+                    StorageNodeId = replicaSet.EncryptedReplicaB.Id.Value,
+                    Role = RepositoryReplicaRole.EncryptedReplica,
                 },
             ];
             context.Set<RepositoryEntity>().Add(entity);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _repositoryKeyService
+                .GenerateAndStoreKeyAsync(repositoryId, cancellationToken)
+                .ConfigureAwait(false);
 
             return Option.From(
                 CreateRepositoryWithStorageResult.Created(RepositoryId.From(repositoryId))
@@ -165,13 +179,13 @@ public sealed class CreateRepositoryWithStorageQueryHandler
     }
 
     private async Task RollBackProvisionedAsync(
-        IReadOnlyList<StorageNodeDto> provisionedNodes,
+        IReadOnlyList<(StorageNodeDto Node, RepositoryReplicaRole Role)> provisionedNodes,
         IReadOnlyDictionary<StorageNodeId, string> nodeTokens,
         string physicalPath,
         CancellationToken cancellationToken
     )
     {
-        foreach (var node in provisionedNodes)
+        foreach (var (node, _) in provisionedNodes)
         {
             if (!nodeTokens.TryGetValue(node.Id, out var token))
             {

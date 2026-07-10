@@ -112,6 +112,7 @@ public sealed class Rf1BackfillService
                     token,
                     repository.PhysicalPath,
                     receiveMaxBytes: 0,
+                    replicationRole: nameof(RepositoryReplicaRole.Replica),
                     cancellationToken
                 )
                 .ConfigureAwait(false);

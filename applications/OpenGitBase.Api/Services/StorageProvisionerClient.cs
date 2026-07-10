@@ -19,7 +19,8 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         string apiToken,
         string physicalPath,
         long receiveMaxBytes,
-        CancellationToken cancellationToken
+        string replicationRole = "Primary",
+        CancellationToken cancellationToken = default
     ) =>
         SendAsync(
             HttpMethod.Post,
@@ -27,6 +28,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             apiToken,
             physicalPath,
             receiveMaxBytes,
+            replicationRole,
             successStatusCodes: [201],
             cancellationToken
         );
@@ -43,6 +45,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             apiToken,
             physicalPath,
             receiveMaxBytes: null,
+            replicationRole: "Primary",
             successStatusCodes: [200],
             cancellationToken
         );
@@ -121,6 +124,7 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         string apiToken,
         string physicalPath,
         long? receiveMaxBytes,
+        string replicationRole,
         int[] successStatusCodes,
         CancellationToken cancellationToken
     )
@@ -133,8 +137,8 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         var requestUri =
             $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos";
         var payload = receiveMaxBytes is null
-            ? JsonSerializer.Serialize(new { physicalPath })
-            : JsonSerializer.Serialize(new { physicalPath, receiveMaxBytes });
+            ? JsonSerializer.Serialize(new { physicalPath, replicationRole })
+            : JsonSerializer.Serialize(new { physicalPath, receiveMaxBytes, replicationRole });
         using var request = new HttpRequestMessage(method, requestUri)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),

@@ -9,7 +9,8 @@ public interface IStorageProvisionerClient
         string apiToken,
         string physicalPath,
         long receiveMaxBytes,
-        CancellationToken cancellationToken
+        string replicationRole = "Primary",
+        CancellationToken cancellationToken = default
     );
 
     Task<StorageProvisionerResult> DeleteRepositoryAsync(

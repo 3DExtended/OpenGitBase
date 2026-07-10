@@ -77,6 +77,7 @@ public class CreateRepositoryWithStorageQueryHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<long>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new StorageProvisionerResult { Success = true });
@@ -92,8 +93,14 @@ public class CreateRepositoryWithStorageQueryHandlerTests
         services.AddSingleton<IMapper>(sp => new Mapper(
             sp.GetRequiredService<TypeAdapterConfig>()
         ));
+        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
+        repositoryKeyService
+            .GenerateAndStoreKeyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+
         services.AddSingleton(queryProcessor);
         services.AddSingleton(provisioner);
+        services.AddSingleton(repositoryKeyService);
         services.AddSingleton(new RepositoryStorageQuotaOptions { Enabled = false });
         services.AddSingleton<CreateRepositoryWithStorageQueryHandler>();
 
@@ -118,6 +125,7 @@ public class CreateRepositoryWithStorageQueryHandlerTests
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<long>(),
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>()
         );
 
@@ -126,10 +134,11 @@ public class CreateRepositoryWithStorageQueryHandlerTests
             .Set<RepositoryEntity>()
             .Include(entity => entity.Replicas)
             .SingleAsync();
-        Assert.Equal(ReplicationState.Rf3Healthy, repository.ReplicationState);
-        Assert.Equal(3, repository.Replicas.Count);
+        Assert.Equal(ReplicationState.Rf4Healthy, repository.ReplicationState);
+        Assert.Equal(4, repository.Replicas.Count);
         Assert.Equal(1, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.Primary));
-        Assert.Equal(2, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.Replica));
+        Assert.Equal(1, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.ReadReplica));
+        Assert.Equal(2, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica));
     }
 
     [Fact]
@@ -164,6 +173,7 @@ public class CreateRepositoryWithStorageQueryHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<long>(),
+                Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(_ =>
@@ -209,11 +219,13 @@ public class CreateRepositoryWithStorageQueryHandlerTests
         ));
         services.AddSingleton(queryProcessor);
         services.AddSingleton(provisioner);
+        services.AddSingleton<IRepositoryKeyService>(Substitute.For<IRepositoryKeyService>());
         services.AddSingleton(new RepositoryStorageQuotaOptions { Enabled = false });
         var serviceProvider = services.BuildServiceProvider();
         return new CreateRepositoryWithStorageQueryHandler(
             queryProcessor,
             provisioner,
+            serviceProvider.GetRequiredService<IRepositoryKeyService>(),
             serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>(),
             serviceProvider.GetRequiredService<IMapper>(),
             new RepositoryStorageQuotaOptions { Enabled = false }

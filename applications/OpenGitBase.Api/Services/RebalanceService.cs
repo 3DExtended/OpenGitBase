@@ -227,6 +227,7 @@ public sealed class RebalanceService
                 token,
                 repository.PhysicalPath,
                 receiveMaxBytes: 0,
+                replicationRole: nameof(RepositoryReplicaRole.Replica),
                 cancellationToken
             )
             .ConfigureAwait(false);

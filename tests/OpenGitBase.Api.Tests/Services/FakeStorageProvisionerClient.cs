@@ -10,7 +10,8 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
         string apiToken,
         string physicalPath,
         long receiveMaxBytes,
-        CancellationToken cancellationToken
+        string replicationRole = "Primary",
+        CancellationToken cancellationToken = default
     ) => Task.FromResult(StorageProvisionerResult.Ok(201));
 
     public Task<StorageProvisionerResult> DeleteRepositoryAsync(

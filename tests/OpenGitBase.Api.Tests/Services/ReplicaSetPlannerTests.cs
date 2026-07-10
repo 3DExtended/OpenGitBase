@@ -27,8 +27,9 @@ public class ReplicaSetPlannerTests
 
         Assert.NotNull(result);
         Assert.Equal("high", result!.Primary.NodeId);
-        Assert.Equal("medium", result.ReplicaA.NodeId);
-        Assert.Equal("low", result.ReplicaB.NodeId);
+        Assert.Equal("high", result.ReadReplica.NodeId);
+        Assert.Equal("medium", result.EncryptedReplicaA.NodeId);
+        Assert.Equal("low", result.EncryptedReplicaB.NodeId);
     }
 
     [Fact]
