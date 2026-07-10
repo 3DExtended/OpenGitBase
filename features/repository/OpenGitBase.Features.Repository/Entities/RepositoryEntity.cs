@@ -1,4 +1,5 @@
 ﻿using OpenGitBase.Cqrs.EfCore;
+using OpenGitBase.Features.Organization.Contracts;
 
 namespace OpenGitBase.Features.Repository.Entities;
 
@@ -33,4 +34,6 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
     public long StorageBytesUsed { get; set; }
 
     public string? DefaultBranchName { get; set; }
+
+    public PlacementPolicy? PlacementPolicy { get; set; }
 }

@@ -11,4 +11,10 @@ public sealed class StorageNodeEnrollmentDto
     public DateTimeOffset ExpiresAt { get; init; }
 
     public DateTimeOffset? ConsumedAt { get; init; }
+
+    public Guid? OrganizationId { get; init; }
+
+    public long MaxBytes { get; init; }
+
+    public HostingScope HostingScope { get; init; } = HostingScope.OwnOrgOnly;
 }

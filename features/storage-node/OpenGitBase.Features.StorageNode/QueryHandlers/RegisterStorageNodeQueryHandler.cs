@@ -73,7 +73,7 @@ public sealed class RegisterStorageNodeQueryHandler
                 return Option<RegisterStorageNodeResult>.None;
             }
 
-            var enrollmentValid = await VerifyEnrollmentAsync(
+            var (enrollmentValid, enrollment) = await VerifyEnrollmentAsync(
                 query.NodeId,
                 query.EnrollmentToken,
                 context,
@@ -97,10 +97,14 @@ public sealed class RegisterStorageNodeQueryHandler
                 ApiTokenProtected = _emailProtectionService.EncryptSecret(apiToken),
                 FreeBytesAvailable = query.FreeBytesAvailable,
                 TotalBytesAvailable = query.TotalBytesAvailable,
+                UsedBytes = Math.Max(0, query.TotalBytesAvailable - query.FreeBytesAvailable),
                 LastHeartbeatAt = now,
                 IsHealthy = true,
                 RegisteredAt = now,
                 CertificateThumbprint = certificateThumbprint,
+                OwnerOrganizationId = enrollment?.OrganizationId,
+                MaxBytes = enrollment?.MaxBytes ?? 0,
+                HostingScope = enrollment?.HostingScope ?? HostingScope.OwnOrgOnly,
             };
             context.Set<StorageNodeEntity>().Add(existing);
         }
@@ -123,6 +127,7 @@ public sealed class RegisterStorageNodeQueryHandler
                 query.InternalGitHttpPort > 0 ? query.InternalGitHttpPort : 8082;
             existing.FreeBytesAvailable = query.FreeBytesAvailable;
             existing.TotalBytesAvailable = query.TotalBytesAvailable;
+            existing.UsedBytes = Math.Max(0, query.TotalBytesAvailable - query.FreeBytesAvailable);
             existing.LastHeartbeatAt = now;
             existing.IsHealthy = true;
 
@@ -158,7 +163,7 @@ public sealed class RegisterStorageNodeQueryHandler
     private static string GenerateApiToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
-    private async Task<bool> VerifyEnrollmentAsync(
+    private async Task<(bool Valid, StorageNodeEnrollmentEntity? Enrollment)> VerifyEnrollmentAsync(
         string nodeId,
         string enrollmentToken,
         OpenGitBaseDbContext context,
@@ -190,9 +195,9 @@ public sealed class RegisterStorageNodeQueryHandler
             }
 
             enrollment.ConsumedAt = now;
-            return true;
+            return (true, enrollment);
         }
 
-        return false;
+        return (false, null);
     }
 }

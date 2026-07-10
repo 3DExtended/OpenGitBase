@@ -53,6 +53,8 @@ public sealed class AdminStorageEnrollmentsController : ControllerBase
                 NodeId = request.NodeId,
                 CreatedByUserId = _userContext.User.UserId,
                 ExpiresInHours = request.ExpiresInHours,
+                MaxBytes = request.MaxBytes,
+                HostingScope = request.HostingScope,
             },
             cancellationToken
         );

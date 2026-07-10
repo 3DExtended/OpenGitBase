@@ -9,6 +9,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
@@ -23,6 +24,9 @@ public class CreateRepositoryWithStorageQueryHandlerTests
     public async Task RunQueryAsync_WhenFewerThanThreeHealthyNodes_ReturnsFailed()
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
         queryProcessor
             .RunQueryAsync(
                 Arg.Any<ListHealthyStorageNodesQuery>(),
@@ -40,7 +44,7 @@ public class CreateRepositoryWithStorageQueryHandlerTests
         Assert.True(result.IsSome);
         Assert.Null(result.Get().RepositoryId);
         Assert.NotNull(result.Get().Error);
-        Assert.Contains("three healthy storage nodes", result.Get().Error!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("replica set", result.Get().Error!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -51,6 +55,9 @@ public class CreateRepositoryWithStorageQueryHandlerTests
 
         var nodes = CreateNodes(3);
         var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
         queryProcessor
             .RunQueryAsync(
                 Arg.Any<ListHealthyStorageNodesQuery>(),
@@ -135,9 +142,9 @@ public class CreateRepositoryWithStorageQueryHandlerTests
             .Include(entity => entity.Replicas)
             .SingleAsync();
         Assert.Equal(ReplicationState.Rf4Healthy, repository.ReplicationState);
-        Assert.Equal(4, repository.Replicas.Count);
+        Assert.Equal(3, repository.Replicas.Count);
         Assert.Equal(1, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.Primary));
-        Assert.Equal(1, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.ReadReplica));
+        Assert.Equal(0, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.ReadReplica));
         Assert.Equal(2, repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica));
     }
 
@@ -146,6 +153,9 @@ public class CreateRepositoryWithStorageQueryHandlerTests
     {
         var nodes = CreateNodes(3);
         var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
         queryProcessor
             .RunQueryAsync(
                 Arg.Any<ListHealthyStorageNodesQuery>(),

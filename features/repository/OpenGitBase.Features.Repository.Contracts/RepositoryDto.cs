@@ -1,4 +1,5 @@
 ﻿using OpenGitBase.Cqrs.EfCore;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
@@ -25,4 +26,6 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
     public string OwnerSlug { get; set; } = string.Empty;
 
     public string? DefaultBranchName { get; set; }
+
+    public PlacementPolicy? PlacementPolicy { get; set; }
 }

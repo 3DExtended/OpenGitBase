@@ -266,7 +266,7 @@ public class Startup
         services.AddScoped<Rf4BackfillService>();
         services.AddScoped<RebalanceService>();
         services.AddScoped<AntiEntropyReconcilerService>();
-        services.AddSingleton<IColdRecoveryService, ColdRecoveryService>();
+        services.AddScoped<IColdRecoveryService, ColdRecoveryService>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler

@@ -549,6 +549,29 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("OrganizationMember", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Organization.Entities.OrganizationStorageSettingsEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DefaultPlacementPolicy")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DefaultSelfHostPreference")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique();
+
+                    b.ToTable("OrganizationStorageSettings", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.PublicGitSshKey.Entities.PublicGitSshKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -694,6 +717,9 @@ namespace OpenGitBase.Common.Migrations
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<int?>("PlacementPolicy")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("PrimaryStorageNodeId")
                         .HasColumnType("uuid");
@@ -858,10 +884,19 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("HostingScope")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("MaxBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("NodeId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -893,6 +928,9 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<long>("FreeBytesAvailable")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("HostingScope")
+                        .HasColumnType("integer");
+
                     b.Property<int>("InternalGitHttpPort")
                         .HasColumnType("integer");
 
@@ -913,15 +951,24 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<DateTimeOffset?>("LastHeartbeatAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long>("MaxBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("NodeId")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("OwnerOrganizationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("RegisteredAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("TotalBytesAvailable")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UsedBytes")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");

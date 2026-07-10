@@ -8,6 +8,9 @@
       Include="..\..\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
 
     <ProjectReference
+      Include="..\..\organization\OpenGitBase.Features.Organization.Contracts\OpenGitBase.Features.Organization.Contracts.csproj" />
+
+    <ProjectReference
       Include="..\..\storage-node\OpenGitBase.Features.StorageNode.Contracts\OpenGitBase.Features.StorageNode.Contracts.csproj" />
 
     <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />

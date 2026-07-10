@@ -261,6 +261,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                     repositoryDto,
                     platformResponse,
                     request.Operation,
+                    request.PackSizeBytes,
                     cancellationToken
                 )
             );
@@ -284,7 +285,9 @@ public sealed class RepositoryAccessChecksController : ControllerBase
 
             if (
                 request.PackSizeBytes > 0
-                && repositoryDto.StorageBytesUsed + request.PackSizeBytes > _quotaOptions.MaxBytes
+                && repositoryDto.StorageBytesUsed + request.PackSizeBytes
+                    > await ResolveRepositoryBytesLimitAsync(repositoryDto, cancellationToken)
+                        .ConfigureAwait(false)
             )
             {
                 return OkWithLog(
@@ -330,6 +333,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                     repositoryDto,
                     ownerResponse,
                     request.Operation,
+                    request.PackSizeBytes,
                     cancellationToken
                 )
             );
@@ -379,6 +383,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                         repositoryDto,
                         organizationAccess,
                         request.Operation,
+                        request.PackSizeBytes,
                         cancellationToken
                     )
                 );
@@ -425,6 +430,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                         EffectiveRole = effectiveRole,
                     },
                     request.Operation,
+                    request.PackSizeBytes,
                     cancellationToken
                 )
             );
@@ -467,6 +473,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                     repositoryDto,
                     writeResponse,
                     request.Operation,
+                    request.PackSizeBytes,
                     cancellationToken
                 )
             );
@@ -623,6 +630,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         RepositoryDto repositoryDto,
         RepositoryAccessCheckResponse response,
         RepositoryOperation operation,
+        long packSizeBytes,
         CancellationToken cancellationToken
     )
     {
@@ -689,6 +697,52 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 EffectiveRole = response.EffectiveRole,
                 Reason = "Write quorum unavailable: encrypted replication quorum cannot be met.",
             };
+        }
+
+        if (operation == RepositoryOperation.WriteGit && packSizeBytes > 0)
+        {
+            var writeTargets = routingDto
+                .Targets.Where(target =>
+                    string.Equals(
+                        target.Role,
+                        nameof(RepositoryReplicaRole.Primary),
+                        StringComparison.Ordinal
+                    )
+                    || string.Equals(
+                        target.Role,
+                        nameof(RepositoryReplicaRole.EncryptedReplica),
+                        StringComparison.Ordinal
+                    )
+                )
+                .ToList();
+
+            foreach (var target in writeTargets)
+            {
+                var nodeResult = await _queryProcessor
+                    .RunQueryAsync(
+                        new GetStorageNodeQuery
+                        {
+                            ModelId = StorageNodeId.From(target.StorageNodeId),
+                        },
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+
+                if (
+                    nodeResult.IsSome
+                    && !StorageNodeCapacity.HasCapacity(nodeResult.Get(), packSizeBytes)
+                )
+                {
+                    return new RepositoryAccessCheckResponse
+                    {
+                        Allowed = false,
+                        ResolvedUserId = response.ResolvedUserId,
+                        RepositoryId = response.RepositoryId,
+                        EffectiveRole = response.EffectiveRole,
+                        Reason = "Storage node capacity exceeded.",
+                    };
+                }
+            }
         }
 
         var readTargets = routingDto
@@ -806,5 +860,38 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         }
 
         return Ok(response);
+    }
+
+    private async Task<long> ResolveRepositoryBytesLimitAsync(
+        RepositoryDto repositoryDto,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationQuery
+                {
+                    ModelId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (organizationResult.IsNone)
+        {
+            return _quotaOptions.MaxBytes;
+        }
+
+        var quotaResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationStorageQuotaQuery
+                {
+                    OrganizationId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return quotaResult.IsSome ? quotaResult.Get().BytesLimit : _quotaOptions.MaxBytes;
     }
 }

@@ -24,11 +24,13 @@ public sealed class ListStorageNodeEnrollmentsQueryHandler
     )
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context
-            .Set<StorageNodeEnrollmentEntity>()
-            .AsNoTracking()
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var queryable = context.Set<StorageNodeEnrollmentEntity>().AsNoTracking();
+        if (query.OrganizationId is Guid organizationId)
+        {
+            queryable = queryable.Where(entity => entity.OrganizationId == organizationId);
+        }
+
+        var entities = await queryable.ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var enrollments = entities
             .OrderByDescending(entity => entity.CreatedAt)
@@ -39,6 +41,9 @@ public sealed class ListStorageNodeEnrollmentsQueryHandler
                 CreatedAt = entity.CreatedAt,
                 ExpiresAt = entity.ExpiresAt,
                 ConsumedAt = entity.ConsumedAt,
+                OrganizationId = entity.OrganizationId,
+                MaxBytes = entity.MaxBytes,
+                HostingScope = entity.HostingScope,
             })
             .ToList();
 

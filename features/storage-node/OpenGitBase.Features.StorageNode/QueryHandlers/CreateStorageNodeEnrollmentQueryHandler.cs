@@ -46,6 +46,9 @@ public sealed class CreateStorageNodeEnrollmentQueryHandler
             CreatedByUserId = query.CreatedByUserId,
             CreatedAt = now,
             ExpiresAt = expiresAt,
+            OrganizationId = query.OrganizationId,
+            MaxBytes = query.MaxBytes,
+            HostingScope = query.HostingScope,
         };
         context.Set<StorageNodeEnrollmentEntity>().Add(entity);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

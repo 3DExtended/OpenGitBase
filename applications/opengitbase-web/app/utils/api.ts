@@ -19,6 +19,10 @@ export interface StorageNodeDto {
   isHealthy: boolean
   registeredAt: string
   certificateThumbprint?: string
+  ownerOrganizationId?: string | null
+  maxBytes?: number
+  usedBytes?: number
+  hostingScope?: number
 }
 
 export interface StorageNodeEnrollmentDto {
@@ -149,6 +153,15 @@ export interface OrganizationInvitePublic {
   role: number
   expiresAt: string
   status: number
+}
+
+export interface OrganizationStorageSettings {
+  organizationId: string
+  defaultPlacementPolicy: number
+  defaultSelfHostPreference: number
+  bytesLimit: number
+  platformBytesLimit: number
+  contributedBytesCapacity: number
 }
 
 export interface PublicGitSshKey {
@@ -1489,6 +1502,12 @@ export function createApi(baseUrl: string) {
           },
         }
       },
+
+      updatePlacementPolicy: (id: string, body: { placementPolicy: number | null }) =>
+        request<Record<string, unknown>>(`/repository/${id}/placement-policy`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        }),
     },
 
     repositoryMembers: {
@@ -1584,6 +1603,43 @@ export function createApi(baseUrl: string) {
 
       delete: (id: string) =>
         request<null>(`/organization/${id}`, { method: 'DELETE' }),
+
+      storage: {
+        getSettings: (organizationId: string) =>
+          request<OrganizationStorageSettings>(`/organization/${organizationId}/storage/settings`),
+
+        updateSettings: (organizationId: string, body: {
+          defaultPlacementPolicy: number
+          defaultSelfHostPreference: number
+        }) =>
+          request<OrganizationStorageSettings>(`/organization/${organizationId}/storage/settings`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+          }),
+
+        listNodes: (organizationId: string) =>
+          request<StorageNodeDto[]>(`/organization/${organizationId}/storage/nodes`),
+
+        listEnrollments: (organizationId: string) =>
+          request<StorageNodeEnrollmentDto[]>(`/organization/${organizationId}/storage/enrollments`),
+
+        createEnrollment: (organizationId: string, body: {
+          nodeId: string
+          expiresInHours?: number
+          maxBytes: number
+          hostingScope?: number
+        }) =>
+          request<CreateStorageNodeEnrollmentResult>(`/organization/${organizationId}/storage/enrollments`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+
+        updateHostingScope: (organizationId: string, storageNodeId: string, body: { hostingScope: number }) =>
+          request<StorageNodeDto>(`/organization/${organizationId}/storage/nodes/${storageNodeId}/hosting-scope`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          }),
+      },
     },
 
     sshKeys: {
@@ -2311,6 +2367,11 @@ export function createApi(baseUrl: string) {
     admin: {
       storageNodes: {
         list: () => request<StorageNodeDto[]>('/admin/storage-nodes'),
+        updateCapacity: (storageNodeId: string, body: { maxBytes: number }) =>
+          request<StorageNodeDto>(`/admin/storage-nodes/${storageNodeId}/capacity`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          }),
       },
       storageEnrollments: {
         list: () => request<StorageNodeEnrollmentDto[]>('/admin/storage-enrollments'),

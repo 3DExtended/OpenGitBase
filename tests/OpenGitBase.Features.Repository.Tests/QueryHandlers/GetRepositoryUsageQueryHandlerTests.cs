@@ -1,7 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Repository;
 using OpenGitBase.Features.Repository.Contracts;
@@ -31,7 +34,11 @@ public class GetRepositoryUsageQueryHandlerTests
             MaxFileBytes = 52_428_800,
         };
         var contextFactory = scope.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
-        var handler = new GetRepositoryUsageQueryHandler(contextFactory, quotaOptions);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
+        var handler = new GetRepositoryUsageQueryHandler(contextFactory, quotaOptions, queryProcessor);
 
         var result = await handler.RunQueryAsync(
             new GetRepositoryUsageQuery { RepositoryId = repositoryId },
@@ -59,9 +66,14 @@ public class GetRepositoryUsageQueryHandlerTests
         await scope.EnsureCreatedAsync();
 
         var contextFactory = scope.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
         var handler = new GetRepositoryUsageQueryHandler(
             contextFactory,
-            new RepositoryStorageQuotaOptions()
+            new RepositoryStorageQuotaOptions(),
+            queryProcessor
         );
 
         var result = await handler.RunQueryAsync(

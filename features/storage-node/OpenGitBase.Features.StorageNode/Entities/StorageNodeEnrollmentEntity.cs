@@ -1,4 +1,5 @@
 ﻿using OpenGitBase.Cqrs.EfCore;
+using OpenGitBase.Features.StorageNode.Contracts;
 
 namespace OpenGitBase.Features.StorageNode.Entities;
 
@@ -17,4 +18,10 @@ public class StorageNodeEnrollmentEntity : IIdentifiableEntity<Guid>
     public DateTimeOffset ExpiresAt { get; set; }
 
     public DateTimeOffset? ConsumedAt { get; set; }
+
+    public Guid? OrganizationId { get; set; }
+
+    public long MaxBytes { get; set; }
+
+    public HostingScope HostingScope { get; set; } = HostingScope.OwnOrgOnly;
 }

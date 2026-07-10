@@ -2,6 +2,7 @@
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
 
@@ -12,14 +13,17 @@ public class GetRepositoryUsageQueryHandler
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
+    private readonly IQueryProcessor _queryProcessor;
 
     public GetRepositoryUsageQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        RepositoryStorageQuotaOptions quotaOptions
+        RepositoryStorageQuotaOptions quotaOptions,
+        IQueryProcessor queryProcessor
     )
     {
         _contextFactory = contextFactory;
         _quotaOptions = quotaOptions;
+        _queryProcessor = queryProcessor;
     }
 
     public async Task<Option<RepositoryUsageDto>> RunQueryAsync(
@@ -38,13 +42,46 @@ public class GetRepositoryUsageQueryHandler
             return Option<RepositoryUsageDto>.None;
         }
 
+        var bytesLimit = await ResolveBytesLimitAsync(entity.OwnerUserId, cancellationToken)
+            .ConfigureAwait(false);
+
         return Option.From(
             new RepositoryUsageDto
             {
                 BytesUsed = entity.StorageBytesUsed,
-                BytesLimit = _quotaOptions.MaxBytes,
+                BytesLimit = bytesLimit,
                 FileSizeLimit = _quotaOptions.MaxFileBytes,
             }
         );
+    }
+
+    private async Task<long> ResolveBytesLimitAsync(
+        Guid ownerUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        var organizationResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationQuery { ModelId = OrganizationId.From(ownerUserId) },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (organizationResult.IsNone)
+        {
+            return _quotaOptions.MaxBytes;
+        }
+
+        var quotaResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationStorageQuotaQuery
+                {
+                    OrganizationId = OrganizationId.From(ownerUserId),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return quotaResult.IsSome ? quotaResult.Get().BytesLimit : _quotaOptions.MaxBytes;
     }
 }

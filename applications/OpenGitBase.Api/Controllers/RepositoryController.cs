@@ -303,6 +303,41 @@ public class RepositoryController : ControllerBase
         return NoContent();
     }
 
+    [HttpPatch("{id:guid}/placement-policy")]
+    public async Task<IActionResult> UpdatePlacementPolicy(
+        Guid id,
+        [FromBody] UpdateRepositoryPlacementPolicyRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var getResult = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
+            cancellationToken
+        );
+
+        if (getResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var repository = getResult.Get();
+        if (!await CanManageRepositoryAsync(repository, cancellationToken).ConfigureAwait(false))
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new UpdateRepositoryPlacementPolicyQuery
+            {
+                RepositoryId = RepositoryId.From(id),
+                PlacementPolicy = request.PlacementPolicy,
+            },
+            cancellationToken
+        );
+
+        return result.IsSome ? Ok(result.Get()) : NotFound();
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -341,6 +376,28 @@ public class RepositoryController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    private async Task<bool> CanManageRepositoryAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var userId = _userContext.GetUserId();
+        if (repository.OwnerUserId == userId)
+        {
+            return true;
+        }
+
+        var organizationAccess = await _organizationAccess
+            .CheckOwnerAccessAsync(
+                OrganizationId.From(repository.OwnerUserId.Value),
+                userId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return organizationAccess.OrganizationExists && organizationAccess.IsOwner;
     }
 
     private IActionResult MapAccessFailure(RepositoryContentAccessResult access) =>

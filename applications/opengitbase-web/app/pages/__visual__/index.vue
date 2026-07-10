@@ -319,6 +319,55 @@ function toggleTheme() {
           </div>
         </div>
       </UCard>
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-org-storage-settings"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Org storage settings
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Quota credits
+          </h3>
+        </template>
+        <dl class="grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt class="text-[var(--ogb-text-muted)]">
+              Platform limit
+            </dt>
+            <dd>1.00 GB</dd>
+          </div>
+          <div>
+            <dt class="text-[var(--ogb-text-muted)]">
+              Contributed capacity
+            </dt>
+            <dd>2.00 GB</dd>
+          </div>
+          <div>
+            <dt class="text-[var(--ogb-text-muted)]">
+              Effective limit
+            </dt>
+            <dd>3.00 GB</dd>
+          </div>
+        </dl>
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Placement defaults
+          </h3>
+        </template>
+        <div class="grid gap-3 text-sm">
+          <div>Default placement: Max self-host</div>
+          <div>Self-host preference: Prefer self-host</div>
+        </div>
+      </UCard>
+    </section>
+
     <section
       class="mt-10 max-w-5xl space-y-4"
       data-testid="visual-admin-rf4-replication"

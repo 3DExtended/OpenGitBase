@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
     <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
     <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\storage-node\OpenGitBase.Features.StorageNode\OpenGitBase.Features.StorageNode.csproj" />
     <ProjectReference Include="..\..\users\OpenGitBase.Features.Users.Contracts\OpenGitBase.Features.Users.Contracts.csproj" />
     <ProjectReference Include="..\..\users\OpenGitBase.Features.Users\OpenGitBase.Features.Users.csproj" />
   </ItemGroup>

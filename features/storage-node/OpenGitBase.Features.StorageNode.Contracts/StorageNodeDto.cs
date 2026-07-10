@@ -24,5 +24,13 @@ public class StorageNodeDto : ModelBase<StorageNodeId, Guid>
 
     public DateTimeOffset RegisteredAt { get; set; }
 
-    public string CertificateThumbprint { get; set; } = string.Empty;
+    public string CertificateThumbprint { get; init; } = string.Empty;
+
+    public Guid? OwnerOrganizationId { get; set; }
+
+    public long MaxBytes { get; set; }
+
+    public long UsedBytes { get; set; }
+
+    public HostingScope HostingScope { get; set; } = HostingScope.OwnOrgOnly;
 }

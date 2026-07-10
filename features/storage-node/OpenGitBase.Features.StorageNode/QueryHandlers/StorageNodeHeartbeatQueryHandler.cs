@@ -52,6 +52,7 @@ public sealed class StorageNodeHeartbeatQueryHandler
 
         node.FreeBytesAvailable = query.FreeBytesAvailable;
         node.TotalBytesAvailable = query.TotalBytesAvailable;
+        node.UsedBytes = Math.Max(0, query.TotalBytesAvailable - query.FreeBytesAvailable);
         node.LastHeartbeatAt = DateTimeOffset.UtcNow;
         node.IsHealthy = true;
 

@@ -10,4 +10,10 @@ public sealed class CreateStorageNodeEnrollmentQuery
     public Guid CreatedByUserId { get; set; }
 
     public int ExpiresInHours { get; set; } = 168;
+
+    public Guid? OrganizationId { get; set; }
+
+    public long MaxBytes { get; set; }
+
+    public HostingScope HostingScope { get; set; } = HostingScope.OwnOrgOnly;
 }

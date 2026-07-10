@@ -51,6 +51,13 @@ test.describe('Shell components @regression', () => {
       'admin-rf4-replication.png',
     )
   })
+
+  test('org storage settings', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-org-storage-settings')).toHaveScreenshot(
+      'org-storage-settings.png',
+    )
+  })
 })
 
 test.describe('Auth screens', () => {
