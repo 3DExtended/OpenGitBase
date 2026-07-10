@@ -30,9 +30,24 @@ async function waitForMergeRequestPage(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('mr-linked-discussions')).toBeVisible()
 }
 
-async function installLinkedDiscussionsRoutes(page: import('@playwright/test').Page) {
+async function installLinkedDiscussionsRoutes(
+  page: import('@playwright/test').Page,
+  options: { authenticated?: boolean } = {},
+) {
+  const authenticated = options.authenticated ?? false
   await page.route('**/api/account/me**', async (route) => {
-    await route.fulfill({ status: 401, body: '' })
+    if (!authenticated) {
+      await route.fulfill({ status: 401, body: '' })
+      return
+    }
+    await route.fulfill({
+      json: {
+        userId: '22222222-2222-2222-2222-222222222222',
+        username: 'demo-user',
+        emailVerified: true,
+        isAdmin: false,
+      },
+    })
   })
 
   const links: DiscussionLink[] = [
@@ -193,11 +208,11 @@ test.describe('Merge request linked discussions @regression', () => {
     await expect(page.getByTestId('mr-linked-discussion-group-implements')).toBeVisible()
     await expect(page.getByTestId('mr-linked-discussions')).toContainText('#12 Protect default branch')
     await expect(page.getByTestId('mr-linked-discussions')).toContainText('#5 Policy matcher refactor')
-    await expect(page.getByTestId('mr-link-discussion-expand')).toBeVisible()
+    await expect(page.getByTestId('mr-link-discussion-expand')).toHaveCount(0)
   })
 
   test('filters open discussions in accordion picker', async ({ page }) => {
-    await installLinkedDiscussionsRoutes(page)
+    await installLinkedDiscussionsRoutes(page, { authenticated: true })
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
@@ -210,7 +225,7 @@ test.describe('Merge request linked discussions @regression', () => {
   })
 
   test('links another discussion from accordion picker', async ({ page }) => {
-    await installLinkedDiscussionsRoutes(page)
+    await installLinkedDiscussionsRoutes(page, { authenticated: true })
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
@@ -223,7 +238,7 @@ test.describe('Merge request linked discussions @regression', () => {
   })
 
   test('removes a linked discussion', async ({ page }) => {
-    await installLinkedDiscussionsRoutes(page)
+    await installLinkedDiscussionsRoutes(page, { authenticated: true })
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)

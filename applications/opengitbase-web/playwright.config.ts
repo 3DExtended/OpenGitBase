@@ -38,7 +38,7 @@ export default defineConfig({
     url: playwrightBaseUrl,
     reuseExistingServer: !process.env.CI,
     env: {
-      NUXT_PUBLIC_MSW: 'true',
+      NUXT_PUBLIC_MSW: 'false',
       NUXT_PUBLIC_SITE_GATE_ENABLED: 'false',
     },
   },
