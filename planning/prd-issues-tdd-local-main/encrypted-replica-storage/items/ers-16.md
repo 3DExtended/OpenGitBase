@@ -25,4 +25,4 @@ Added `MaxBytesOverride` on repositories with eligibility rules (org-owned, >3 h
   - `dotnet test tests/OpenGitBase.Features.Repository.Tests --filter FullyQualifiedName~GetRepositoryUsageQueryHandlerTests`
   - `pnpm test:visual -- tests/visual/shell.spec.ts -g "repository byte override"`
 - Visual snapshots: `applications/opengitbase-web/tests/visual/shell.spec.ts-snapshots/repo-byte-override-*.png`
-- Commit(s): pending
+- Commit(s): `20fc361`
