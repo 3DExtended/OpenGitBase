@@ -56,25 +56,27 @@ def _commit_message(git_dir: str, commit_sha: str) -> str:
 
 
 def _max_blob_bytes(git_dir: str, commit_sha: str) -> int:
-    output = _run_git(git_dir, "cat-file", "-p", commit_sha)
-    tree_sha = output.splitlines()[0].split()[1]
-    sizes = _run_git(
-        git_dir,
-        "rev-list",
-        "--objects",
-        commit_sha,
-        "--",
-    ).splitlines()
+    objects = [
+        line.split()[0]
+        for line in _run_git(git_dir, "rev-list", "--objects", commit_sha).splitlines()
+        if line.strip()
+    ]
+    if not objects:
+        return 0
+
+    process = subprocess.Popen(
+        ["git", "--git-dir", git_dir, "cat-file", "--batch-check=%(objectsize)"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    stdout, _ = process.communicate(input="\n".join(objects) + "\n", timeout=60)
     max_size = 0
-    for line in sizes:
-        parts = line.split()
-        if len(parts) != 2:
-            continue
-        object_sha = parts[0]
+    for line in stdout.splitlines():
         try:
-            size_text = _run_git(git_dir, "cat-file", "-s", object_sha).strip()
-            max_size = max(max_size, int(size_text))
-        except RuntimeError:
+            max_size = max(max_size, int(line.strip()))
+        except ValueError:
             continue
     return max_size
 
