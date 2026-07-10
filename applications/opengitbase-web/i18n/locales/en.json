@@ -61,7 +61,9 @@
       "uptimeSubtitle": "Daily uptime percentage. Toggle groups to overlay component lines.",
       "stateMixTitle": "Overall state mix",
       "stateMixSubtitle": "Daily share of healthy, degraded, and unhealthy samples.",
-      "empty": "History will appear after the status aggregator collects samples."
+      "empty": "History will appear after the status aggregator collects samples.",
+      "partialData": "Showing {count} day(s) of history so far — charts fill in as hourly samples accumulate.",
+      "latestUptime": "Latest daily uptime: {value}"
     }
   },
   "sidebar": {

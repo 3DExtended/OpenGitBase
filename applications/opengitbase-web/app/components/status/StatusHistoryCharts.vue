@@ -9,7 +9,7 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const enabledGroups = ref<Record<string, boolean>>({
-  website: true,
+  website: false,
   api: false,
   git: false,
   storage: false,
@@ -18,40 +18,74 @@ const enabledGroups = ref<Record<string, boolean>>({
 
 const overallSeries = computed(() => props.history?.overall ?? [])
 const stateMixSeries = computed(() => props.history?.overallStateMix ?? [])
-
 const groupSeries = computed(() => props.history?.groups ?? [])
+
+const dayCount = computed(() => overallSeries.value.length)
+const latestOverall = computed(() => overallSeries.value.at(-1) ?? null)
+
+const chartWidth = 640
+const chartHeight = 160
+const chartPadding = { top: 8, right: 8, bottom: 24, left: 36 }
+const plotWidth = chartWidth - chartPadding.left - chartPadding.right
+const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom
 
 function toggleGroup(key: string) {
   enabledGroups.value[key] = !enabledGroups.value[key]
 }
 
-function buildLinePath(days: PublicStatusHistoryDay[], width: number, height: number) {
-  if (!days.length) return ''
-  const maxY = 100
-  const stepX = days.length === 1 ? 0 : width / (days.length - 1)
+function yForUptime(uptimePercent: number) {
+  return chartPadding.top + plotHeight - (uptimePercent / 100) * plotHeight
+}
+
+function xForIndex(index: number, count: number) {
+  if (count <= 1) {
+    return chartPadding.left + plotWidth / 2
+  }
+  return chartPadding.left + (index / (count - 1)) * plotWidth
+}
+
+function buildLinePath(days: PublicStatusHistoryDay[]) {
+  if (!days.length) {
+    return ''
+  }
+
+  if (days.length === 1) {
+    const y = yForUptime(days[0]!.uptimePercent)
+    return `M ${chartPadding.left} ${y} L ${chartPadding.left + plotWidth} ${y}`
+  }
+
   return days
     .map((day, index) => {
-      const x = index * stepX
-      const y = height - (day.uptimePercent / maxY) * height
+      const x = xForIndex(index, days.length)
+      const y = yForUptime(day.uptimePercent)
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
     })
     .join(' ')
 }
 
-const chartWidth = 640
-const chartHeight = 160
-const overallPath = computed(() => buildLinePath(overallSeries.value, chartWidth, chartHeight))
+function buildPointMarkers(days: PublicStatusHistoryDay[]) {
+  return days.map((day, index) => ({
+    x: xForIndex(index, days.length),
+    y: yForUptime(day.uptimePercent),
+    label: day.date,
+    uptimePercent: day.uptimePercent,
+  }))
+}
 
-function overlayPaths() {
-  return groupSeries.value
+const overallPath = computed(() => buildLinePath(overallSeries.value))
+const overallMarkers = computed(() => buildPointMarkers(overallSeries.value))
+
+const activeOverlayPaths = computed(() =>
+  groupSeries.value
     .filter(series => enabledGroups.value[componentGroupKey(series.group)])
     .map(series => ({
       key: componentGroupKey(series.group),
-      path: buildLinePath(series.days, chartWidth, chartHeight),
-    }))
-}
+      path: buildLinePath(series.days),
+      markers: buildPointMarkers(series.days),
+    })),
+)
 
-const activeOverlayPaths = computed(() => overlayPaths())
+const gridLines = [0, 50, 100]
 
 function barSegments(day: PublicStatusHistoryDay) {
   const total = day.healthyRatio + day.degradedRatio + day.unhealthyRatio
@@ -64,20 +98,39 @@ function barSegments(day: PublicStatusHistoryDay) {
     unhealthy: day.unhealthyRatio / total,
   }
 }
+
+function formatPercent(value: number) {
+  return `${value.toFixed(1)}%`
+}
 </script>
 
 <template>
   <div class="space-y-6">
     <UCard>
       <div class="space-y-4">
-        <div>
-          <h2 class="text-lg font-semibold">
-            {{ t('status.charts.uptimeTitle') }}
-          </h2>
-          <p class="text-sm text-[var(--ogb-text-muted)]">
-            {{ t('status.charts.uptimeSubtitle') }}
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold">
+              {{ t('status.charts.uptimeTitle') }}
+            </h2>
+            <p class="text-sm text-[var(--ogb-text-muted)]">
+              {{ t('status.charts.uptimeSubtitle') }}
+            </p>
+          </div>
+          <p
+            v-if="latestOverall"
+            class="text-sm font-medium tabular-nums"
+          >
+            {{ t('status.charts.latestUptime', { value: formatPercent(latestOverall.uptimePercent) }) }}
           </p>
         </div>
+
+        <p
+          v-if="dayCount > 0 && dayCount < 90"
+          class="text-xs text-[var(--ogb-text-muted)]"
+        >
+          {{ t('status.charts.partialData', { count: dayCount }) }}
+        </p>
 
         <div class="flex flex-wrap gap-2">
           <UButton
@@ -101,16 +154,41 @@ function barSegments(day: PublicStatusHistoryDay) {
         <svg
           v-else
           :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
-          class="h-40 w-full text-[var(--ogb-accent)]"
+          class="h-44 w-full text-[var(--ogb-accent)]"
           role="img"
           :aria-label="t('status.charts.uptimeTitle')"
         >
+          <g class="text-[var(--ogb-text-muted)]">
+            <line
+              v-for="tick in gridLines"
+              :key="tick"
+              :x1="chartPadding.left"
+              :x2="chartPadding.left + plotWidth"
+              :y1="yForUptime(tick)"
+              :y2="yForUptime(tick)"
+              stroke="currentColor"
+              stroke-opacity="0.15"
+            />
+            <text
+              v-for="tick in gridLines"
+              :key="`label-${tick}`"
+              :x="chartPadding.left - 6"
+              :y="yForUptime(tick) + 4"
+              text-anchor="end"
+              font-size="10"
+              fill="currentColor"
+            >
+              {{ tick }}
+            </text>
+          </g>
+
           <path
             :d="overallPath"
             fill="none"
             stroke="currentColor"
             stroke-width="2"
           />
+
           <path
             v-for="overlay in activeOverlayPaths"
             :key="overlay.key"
@@ -120,6 +198,29 @@ function barSegments(day: PublicStatusHistoryDay) {
             stroke-width="1.5"
             opacity="0.55"
           />
+
+          <g>
+            <circle
+              v-for="(point, index) in overallMarkers"
+              :key="`overall-${index}`"
+              :cx="point.x"
+              :cy="point.y"
+              r="3.5"
+              fill="currentColor"
+            />
+          </g>
+
+          <text
+            v-for="(point, index) in overallMarkers"
+            :key="`date-${index}`"
+            :x="point.x"
+            :y="chartHeight - 6"
+            text-anchor="middle"
+            font-size="10"
+            fill="var(--ogb-text-muted)"
+          >
+            {{ point.label }}
+          </text>
         </svg>
       </div>
     </UCard>
@@ -143,29 +244,36 @@ function barSegments(day: PublicStatusHistoryDay) {
         </div>
         <div
           v-else
-          class="flex h-32 items-end gap-1"
-          role="img"
-          :aria-label="t('status.charts.stateMixTitle')"
+          class="space-y-2"
         >
           <div
-            v-for="day in stateMixSeries"
-            :key="day.date"
-            class="flex min-w-0 flex-1 flex-col justify-end"
-            :title="day.date"
+            class="flex h-32 items-end gap-1"
+            role="img"
+            :aria-label="t('status.charts.stateMixTitle')"
           >
-            <div class="flex h-full flex-col overflow-hidden rounded-sm">
-              <div
-                class="bg-emerald-500/80"
-                :style="{ flexGrow: barSegments(day).unhealthy }"
-              />
-              <div
-                class="bg-amber-500/80"
-                :style="{ flexGrow: barSegments(day).degraded }"
-              />
-              <div
-                class="bg-emerald-400/90"
-                :style="{ flexGrow: barSegments(day).healthy }"
-              />
+            <div
+              v-for="day in stateMixSeries"
+              :key="day.date"
+              class="flex min-h-24 min-w-8 flex-1 flex-col justify-end"
+              :title="`${day.date}: ${formatPercent(day.uptimePercent)} uptime`"
+            >
+              <div class="flex h-full min-h-20 flex-col overflow-hidden rounded-sm border border-[var(--ogb-border)]">
+                <div
+                  class="bg-red-500/80"
+                  :style="{ flexGrow: barSegments(day).unhealthy }"
+                />
+                <div
+                  class="bg-amber-500/80"
+                  :style="{ flexGrow: barSegments(day).degraded }"
+                />
+                <div
+                  class="bg-emerald-400/90"
+                  :style="{ flexGrow: barSegments(day).healthy }"
+                />
+              </div>
+              <p class="mt-1 truncate text-center text-[10px] text-[var(--ogb-text-muted)]">
+                {{ day.date }}
+              </p>
             </div>
           </div>
         </div>
