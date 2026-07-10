@@ -6,6 +6,9 @@
 
   <ItemGroup>
     <PackageReference Include="Mapster" Version="7.4.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>
@@ -13,6 +16,7 @@
     <ProjectReference Include="..\..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
     <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
     <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+    <ProjectReference Include="..\..\storage-node\OpenGitBase.Features.StorageNode.Contracts\OpenGitBase.Features.StorageNode.Contracts.csproj" />
   </ItemGroup>
 
 </Project>
