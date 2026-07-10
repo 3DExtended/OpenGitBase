@@ -275,6 +275,23 @@ public class Startup
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
         services.AddHostedService<ApiFleetComponentRegistrationService>();
+        services.Configure<StatusProbeOptions>(Configuration.GetSection("StatusProbe"));
+        services.AddSingleton(
+            sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StatusProbeOptions>>().Value
+        );
+        if (Environment.IsEnvironment("E2ETest"))
+        {
+            services.PostConfigure<StatusProbeOptions>(options => options.Enabled = false);
+        }
+
+        services.AddHttpClient(
+            nameof(OpenGitBase.Features.Status.Services.StatusProbeEngine)
+        );
+        services.AddSingleton<OpenGitBase.Features.Status.Services.StatusProbeEngine>();
+        services.AddSingleton<OpenGitBase.Features.Status.Services.StorageGroupStatusBuilder>();
+        services.AddSingleton<OpenGitBase.Features.Status.Services.StatusHistoryService>();
+        services.AddScoped<OpenGitBase.Features.Status.Services.StatusAggregatorService>();
+        services.AddHostedService<StatusAggregatorBackgroundService>();
         services.AddScoped<Rf1BackfillService>();
         services.AddScoped<Rf4BackfillService>();
         services.AddScoped<RebalanceService>();
