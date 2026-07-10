@@ -55,7 +55,7 @@ x-web-common: &web-common
     api-2:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1"]
     interval: 10s
     timeout: 5s
     retries: 5
@@ -111,11 +111,11 @@ x-dispatcher-common: &dispatcher-common
     storage-3:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8082/health >/dev/null || exit 1"]
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8082/health >/dev/null || exit 1"]
     interval: 5s
     timeout: 3s
     retries: 5
-    start_period: 5s
+    start_period: 15s
 
 services:
 
