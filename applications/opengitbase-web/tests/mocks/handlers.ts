@@ -272,4 +272,64 @@ export const handlers = [
   http.post('/api/signin/signout', async () => {
     return HttpResponse.json('Signed out')
   }),
+
+  http.get('/api/public/status', () => {
+    return HttpResponse.json({
+      overallStatus: 0,
+      checkedAt: '2026-07-10T12:00:00Z',
+      incident: null,
+      groups: [
+        {
+          group: 1,
+          status: 0,
+          instances: [{ instanceId: 'web-1', status: 0, lastCheckedAt: '2026-07-10T12:00:00Z', responseTimeMs: 42 }],
+        },
+        {
+          group: 2,
+          status: 0,
+          instances: [{ instanceId: 'api-1', status: 0, lastCheckedAt: '2026-07-10T12:00:00Z', responseTimeMs: 18 }],
+        },
+        {
+          group: 3,
+          status: 1,
+          instances: [{ instanceId: 'dispatcher-1', status: 1, lastCheckedAt: '2026-07-10T12:00:00Z', responseTimeMs: 2100, message: 'Slow response (2100ms)' }],
+        },
+        {
+          group: 4,
+          status: 0,
+          instances: [{ instanceId: 'storage-1', status: 0, lastCheckedAt: '2026-07-10T12:00:00Z', lastSeenAt: '2026-07-10T11:59:30Z' }],
+        },
+        {
+          group: 5,
+          status: 0,
+          instances: [
+            { instanceId: 'postgres', status: 0, lastCheckedAt: '2026-07-10T12:00:00Z', responseTimeMs: 3 },
+            { instanceId: 'redis', status: 0, lastCheckedAt: '2026-07-10T12:00:00Z', responseTimeMs: 2 },
+          ],
+        },
+      ],
+    })
+  }),
+
+  http.get('/api/public/status/history', () => {
+    return HttpResponse.json({
+      overall: [
+        { date: '2026-07-09', uptimePercent: 99.5, healthyRatio: 0.98, degradedRatio: 0.02, unhealthyRatio: 0 },
+        { date: '2026-07-10', uptimePercent: 97.2, healthyRatio: 0.94, degradedRatio: 0.04, unhealthyRatio: 0.02 },
+      ],
+      overallStateMix: [
+        { date: '2026-07-09', uptimePercent: 99.5, healthyRatio: 0.98, degradedRatio: 0.02, unhealthyRatio: 0 },
+        { date: '2026-07-10', uptimePercent: 97.2, healthyRatio: 0.94, degradedRatio: 0.04, unhealthyRatio: 0.02 },
+      ],
+      groups: [
+        { group: 1, days: [{ date: '2026-07-10', uptimePercent: 100, healthyRatio: 1, degradedRatio: 0, unhealthyRatio: 0 }] },
+        { group: 2, days: [{ date: '2026-07-10', uptimePercent: 100, healthyRatio: 1, degradedRatio: 0, unhealthyRatio: 0 }] },
+        { group: 3, days: [{ date: '2026-07-10', uptimePercent: 90, healthyRatio: 0.8, degradedRatio: 0.2, unhealthyRatio: 0 }] },
+        { group: 4, days: [{ date: '2026-07-10', uptimePercent: 100, healthyRatio: 1, degradedRatio: 0, unhealthyRatio: 0 }] },
+        { group: 5, days: [{ date: '2026-07-10', uptimePercent: 100, healthyRatio: 1, degradedRatio: 0, unhealthyRatio: 0 }] },
+      ],
+    })
+  }),
+
+  http.get('/api/admin/status/incident', () => HttpResponse.json(null)),
 ]

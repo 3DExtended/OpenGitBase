@@ -38,6 +38,10 @@ pnpm dev
 
 The dev server listens on `http://localhost:3000` and proxies `/api` to the backend via Vite (`NUXT_DEV_API_PROXY`, default `http://localhost:5000`). This mirrors production same-origin routing so httpOnly cookie auth works consistently.
 
+## Public status page
+
+Anonymous visitors can open `/status` for live fleet health (website, API, Git, storage, and data stores) plus 90-day history charts. Operators manage incident banners at `/admin/status`. See [docs/prd/public-status-dashboard.md](../../docs/prd/public-status-dashboard.md) for the full design.
+
 ### Instance branding
 
 | Variable | Default | Description |

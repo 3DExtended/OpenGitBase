@@ -197,6 +197,15 @@ test.describe('Repository screens', () => {
       fullPage: true,
     })
   })
+
+  test('public status page', async ({ page }) => {
+    await page.goto('/status?msw=1')
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(async () => { await document.fonts.ready })
+    await expect(page.locator('body')).toHaveScreenshot('status-page.png', {
+      fullPage: true,
+    })
+  })
 })
 
 test.describe('Storage meter', () => {
