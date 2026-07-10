@@ -79,6 +79,8 @@ Fleet enrollment tokens are written by `./scripts/bootstrap-fleet.sh` into `dock
 
 Override branding at **image build time** via the `web.build.args` section in `docker-compose.override.yml` (`NUXT_PUBLIC_INSTANCE_NAME`, `NUXT_PUBLIC_INSTANCE_LOGO_URL`, `NUXT_PUBLIC_API_BASE`, `NUXT_PUBLIC_SITE_GATE_ENABLED`).
 
+**Site gate policy:** production Docker images default to `NUXT_PUBLIC_SITE_GATE_ENABLED=false`. When enabled for local dev (`pnpm dev`), the gate is a cosmetic preview lock only — the password is not shipped in production bundles and the middleware does not run outside `import.meta.dev`.
+
 Set `NUXT_PUBLIC_*` variables at **build time** (they are baked into the static bundle).
 
 ## Project layout

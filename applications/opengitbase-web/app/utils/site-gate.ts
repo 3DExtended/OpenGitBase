@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'ogb-site-gate-unlocked'
 
-export const SITE_GATE_PASSWORD = 'OpenGitBase'
+// Cosmetic staging-only gate for local/dev previews. Not a security boundary.
+// Production images set NUXT_PUBLIC_SITE_GATE_ENABLED=false and omit the password from the bundle.
+const DEV_SITE_GATE_PASSWORD = import.meta.dev ? 'OpenGitBase' : ''
 
 export function isSiteGateUnlocked(): boolean {
   if (!import.meta.client) {
@@ -11,7 +13,11 @@ export function isSiteGateUnlocked(): boolean {
 }
 
 export function unlockSiteGate(password: string): boolean {
-  if (password !== SITE_GATE_PASSWORD) {
+  if (!import.meta.dev || !DEV_SITE_GATE_PASSWORD) {
+    return false
+  }
+
+  if (password !== DEV_SITE_GATE_PASSWORD) {
     return false
   }
 

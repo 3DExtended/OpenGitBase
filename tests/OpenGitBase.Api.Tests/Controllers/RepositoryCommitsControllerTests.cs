@@ -86,6 +86,133 @@ public class RepositoryCommitsControllerTests
     }
 
     [Fact]
+    public async Task GetCommit_PrivateRepositoryMember_ReturnsOk()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var memberId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: true);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryMemberDto
+                    {
+                        Id = RepositoryMemberId.From(Guid.NewGuid()),
+                        RepositoryId = repository.Id,
+                        UserId = memberId,
+                        Role = RepositoryRole.Reader,
+                    }
+                )
+            );
+
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        ConfigureSuccessfulCommit(queryProcessor, storageContentClient, repository);
+        var controller = CreateController(queryProcessor, memberId, storageContentClient);
+
+        var result = await controller.GetCommit(
+            "owner",
+            "repo",
+            CommitSha,
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<RepositoryCommitResponse>(ok.Value);
+        Assert.Equal(CommitSha, response.Sha);
+        Assert.Equal("add feature", response.Message);
+    }
+
+    [Fact]
+    public async Task GetCommit_RootCommit_ReturnsRootPayload()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: false);
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            configureStorage: ConfigureRootCommit
+        );
+
+        var result = await controller.GetCommit(
+            "owner",
+            "repo",
+            CommitSha,
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<RepositoryCommitResponse>(ok.Value);
+        Assert.Equal("root", response.Kind);
+        Assert.Empty(response.DiffFiles);
+        Assert.Single(response.RootFiles);
+        Assert.Equal("README.md", response.RootFiles[0].Path);
+        Assert.Equal("added", response.RootFiles[0].ChangeType);
+    }
+
+    [Fact]
+    public async Task GetCommit_PrefixSha_ReturnsCanonicalSha()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: false);
+        var prefixSha = CommitSha[..8];
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, repo) =>
+            {
+                ConfigureStorageRouting(queryProcessor);
+                storageContentClient
+                    .GetCommitAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        repo.PhysicalPath,
+                        prefixSha,
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(
+                        new StorageContentCommitDetailPayload
+                        {
+                            Sha = CommitSha,
+                            ShortSha = prefixSha,
+                            Message = "add feature",
+                            AuthorName = "Test User",
+                            AuthoredAt = "2026-06-01T00:00:00+00:00",
+                            Kind = "diff",
+                            Stats = new StorageContentCommitStatsPayload
+                            {
+                                FilesChanged = 1,
+                                Insertions = 1,
+                                Deletions = 0,
+                            },
+                            Files =
+                            [
+                                new StorageContentCommitFilePayload
+                                {
+                                    NewPath = "feature.txt",
+                                    Status = "added",
+                                },
+                            ],
+                        }
+                    );
+            }
+        );
+
+        var result = await controller.GetCommit(
+            "owner",
+            "repo",
+            prefixSha,
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<RepositoryCommitResponse>(ok.Value);
+        Assert.Equal(CommitSha, response.Sha);
+        Assert.Equal(prefixSha, response.ShortSha);
+    }
+
+    [Fact]
     public async Task GetCommit_WhenStorageReturnsNull_ReturnsNotFound()
     {
         var ownerId = UserId.From(Guid.NewGuid());
@@ -173,6 +300,49 @@ public class RepositoryCommitsControllerTests
                                     ],
                                 },
                             ],
+                        },
+                    ],
+                }
+            );
+    }
+
+    private static void ConfigureRootCommit(
+        IQueryProcessor queryProcessor,
+        IStorageContentClient storageContentClient,
+        RepositoryDto repository
+    )
+    {
+        ConfigureStorageRouting(queryProcessor);
+        storageContentClient
+            .GetCommitAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                repository.PhysicalPath,
+                CommitSha,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new StorageContentCommitDetailPayload
+                {
+                    Sha = CommitSha,
+                    ShortSha = CommitSha[..8],
+                    Message = "init",
+                    AuthorName = "Test User",
+                    AuthoredAt = "2026-06-01T00:00:00+00:00",
+                    Kind = "root",
+                    Parents = [],
+                    Stats = new StorageContentCommitStatsPayload
+                    {
+                        FilesChanged = 1,
+                        Insertions = 0,
+                        Deletions = 0,
+                    },
+                    Files =
+                    [
+                        new StorageContentCommitFilePayload
+                        {
+                            Path = "README.md",
+                            ChangeType = "added",
                         },
                     ],
                 }

@@ -24,7 +24,9 @@ async function onSubmit() {
       error.value = t('auth.signIn.invalidCredentials')
       return
     }
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    const redirect = resolveSafeRedirectPath(
+      typeof route.query.redirect === 'string' ? route.query.redirect : undefined,
+    )
     await navigateTo(redirect)
   }
   finally {

@@ -22,7 +22,9 @@ async function onSubmit() {
     return
   }
 
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+  const redirect = resolveSafeRedirectPath(
+    typeof route.query.redirect === 'string' ? route.query.redirect : undefined,
+  )
   await navigateTo(redirect)
 }
 </script>

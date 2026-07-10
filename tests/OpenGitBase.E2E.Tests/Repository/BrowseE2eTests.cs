@@ -146,6 +146,15 @@ public class BrowseE2eTests : E2eTestBase
             using var commitDoc = JsonDocument.Parse(commit.Body);
             Assert.Equal(mainSha, commitDoc.RootElement.GetProperty("sha").GetString());
             Assert.True(commitDoc.RootElement.TryGetProperty("kind", out _));
+
+            Transcript.Describe("Commit read with abbreviated SHA returns canonical SHA");
+            var shortSha = mainSha![..8];
+            var commitByPrefix = await anon.GetAsync($"/repository/by-slug/{browse.OwnerUsername}/{browse.Slug}/commits/{shortSha}").ConfigureAwait(false);
+            Assert.Equal(200, commitByPrefix.StatusCode);
+            using var prefixDoc = JsonDocument.Parse(commitByPrefix.Body);
+            Assert.Equal(mainSha, prefixDoc.RootElement.GetProperty("sha").GetString());
+            Assert.Equal(shortSha, prefixDoc.RootElement.GetProperty("shortSha").GetString());
+
             await Baselines.CaptureApiAsync("public-commit-read", commit).ConfigureAwait(false);
             await AssertBaselinesAsync().ConfigureAwait(false);
         }

@@ -1,7 +1,7 @@
 export default defineNuxtRouteMiddleware((to) => {
   const config = useRuntimeConfig()
 
-  if (!config.public.siteGateEnabled) {
+  if (!config.public.siteGateEnabled || !import.meta.dev) {
     return
   }
 

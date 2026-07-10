@@ -60,8 +60,12 @@ async function installCommitRoutes(page: import('@playwright/test').Page) {
     await route.fulfill({ status: 401, body: '' })
   })
 
-  await page.route('**/api/repository/by-slug/demo-user/hello-world/commits/**', async (route) => {
-    await route.fulfill({ json: commitDetailPayload })
+  await page.route(/\/api\/repository\/by-slug\/demo-user\/hello-world\/commits\/.+/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      json: commitDetailPayload,
+    })
   })
 
   await page.route('**/api/repository/by-slug/demo-user/hello-world/merge-requests/7/discussion-links**', async (route) => {
@@ -165,5 +169,17 @@ test.describe('Commit change view', () => {
     await expect(page).toHaveURL(/\/demo-user\/hello-world\/commit\//)
     await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Back to merge request !7' })).toBeVisible()
+  })
+
+  test('abbreviated SHA in URL is replaced with canonical SHA', async ({ page }) => {
+    await installCommitRoutes(page)
+    await page.goto(
+      `${baseURL}/demo-user/hello-world/commit/${commitDetailPayload.shortSha}?from=mr/7`,
+      { waitUntil: 'networkidle' },
+    )
+    await expect(page).toHaveURL(
+      new RegExp(`/demo-user/hello-world/commit/${commitDetailPayload.sha}(\\?|$)`),
+    )
+    await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
   })
 })
