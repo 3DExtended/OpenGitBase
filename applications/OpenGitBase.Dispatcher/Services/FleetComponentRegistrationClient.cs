@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿using System.Net;
+using System.Net.Http.Json;
 using OpenGitBase.Dispatcher.Options;
 
 namespace OpenGitBase.Dispatcher.Services;
@@ -17,7 +18,7 @@ public sealed class FleetComponentRegistrationClient
         _options = options.Value;
     }
 
-    public async Task<bool> RegisterAsync(
+    public async Task<HttpStatusCode> RegisterAsync(
         string instanceId,
         string probeUrl,
         CancellationToken cancellationToken
@@ -36,10 +37,10 @@ public sealed class FleetComponentRegistrationClient
             )
             .ConfigureAwait(false);
 
-        return response.IsSuccessStatusCode;
+        return response.StatusCode;
     }
 
-    public async Task<bool> HeartbeatAsync(
+    public async Task<HttpStatusCode> HeartbeatAsync(
         string instanceId,
         CancellationToken cancellationToken
     )
@@ -56,6 +57,6 @@ public sealed class FleetComponentRegistrationClient
             )
             .ConfigureAwait(false);
 
-        return response.IsSuccessStatusCode;
+        return response.StatusCode;
     }
 }

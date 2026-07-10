@@ -40,10 +40,10 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
 
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
-            var acknowledged = await _client
+            var heartbeatStatus = await _client
                 .HeartbeatAsync(instanceId, stoppingToken)
                 .ConfigureAwait(false);
-            if (!acknowledged)
+            if (!IsSuccess(heartbeatStatus))
             {
                 await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
             }
@@ -56,14 +56,16 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
         CancellationToken cancellationToken
     )
     {
-        var registered = await _client
+        var status = await _client
             .RegisterAsync(instanceId, probeUrl, cancellationToken)
             .ConfigureAwait(false);
-        if (!registered)
+        if (!IsSuccess(status))
         {
             _logger.LogWarning(
-                "Fleet component registration failed for dispatcher {InstanceId}",
-                instanceId
+                "Fleet component registration failed for dispatcher {InstanceId}: HTTP {StatusCode}. "
+                    + "Ensure API replicas expose /api/v1/internal/fleet-components before rolling dispatchers.",
+                instanceId,
+                (int)status
             );
             return;
         }
@@ -74,4 +76,7 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
             probeUrl
         );
     }
+
+    private static bool IsSuccess(System.Net.HttpStatusCode status) =>
+        (int)status is >= 200 and < 300;
 }

@@ -140,10 +140,13 @@ prepare_deploy_build_env() {
   fi
 }
 
-FLEET_ROLL_SERVICES=(
+STORAGE_ROLL_SERVICES=(
   storage-1
   storage-2
   storage-3
+)
+
+DISPATCHER_ROLL_SERVICES=(
   dispatcher-1
   dispatcher-2
 )
@@ -354,7 +357,13 @@ run_step "Run database migrations (api-migrate)" \
 
 ROLL_SERVICES=("${APP_ROLL_SERVICES[@]}")
 if [ "${ROLL_FLEET}" = true ]; then
-  ROLL_SERVICES=("${FLEET_ROLL_SERVICES[@]}" "${APP_ROLL_SERVICES[@]}")
+  # API must roll before dispatchers: fleet self-registration hits
+  # /api/v1/internal/fleet-components on the API image.
+  ROLL_SERVICES=(
+    "${STORAGE_ROLL_SERVICES[@]}"
+    "${APP_ROLL_SERVICES[@]}"
+    "${DISPATCHER_ROLL_SERVICES[@]}"
+  )
 fi
 
 for service in "${ROLL_SERVICES[@]}"; do
