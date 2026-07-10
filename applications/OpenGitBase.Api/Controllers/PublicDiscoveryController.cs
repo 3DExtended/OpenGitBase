@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 
@@ -11,10 +12,15 @@ namespace OpenGitBase.Api.Controllers;
 public class PublicDiscoveryController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
+    private readonly RepositoryResponseMapper _responseMapper;
 
-    public PublicDiscoveryController(IQueryProcessor queryProcessor)
+    public PublicDiscoveryController(
+        IQueryProcessor queryProcessor,
+        RepositoryResponseMapper responseMapper
+    )
     {
         _queryProcessor = queryProcessor;
+        _responseMapper = responseMapper;
     }
 
     [HttpGet("repositories")]
@@ -29,7 +35,7 @@ public class PublicDiscoveryController : ControllerBase
                 cancellationToken
             )
             .ConfigureAwait(false);
-        return ToActionResult(result);
+        return ToActionResult(result, repositories => _responseMapper.MapRepositories(repositories));
     }
 
     [HttpGet("repositories/recent")]
@@ -38,7 +44,7 @@ public class PublicDiscoveryController : ControllerBase
         var result = await _queryProcessor
             .RunQueryAsync(new ListRecentPublicRepositoriesQuery(), cancellationToken)
             .ConfigureAwait(false);
-        return ToActionResult(result);
+        return ToActionResult(result, repositories => _responseMapper.MapRepositories(repositories));
     }
 
     [HttpGet("owners/{slug}")]
@@ -50,16 +56,33 @@ public class PublicDiscoveryController : ControllerBase
         var result = await _queryProcessor
             .RunQueryAsync(new GetOwnerProfileQuery { OwnerSlug = slug }, cancellationToken)
             .ConfigureAwait(false);
-        return ToActionResult(result);
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        var profile = result.Get();
+        return Ok(
+            new
+            {
+                profile.Slug,
+                profile.Name,
+                profile.Kind,
+                Repositories = _responseMapper.MapRepositories(profile.Repositories),
+            }
+        );
     }
 
-    private IActionResult ToActionResult<T>(Option<T> result)
+    private IActionResult ToActionResult<T>(
+        Option<T> result,
+        Func<T, IReadOnlyList<object>> map
+    )
     {
         if (result.IsNone)
         {
             return NotFound();
         }
 
-        return Ok(result.Get());
+        return Ok(map(result.Get()));
     }
 }

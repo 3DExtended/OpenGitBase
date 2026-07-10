@@ -103,6 +103,24 @@ public class RepositoryContentAuthorizationServiceTests
         Assert.Equal(RepositoryContentAccessResultKind.NotFound, result.Kind);
     }
 
+    [Fact]
+    public async Task AuthorizeReadByIdAsync_PrivateRepositoryOwner_ReturnsAllowed()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: true);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(repository));
+
+        var service = CreateService(queryProcessor, ownerId);
+
+        var result = await service.AuthorizeReadByIdAsync(repository.Id, CancellationToken.None);
+
+        Assert.Equal(RepositoryContentAccessResultKind.Allowed, result.Kind);
+        Assert.Equal(repository.Id, result.Repository?.Id);
+    }
+
     private static RepositoryContentAuthorizationService CreateService(
         IQueryProcessor queryProcessor,
         UserId? authenticatedUserId

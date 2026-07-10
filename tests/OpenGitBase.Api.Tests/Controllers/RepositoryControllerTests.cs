@@ -1,11 +1,13 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
+using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Api.Tests.Base;
 using OpenGitBase.Common.Auth;
@@ -13,6 +15,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.RepositoryMember.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
@@ -304,7 +307,7 @@ public class RepositoryControllerTests
         var result = await controller.Get(repositoryId.Value, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsType<RepositoryDto>(ok.Value);
+        var returned = Assert.IsType<RepositorySummaryResponse>(ok.Value);
         Assert.Equal(repositoryId, returned.Id);
         Assert.Equal(DefaultRepositoryName, returned.Name);
     }
@@ -350,7 +353,7 @@ public class RepositoryControllerTests
         var result = await controller.GetByOwnerSlug("demo-user", "hello-world", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsType<RepositoryDto>(ok.Value);
+        var returned = Assert.IsType<RepositorySummaryResponse>(ok.Value);
         Assert.Equal(repositoryId, returned.Id);
     }
 
@@ -507,9 +510,10 @@ public class RepositoryControllerTests
         var result = await controller.List(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsType<List<RepositoryDto>>(ok.Value);
+        var returned = Assert.IsAssignableFrom<IReadOnlyList<object>>(ok.Value);
         Assert.Single(returned);
-        Assert.Equal("repo-one", returned[0].Slug);
+        var summary = Assert.IsType<RepositorySummaryResponse>(returned[0]);
+        Assert.Equal("repo-one", summary.Slug);
     }
 
     [Fact]
@@ -548,7 +552,7 @@ public class RepositoryControllerTests
         var result = await controller.List(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsType<RepositoryDto[]>(ok.Value);
+        var returned = Assert.IsAssignableFrom<IReadOnlyList<object>>(ok.Value);
         Assert.Empty(returned);
     }
 
@@ -795,7 +799,8 @@ public class RepositoryControllerTests
         UserId userId,
         string username = "testuser",
         IOrganizationAccessService? organizationAccess = null,
-        IRepositoryDiskUsageProvider? repositoryDiskUsageProvider = null
+        IRepositoryDiskUsageProvider? repositoryDiskUsageProvider = null,
+        IHttpContextAccessor? httpContextAccessor = null
     )
     {
         var userContext = Substitute.For<IUserContext>();
@@ -803,13 +808,35 @@ public class RepositoryControllerTests
             new UserIdentity { IdentityProviderId = userId.Value.ToString(), Username = username }
         );
 
+        var accessor = httpContextAccessor ?? CreateHttpContextAccessor(userId);
+
         return new RepositoryController(
             queryProcessor,
             userContext,
             organizationAccess ?? Substitute.For<IOrganizationAccessService>(),
             new RepositoryStorageQuotaOptions(),
-            repositoryDiskUsageProvider ?? Substitute.For<IRepositoryDiskUsageProvider>()
+            repositoryDiskUsageProvider ?? Substitute.For<IRepositoryDiskUsageProvider>(),
+            new RepositoryContentAuthorizationService(queryProcessor, accessor),
+            new RepositoryResponseMapper(accessor)
         );
+    }
+
+    private static IHttpContextAccessor CreateHttpContextAccessor(UserId? authenticatedUserId = null)
+    {
+        var context = new DefaultHttpContext();
+        if (authenticatedUserId is not null)
+        {
+            context.User = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim("identityproviderid", authenticatedUserId.Value.ToString())],
+                    authenticationType: "Test"
+                )
+            );
+        }
+
+        var accessor = Substitute.For<IHttpContextAccessor>();
+        accessor.HttpContext.Returns(context);
+        return accessor;
     }
 
     private static void ConfigureUserLookup(IQueryProcessor queryProcessor, UserId userId)

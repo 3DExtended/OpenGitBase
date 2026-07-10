@@ -39,7 +39,34 @@ public sealed class RepositoryContentAuthorizationService
             return RepositoryContentAccessResult.NotFound();
         }
 
-        var repository = repositoryResult.Get();
+        return await AuthorizeReadAsync(repositoryResult.Get(), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RepositoryContentAccessResult> AuthorizeReadByIdAsync(
+        RepositoryId repositoryId,
+        CancellationToken cancellationToken
+    )
+    {
+        var repositoryResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryQuery { ModelId = repositoryId },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (repositoryResult.IsNone)
+        {
+            return RepositoryContentAccessResult.NotFound();
+        }
+
+        return await AuthorizeReadAsync(repositoryResult.Get(), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RepositoryContentAccessResult> AuthorizeReadAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
         if (!repository.IsPrivate)
         {
             return RepositoryContentAccessResult.Allow(repository);

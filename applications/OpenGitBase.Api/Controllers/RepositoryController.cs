@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
@@ -22,13 +23,17 @@ public class RepositoryController : ControllerBase
     private readonly IOrganizationAccessService _organizationAccess;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
     private readonly IRepositoryDiskUsageProvider _repositoryDiskUsageProvider;
+    private readonly RepositoryContentAuthorizationService _authorization;
+    private readonly RepositoryResponseMapper _responseMapper;
 
     public RepositoryController(
         IQueryProcessor queryProcessor,
         IUserContext userContext,
         IOrganizationAccessService organizationAccess,
         RepositoryStorageQuotaOptions quotaOptions,
-        IRepositoryDiskUsageProvider repositoryDiskUsageProvider
+        IRepositoryDiskUsageProvider repositoryDiskUsageProvider,
+        RepositoryContentAuthorizationService authorization,
+        RepositoryResponseMapper responseMapper
     )
     {
         _queryProcessor = queryProcessor;
@@ -36,6 +41,8 @@ public class RepositoryController : ControllerBase
         _organizationAccess = organizationAccess;
         _quotaOptions = quotaOptions;
         _repositoryDiskUsageProvider = repositoryDiskUsageProvider;
+        _authorization = authorization;
+        _responseMapper = responseMapper;
     }
 
     [HttpPost("{slug}")]
@@ -163,6 +170,7 @@ public class RepositoryController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = id.Value }, id);
     }
 
+    [AllowAnonymous]
     [HttpGet("by-slug/{owner}/{slug}")]
     public async Task<IActionResult> GetByOwnerSlug(
         string owner,
@@ -170,24 +178,28 @@ public class RepositoryController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        var result = await _queryProcessor.RunQueryAsync(
-            new GetRepositoryByOwnerSlugQuery { OwnerSlug = owner, Slug = slug },
-            cancellationToken
-        );
-        return ToActionResult(result);
+        var access = await _authorization
+            .AuthorizeReadAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return MapAccessFailure(access);
+        }
+
+        return Ok(_responseMapper.MapRepository(access.Repository));
     }
 
+    [AllowAnonymous]
     [HttpGet("{id:guid}/usage")]
     public async Task<IActionResult> GetUsage(Guid id, CancellationToken cancellationToken)
     {
         var repositoryId = RepositoryId.From(id);
-        var repositoryResult = await _queryProcessor.RunQueryAsync(
-            new GetRepositoryQuery { ModelId = repositoryId },
-            cancellationToken
-        );
-        if (repositoryResult.IsNone)
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(repositoryId, cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
         {
-            return NotFound();
+            return MapAccessFailure(access);
         }
 
         var result = await _queryProcessor.RunQueryAsync(
@@ -201,7 +213,7 @@ public class RepositoryController : ControllerBase
 
         var usage = result.Get();
         var liveBytes = await _repositoryDiskUsageProvider
-            .GetDiskUsageBytesAsync(repositoryResult.Get(), cancellationToken)
+            .GetDiskUsageBytesAsync(access.Repository, cancellationToken)
             .ConfigureAwait(false);
         if (liveBytes.HasValue)
         {
@@ -216,14 +228,19 @@ public class RepositoryController : ControllerBase
         return Ok(usage);
     }
 
+    [AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _queryProcessor.RunQueryAsync(
-            new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
-            cancellationToken
-        );
-        return ToActionResult(result);
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(id), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return MapAccessFailure(access);
+        }
+
+        return Ok(_responseMapper.MapRepository(access.Repository));
     }
 
     [HttpGet]
@@ -233,7 +250,12 @@ public class RepositoryController : ControllerBase
             new ListRepositoriesForUserQuery { UserId = UserId.From(_userContext.User.UserId) },
             cancellationToken
         );
-        return ToActionResult(result);
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        return Ok(_responseMapper.MapRepositories(result.Get()));
     }
 
     [HttpPut("{id:guid}")]
@@ -321,13 +343,14 @@ public class RepositoryController : ControllerBase
         return NoContent();
     }
 
-    private IActionResult ToActionResult<T>(Option<T> result)
-    {
-        if (result.IsNone)
+    private IActionResult MapAccessFailure(RepositoryContentAccessResult access) =>
+        access.Kind switch
         {
-            return NotFound();
-        }
-
-        return Ok(result.Get());
-    }
+            RepositoryContentAccessResultKind.NotFound => NotFound(),
+            RepositoryContentAccessResultKind.Forbidden => Forbid(),
+            RepositoryContentAccessResultKind.Unavailable => StatusCode(
+                StatusCodes.Status503ServiceUnavailable
+            ),
+            _ => NotFound(),
+        };
 }

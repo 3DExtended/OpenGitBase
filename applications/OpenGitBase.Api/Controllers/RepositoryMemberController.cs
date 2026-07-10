@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
@@ -15,11 +17,17 @@ public class RepositoryMemberController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
+    private readonly RepositoryContentAuthorizationService _authorization;
 
-    public RepositoryMemberController(IQueryProcessor queryProcessor, IUserContext userContext)
+    public RepositoryMemberController(
+        IQueryProcessor queryProcessor,
+        IUserContext userContext,
+        RepositoryContentAuthorizationService authorization
+    )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
+        _authorization = authorization;
     }
 
     [HttpPost]
@@ -28,7 +36,6 @@ public class RepositoryMemberController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        // get repository if it exists
         var repository = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = query.ModelToCreate.RepositoryId },
             cancellationToken
@@ -41,7 +48,6 @@ public class RepositoryMemberController : ControllerBase
 
         if (repository.Get().OwnerUserId != _userContext.GetUserId())
         {
-            // now check if user has permissions to add members to the repository
             var repositoryMember = await _queryProcessor.RunQueryAsync(
                 new GetRepositoryMemberQuery
                 {
@@ -55,6 +61,20 @@ public class RepositoryMemberController : ControllerBase
             {
                 return Forbid("Only repository owner or admins can add members to the repository.");
             }
+        }
+
+        var callerRole = await ResolveCallerEffectiveRoleAsync(
+            repository.Get(),
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (callerRole is null)
+        {
+            return Forbid();
+        }
+
+        if (query.ModelToCreate.Role > callerRole)
+        {
+            return Forbid("Cannot grant a role higher than your own.");
         }
 
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);
@@ -73,6 +93,14 @@ public class RepositoryMemberController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(repositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            return MapAccessFailure(access);
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new ListRepositoryMemberQuery { RepositoryId = RepositoryId.From(repositoryId) },
             cancellationToken
@@ -89,7 +117,6 @@ public class RepositoryMemberController : ControllerBase
     {
         query.UpdatedModel.Id = RepositoryMemberId.From(id);
 
-        // first check if there is an existing repository member with the given id, if not return 404
         var existingRepositoryMember = await _queryProcessor
             .RunQueryAsync(
                 new GetRepositoryMemberQuery
@@ -108,11 +135,9 @@ public class RepositoryMemberController : ControllerBase
 
         if (existingRepositoryMember.Get().Id != query.UpdatedModel.Id)
         {
-            // if the id of the existing repository member doesn't match the id in the route, return 404
             return NotFound();
         }
 
-        // get repository if it exists
         var repository = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = query.UpdatedModel.RepositoryId },
             cancellationToken
@@ -125,7 +150,6 @@ public class RepositoryMemberController : ControllerBase
 
         if (repository.Get().OwnerUserId != _userContext.GetUserId())
         {
-            // now check if user has permissions to add members to the repository
             var repositoryMember = await _queryProcessor.RunQueryAsync(
                 new GetRepositoryMemberQuery
                 {
@@ -139,6 +163,20 @@ public class RepositoryMemberController : ControllerBase
             {
                 return Forbid("Only repository owner or admins can add members to the repository.");
             }
+        }
+
+        var callerRole = await ResolveCallerEffectiveRoleAsync(
+            repository.Get(),
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (callerRole is null)
+        {
+            return Forbid();
+        }
+
+        if (query.UpdatedModel.Role > callerRole)
+        {
+            return Forbid("Cannot grant a role higher than your own.");
         }
 
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);
@@ -155,7 +193,6 @@ public class RepositoryMemberController : ControllerBase
     {
         var repositoryMemberId = RepositoryMemberId.From(id);
 
-        // first check if there is an existing repository member with the given id, if not return 404
         var existingRepositoryMember = await _queryProcessor
             .RunQueryAsync(
                 new GetRepositoryMemberByIdQuery { ModelId = repositoryMemberId },
@@ -168,7 +205,6 @@ public class RepositoryMemberController : ControllerBase
             return NotFound();
         }
 
-        // get repository if it exists
         var repository = await _queryProcessor.RunQueryAsync(
             new GetRepositoryQuery { ModelId = existingRepositoryMember.Get().RepositoryId },
             cancellationToken
@@ -181,7 +217,6 @@ public class RepositoryMemberController : ControllerBase
 
         if (repository.Get().OwnerUserId != _userContext.GetUserId())
         {
-            // now check if user has permissions to add members to the repository
             var repositoryMember = await _queryProcessor.RunQueryAsync(
                 new GetRepositoryMemberQuery
                 {
@@ -210,6 +245,31 @@ public class RepositoryMemberController : ControllerBase
         return NoContent();
     }
 
+    private async Task<RepositoryRole?> ResolveCallerEffectiveRoleAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var callerId = _userContext.GetUserId();
+        if (repository.OwnerUserId == callerId)
+        {
+            return RepositoryRole.Owner;
+        }
+
+        var membership = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryMemberQuery
+                {
+                    RepositoryId = repository.Id,
+                    UserId = callerId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return membership.IsSome ? membership.Get().Role : null;
+    }
+
     private IActionResult ToActionResult<T>(Option<T> result)
     {
         if (result.IsNone)
@@ -219,4 +279,15 @@ public class RepositoryMemberController : ControllerBase
 
         return Ok(result.Get());
     }
+
+    private IActionResult MapAccessFailure(RepositoryContentAccessResult access) =>
+        access.Kind switch
+        {
+            RepositoryContentAccessResultKind.NotFound => NotFound(),
+            RepositoryContentAccessResultKind.Forbidden => Forbid(),
+            RepositoryContentAccessResultKind.Unavailable => StatusCode(
+                StatusCodes.Status503ServiceUnavailable
+            ),
+            _ => NotFound(),
+        };
 }

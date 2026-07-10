@@ -1,6 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
@@ -242,6 +245,20 @@ public class RepositoryMemberControllerTests
         };
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "owned",
+                        Name = "Owned",
+                        IsPrivate = true,
+                    }
+                )
+            );
+        queryProcessor
             .RunQueryAsync(
                 Arg.Is<ListRepositoryMemberQuery>(query => query.RepositoryId == repositoryId),
                 Arg.Any<CancellationToken>()
@@ -264,6 +281,20 @@ public class RepositoryMemberControllerTests
         var userId = UserId.From(Guid.NewGuid());
         var repositoryId = RepositoryId.From(Guid.NewGuid());
         var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "owned",
+                        Name = "Owned",
+                        IsPrivate = true,
+                    }
+                )
+            );
         queryProcessor
             .RunQueryAsync(Arg.Any<ListRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<IReadOnlyList<RepositoryMemberDto>>.None);
@@ -879,6 +910,23 @@ public class RepositoryMemberControllerTests
             new UserIdentity { IdentityProviderId = userId.Value.ToString(), Username = username }
         );
 
-        return new RepositoryMemberController(queryProcessor, userContext);
+        var accessor = Substitute.For<IHttpContextAccessor>();
+        accessor.HttpContext.Returns(
+            new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(
+                    new ClaimsIdentity(
+                        [new Claim("identityproviderid", userId.Value.ToString())],
+                        authenticationType: "Test"
+                    )
+                ),
+            }
+        );
+
+        return new RepositoryMemberController(
+            queryProcessor,
+            userContext,
+            new RepositoryContentAuthorizationService(queryProcessor, accessor)
+        );
     }
 }

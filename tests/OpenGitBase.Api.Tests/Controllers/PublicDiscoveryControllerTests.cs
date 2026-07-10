@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 
@@ -16,7 +17,7 @@ public class PublicDiscoveryControllerTests
             .RunQueryAsync(Arg.Any<ListPublicRepositoriesQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From((IReadOnlyList<RepositoryDto>)Array.Empty<RepositoryDto>()));
 
-        var controller = new PublicDiscoveryController(queryProcessor);
+        var controller = CreateController(queryProcessor);
         var result = await controller.ListRepositories(null, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
@@ -33,7 +34,7 @@ public class PublicDiscoveryControllerTests
             )
             .Returns(Option.From((IReadOnlyList<RepositoryDto>)Array.Empty<RepositoryDto>()));
 
-        var controller = new PublicDiscoveryController(queryProcessor);
+        var controller = CreateController(queryProcessor);
         var result = await controller.ListRecentRepositories(CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
@@ -57,7 +58,7 @@ public class PublicDiscoveryControllerTests
                 )
             );
 
-        var controller = new PublicDiscoveryController(queryProcessor);
+        var controller = CreateController(queryProcessor);
         var result = await controller.GetOwnerProfile("demo-user", CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
@@ -71,9 +72,15 @@ public class PublicDiscoveryControllerTests
             .RunQueryAsync(Arg.Any<GetOwnerProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<OwnerProfileDto>.None);
 
-        var controller = new PublicDiscoveryController(queryProcessor);
+        var controller = CreateController(queryProcessor);
         var result = await controller.GetOwnerProfile("missing", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
+
+    private static PublicDiscoveryController CreateController(IQueryProcessor queryProcessor) =>
+        new(
+            queryProcessor,
+            new RepositoryResponseMapper(Substitute.For<Microsoft.AspNetCore.Http.IHttpContextAccessor>())
+        );
 }
