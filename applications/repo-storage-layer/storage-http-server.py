@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -34,7 +35,12 @@ STORAGE_TOKEN_FILE = os.environ.get("STORAGE_TOKEN_FILE", "/var/lib/opengitbase/
 STORAGE_HTTP_PORT = int(os.environ.get("STORAGE_HTTP_PORT", "8081"))
 STORAGE_MTLS_GIT_HTTP_PORT = int(os.environ.get("STORAGE_MTLS_GIT_HTTP_PORT", "8443"))
 WATERMARK_DIR = Path(os.environ.get("STORAGE_WATERMARK_DIR", "/var/lib/opengitbase/watermarks"))
+ARTIFACT_ROOT = Path(os.environ.get("STORAGE_ARTIFACT_ROOT", "/var/lib/opengitbase/artifacts"))
+ROLE_DIR = Path(os.environ.get("STORAGE_ROLE_DIR", "/var/lib/opengitbase/repo-roles"))
 REPOS_ROOT = Path("/srv/git")
+ARTIFACT_PATH_PATTERN = re.compile(
+    r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
+)
 CA_CERT = Path("/etc/opengitbase/ca.crt")
 NODE_CERT = Path("/etc/opengitbase/node.crt")
 NODE_KEY = Path("/etc/opengitbase/node.key")
@@ -101,6 +107,52 @@ def _git_mtls_env() -> dict[str, str]:
 
 def _repository_id_from_path(physical_path: str) -> str:
     return Path(physical_path).name.removesuffix(".git")
+
+
+def _write_repo_role(repository_id: str, replication_role: str) -> None:
+    ROLE_DIR.mkdir(parents=True, exist_ok=True)
+    role_file = ROLE_DIR / f"{repository_id}.txt"
+    role_file.write_text(replication_role.strip(), encoding="utf-8")
+
+
+def _read_repo_role(repository_id: str) -> str | None:
+    role_file = ROLE_DIR / f"{repository_id}.txt"
+    if not role_file.is_file():
+        return None
+    return role_file.read_text(encoding="utf-8").strip()
+
+
+def _is_encrypted_replica(repository_id: str) -> bool:
+    return _read_repo_role(repository_id) == "EncryptedReplica"
+
+
+def _artifact_directory(repository_id: str, watermark: int) -> Path:
+    return ARTIFACT_ROOT / repository_id / str(watermark)
+
+
+def store_replication_artifact(
+    repository_id: str,
+    watermark: int,
+    manifest: dict[str, Any],
+    bundle_bytes: bytes,
+) -> Path:
+    artifact_dir = _artifact_directory(repository_id, watermark)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = artifact_dir / "manifest.json"
+    bundle_path = artifact_dir / "bundle.aead"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    bundle_path.write_bytes(bundle_bytes)
+    return artifact_dir
+
+
+def fetch_replication_artifact(repository_id: str, watermark: int) -> tuple[dict[str, Any], bytes]:
+    artifact_dir = _artifact_directory(repository_id, watermark)
+    manifest_path = artifact_dir / "manifest.json"
+    bundle_path = artifact_dir / "bundle.aead"
+    if not manifest_path.is_file() or not bundle_path.is_file():
+        raise FileNotFoundError(f"Artifact not found for {repository_id} at watermark {watermark}.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return manifest, bundle_path.read_bytes()
 
 
 def _write_initial_watermark(physical_path: str) -> None:
@@ -319,6 +371,23 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if parsed.path == "/internal/repos/usage":
             self._handle_disk_usage()
             return
+
+        artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
+        if artifact_match:
+            self._handle_get_artifact(
+                artifact_match.group("repository_id"),
+                int(artifact_match.group("watermark")),
+            )
+            return
+
+        if parsed.path.startswith("/internal/repos/content/"):
+            physical_path = self._physical_path_from_query()
+            if physical_path and _is_encrypted_replica(_repository_id_from_path(physical_path)):
+                self._send_json(
+                    403,
+                    {"error": "Git access is not allowed on encrypted replica storage."},
+                )
+                return
 
         self.send_error(404)
 
@@ -615,6 +684,59 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(200, {"isAncestor": is_ancestor})
 
+    def do_PUT(self) -> None:
+        if not self._check_auth():
+            self.send_error(401)
+            return
+
+        parsed = urlparse(self.path)
+        artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
+        if not artifact_match:
+            self.send_error(404)
+            return
+
+        self._handle_put_artifact(
+            artifact_match.group("repository_id"),
+            int(artifact_match.group("watermark")),
+        )
+
+    def _handle_get_artifact(self, repository_id: str, watermark: int) -> None:
+        try:
+            manifest, bundle_bytes = fetch_replication_artifact(repository_id, watermark)
+        except FileNotFoundError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+
+        self._send_json(
+            200,
+            {
+                "repositoryId": repository_id,
+                "watermark": watermark,
+                "manifest": manifest,
+                "bundleBase64": bundle_bytes.hex(),
+            },
+        )
+
+    def _handle_put_artifact(self, repository_id: str, watermark: int) -> None:
+        data = self._read_json()
+        manifest = data.get("manifest")
+        bundle_hex = data.get("bundleBase64", "")
+        if not isinstance(manifest, dict):
+            self._send_json(400, {"error": "manifest object is required."})
+            return
+        if not bundle_hex:
+            self._send_json(400, {"error": "bundleBase64 is required."})
+            return
+
+        try:
+            bundle_bytes = bytes.fromhex(bundle_hex)
+        except ValueError:
+            self._send_json(400, {"error": "bundleBase64 must be hexadecimal."})
+            return
+
+        store_replication_artifact(repository_id, watermark, manifest, bundle_bytes)
+        self._send_json(201, {"repositoryId": repository_id, "watermark": watermark})
+
     def do_POST(self) -> None:
         if not self._check_auth():
             self.send_error(401)
@@ -639,8 +761,22 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
         data = self._read_json()
         physical_path = data.get("physicalPath", "")
+        replication_role = str(data.get("replicationRole") or "Primary")
         if not _is_valid_physical_path(physical_path):
             self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+
+        repository_id = _repository_id_from_path(physical_path)
+        if replication_role == "EncryptedReplica":
+            if os.path.exists(physical_path):
+                self._send_json(409, {"error": "Repository already exists."})
+                return
+            ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+            _write_repo_role(repository_id, replication_role)
+            self._send_json(
+                201,
+                {"physicalPath": physical_path, "replicationRole": replication_role},
+            )
             return
 
         if os.path.exists(physical_path):
@@ -679,7 +815,8 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             )
         _write_initial_watermark(physical_path)
         _install_replication_hook(physical_path)
-        self._send_json(201, {"physicalPath": physical_path})
+        _write_repo_role(repository_id, replication_role)
+        self._send_json(201, {"physicalPath": physical_path, "replicationRole": replication_role})
 
     def _handle_sync_from(self) -> None:
         data = self._read_json()
@@ -698,6 +835,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
         if not _is_valid_physical_path(physical_path):
             self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+
+        if _is_encrypted_replica(_repository_id_from_path(physical_path)):
+            self._send_json(
+                403,
+                {"error": "Git sync is not allowed on encrypted replica storage."},
+            )
             return
 
         if source_physical_path and not _is_valid_physical_path(source_physical_path):
