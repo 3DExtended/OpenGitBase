@@ -13,10 +13,10 @@ Phase 1 only — platform four-copy encryption through E2E tests. Phase 2/3 (iss
 
 | Step | ID | Title | Status |
 |------|-----|-------|--------|
-| 1 | ers-01 | RF=4 fleet layout foundation | pending |
-| 2 | ers-02 | RF=4 schema, repository keys, and artifact library | pending |
-| 3 | ers-03 | Storage artifact API and encrypted node isolation | pending |
-| 4 | ers-04 | Four-copy repository create | pending |
+| 1 | ers-01 | RF=4 fleet layout foundation | completed |
+| 2 | ers-02 | RF=4 schema, repository keys, and artifact library | completed |
+| 3 | ers-03 | Storage artifact API and encrypted node isolation | completed |
+| 4 | ers-04 | Four-copy repository create | completed |
 | 5 | ers-05 | Encrypted quorum push | pending |
 | 6 | ers-06 | Read/write routing split | pending |
 | 7 | ers-07 | Hot promotion and cold recovery | pending |
@@ -38,10 +38,10 @@ Phase 1 only — platform four-copy encryption through E2E tests. Phase 2/3 (iss
 
 | Item | SHA |
 |------|-----|
-| ers-01 | |
-| ers-02 | |
-| ers-03 | |
-| ers-04 | |
+| ers-01 | 8e72101 |
+| ers-02 | edc7b41 |
+| ers-03 | 0bbbe80 |
+| ers-04 | 68af814 |
 | ers-05 | |
 | ers-06 | |
 | ers-07 | |
