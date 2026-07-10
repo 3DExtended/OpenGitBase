@@ -6,4 +6,7 @@ public enum ReplicationState
     Rf3Healthy = 1,
     Degraded = 2,
     Promoting = 3,
+    Rf4Migrating = 4,
+    Rf4Healthy = 5,
+    Recovering = 6,
 }

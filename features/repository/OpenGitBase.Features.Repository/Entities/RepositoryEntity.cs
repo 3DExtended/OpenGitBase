@@ -18,6 +18,8 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
 
     public Guid? PrimaryStorageNodeId { get; set; }
 
+    public Guid? ReadReplicaStorageNodeId { get; set; }
+
     public long ReplicationEpoch { get; set; } = 1;
 
     public long PrimaryWatermark { get; set; }

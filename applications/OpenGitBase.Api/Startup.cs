@@ -280,6 +280,10 @@ public class Startup
         services.AddSingleton<IJWTTokenGenerator, JWTTokenGenerator>();
         services.AddSingleton<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
+        services.AddSingleton<IRepositoryKeyProtectionService, RepositoryKeyProtectionService>();
+        services.AddSingleton<IEncryptedArtifactService, EncryptedArtifactService>();
+        services.AddSingleton<IRepositoryKeyRotationService, RepositoryKeyRotationService>();
+        services.AddSingleton<IRepositoryKeyService, RepositoryKeyService>();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();

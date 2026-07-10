@@ -10,6 +10,8 @@ public class RepositoryReplicaEntity
 
     public long AppliedWatermark { get; set; }
 
+    public long? ArtifactWatermark { get; set; }
+
     public DateTimeOffset? LastSyncedAt { get; set; }
 
     public RepositoryEntity? Repository { get; set; }
