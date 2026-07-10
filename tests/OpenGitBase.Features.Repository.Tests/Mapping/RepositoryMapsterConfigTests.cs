@@ -20,6 +20,7 @@ public class RepositoryMapsterConfigTests
         (typeof(RepositoryEntity), nameof(RepositoryEntity.ReplicationEpoch)),
         (typeof(RepositoryEntity), nameof(RepositoryEntity.PrimaryWatermark)),
         (typeof(RepositoryEntity), nameof(RepositoryEntity.ReplicationState)),
+        (typeof(RepositoryEntity), nameof(RepositoryEntity.ReadReplicaStorageNodeId)),
     ];
 
     [Fact]

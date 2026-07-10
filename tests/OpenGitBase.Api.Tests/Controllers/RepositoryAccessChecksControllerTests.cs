@@ -848,6 +848,109 @@ public class RepositoryAccessChecksControllerTests
         Assert.Equal("Repository storage quota exceeded.", response.Reason);
     }
 
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenWriteUnderMaxBytesOverride_ReturnsAllowed()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        ConfigureTokenValidation(queryProcessor, userId, GitAccessTokenScopes.Write);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(userId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "repo",
+                        Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                        StorageBytesUsed = 900,
+                        MaxBytesOverride = 1_000,
+                    }
+                )
+            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
+
+        var controller = CreateController(queryProcessor: queryProcessor);
+
+        var result = await controller.CheckRepositoryAccess(
+            new RepositoryAccessCheckRequest
+            {
+                AccessToken = "ogb_test_token",
+                RepositoryPath = "alice/repo",
+                Operation = RepositoryOperation.WriteGit,
+                PackSizeBytes = 50,
+            },
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.True(response.Allowed);
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenWriteExceedsDefaultQuotaWithoutOverride_ReturnsQuotaDenied()
+    {
+        var authenticatingUserId = UserId.From(Guid.NewGuid());
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        ConfigureTokenValidation(queryProcessor, authenticatingUserId, GitAccessTokenScopes.Write);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(ownerUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = ownerUserId,
+                        Slug = "repo",
+                        Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                        StorageBytesUsed = 1_073_741_700,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            platformMergeOptions: null
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            new RepositoryAccessCheckRequest
+            {
+                AccessToken = "ogb_test_token",
+                RepositoryPath = "alice/repo",
+                Operation = RepositoryOperation.WriteGit,
+                PackSizeBytes = 200,
+            },
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("Repository storage quota exceeded.", response.Reason);
+    }
+
     private static RepositoryAccessChecksController CreateController(
         IQueryProcessor? queryProcessor = null,
         ISshKeyService? sshKeyService = null,

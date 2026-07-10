@@ -83,10 +83,123 @@ public class RepositoryByteOverrideServiceTests
         }
     }
 
+    [Fact]
+    public async Task EvaluateAsync_WhenNotOrganizationOwned_IsNotEligible()
+    {
+        var orgId = Guid.NewGuid();
+        var (service, provider) = await CreateServiceAsync(
+            orgId,
+            orgNodeCount: 4,
+            allOrgOwned: true,
+            organizationExists: false
+        );
+
+        await using (provider)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .Include(entity => entity.Replicas)
+                .SingleAsync();
+
+            var result = await service.EvaluateAsync(repository, CancellationToken.None);
+
+            Assert.False(result.Eligible);
+            Assert.Contains("not organization-owned", result.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WhenReplicasMissing_IsNotEligible()
+    {
+        var orgId = Guid.NewGuid();
+        var (service, provider) = await CreateServiceAsync(
+            orgId,
+            orgNodeCount: 4,
+            allOrgOwned: true,
+            includeReplicas: false
+        );
+
+        await using (provider)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .Include(entity => entity.Replicas)
+                .SingleAsync();
+
+            var result = await service.EvaluateAsync(repository, CancellationToken.None);
+
+            Assert.False(result.Eligible);
+            Assert.Contains("not provisioned", result.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WhenMissingEncryptedReplica_IsNotEligible()
+    {
+        var orgId = Guid.NewGuid();
+        var (service, provider) = await CreateServiceAsync(
+            orgId,
+            orgNodeCount: 4,
+            allOrgOwned: true,
+            encryptedReplicaCount: 1
+        );
+
+        await using (provider)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .Include(entity => entity.Replicas)
+                .SingleAsync();
+
+            var result = await service.EvaluateAsync(repository, CancellationToken.None);
+
+            Assert.False(result.Eligible);
+            Assert.Contains("not fully replicated", result.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WhenNodeHeartbeatStale_ExcludesFromOrgCount()
+    {
+        var orgId = Guid.NewGuid();
+        var (service, provider) = await CreateServiceAsync(orgId, orgNodeCount: 4, allOrgOwned: true);
+
+        await using (provider)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var staleNode = await context
+                .Set<StorageNodeEntity>()
+                .OrderBy(node => node.NodeId)
+                .LastAsync();
+            staleNode.LastHeartbeatAt = DateTimeOffset.UtcNow.AddHours(-2);
+            await context.SaveChangesAsync();
+
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .Include(entity => entity.Replicas)
+                .SingleAsync();
+
+            var result = await service.EvaluateAsync(repository, CancellationToken.None);
+
+            Assert.False(result.Eligible);
+            Assert.Equal(3, result.OrgContributedNodeCount);
+        }
+    }
+
     private static async Task<(RepositoryByteOverrideService Service, ServiceProvider Provider)> CreateServiceAsync(
         Guid orgId,
         int orgNodeCount,
-        bool allOrgOwned
+        bool allOrgOwned,
+        bool organizationExists = true,
+        bool includeReplicas = true,
+        int encryptedReplicaCount = 2
     )
     {
         var connection = new SqliteConnection("Data Source=:memory:");
@@ -102,19 +215,29 @@ public class RepositoryByteOverrideServiceTests
         services.AddSingleton(new StorageNodeOptions { MissedHeartbeatThresholdSeconds = 300 });
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new OrganizationDto
-                    {
-                        Id = OrganizationId.From(orgId),
-                        Name = "Org",
-                        Slug = "org",
-                        OwnerUserId = Guid.NewGuid(),
-                    }
-                )
-            );
+        if (organizationExists)
+        {
+            queryProcessor
+                .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+                .Returns(
+                    Option.From(
+                        new OrganizationDto
+                        {
+                            Id = OrganizationId.From(orgId),
+                            Name = "Org",
+                            Slug = "org",
+                            OwnerUserId = Guid.NewGuid(),
+                        }
+                    )
+                );
+        }
+        else
+        {
+            queryProcessor
+                .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+                .Returns(Option<OrganizationDto>.None);
+        }
+
         services.AddSingleton(queryProcessor);
         services.AddSingleton<RepositoryByteOverrideService>();
 
@@ -157,63 +280,58 @@ public class RepositoryByteOverrideServiceTests
 
             context.Set<StorageNodeEntity>().AddRange(orgNodes);
             var repositoryId = Guid.NewGuid();
-            var replicas = new List<RepositoryReplicaEntity>
-            {
-                new()
-                {
-                    RepositoryId = repositoryId,
-                    StorageNodeId = orgNodes[0].Id,
-                    Role = RepositoryReplicaRole.Primary,
-                },
-            };
+            var replicas = new List<RepositoryReplicaEntity>();
 
-            if (orgNodeCount >= 4)
+            if (includeReplicas)
             {
                 replicas.Add(
                     new RepositoryReplicaEntity
                     {
                         RepositoryId = repositoryId,
-                        StorageNodeId = orgNodes[1].Id,
-                        Role = RepositoryReplicaRole.ReadReplica,
+                        StorageNodeId = orgNodes[0].Id,
+                        Role = RepositoryReplicaRole.Primary,
                     }
                 );
-                replicas.Add(
-                    new RepositoryReplicaEntity
-                    {
-                        RepositoryId = repositoryId,
-                        StorageNodeId = orgNodes[2].Id,
-                        Role = RepositoryReplicaRole.EncryptedReplica,
-                    }
-                );
-                replicas.Add(
-                    new RepositoryReplicaEntity
-                    {
-                        RepositoryId = repositoryId,
-                        StorageNodeId = allOrgOwned ? orgNodes[3].Id : platformNode!.Id,
-                        Role = RepositoryReplicaRole.EncryptedReplica,
-                    }
-                );
-            }
-            else
-            {
-                replicas.Add(
-                    new RepositoryReplicaEntity
-                    {
-                        RepositoryId = repositoryId,
-                        StorageNodeId = orgNodes[Math.Min(1, orgNodeCount - 1)].Id,
-                        Role = RepositoryReplicaRole.EncryptedReplica,
-                    }
-                );
-                replicas.Add(
-                    new RepositoryReplicaEntity
-                    {
-                        RepositoryId = repositoryId,
-                        StorageNodeId = allOrgOwned
-                            ? orgNodes[Math.Min(2, orgNodeCount - 1)].Id
-                            : platformNode!.Id,
-                        Role = RepositoryReplicaRole.EncryptedReplica,
-                    }
-                );
+
+                if (orgNodeCount >= 4)
+                {
+                    replicas.Add(
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = orgNodes[1].Id,
+                            Role = RepositoryReplicaRole.ReadReplica,
+                        }
+                    );
+                }
+
+                if (encryptedReplicaCount >= 1)
+                {
+                    var encryptedReplicaAIndex = orgNodeCount >= 4 ? 2 : Math.Min(1, orgNodeCount - 1);
+                    replicas.Add(
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = orgNodes[encryptedReplicaAIndex].Id,
+                            Role = RepositoryReplicaRole.EncryptedReplica,
+                        }
+                    );
+                }
+
+                if (encryptedReplicaCount >= 2)
+                {
+                    var encryptedReplicaBNodeId = allOrgOwned
+                        ? orgNodes[orgNodeCount >= 4 ? 3 : Math.Min(2, orgNodeCount - 1)].Id
+                        : platformNode!.Id;
+                    replicas.Add(
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = encryptedReplicaBNodeId,
+                            Role = RepositoryReplicaRole.EncryptedReplica,
+                        }
+                    );
+                }
             }
 
             context
