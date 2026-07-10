@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { blockServiceWorker } from './helpers'
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
@@ -190,12 +191,7 @@ async function installLinkedDiscussionsRoutes(
 
 test.describe('Merge request linked discussions @regression', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
-      void navigator.serviceWorker.getRegistrations().then(registrations =>
-        Promise.all(registrations.map(registration => registration.unregister())),
-      )
-    })
+    await blockServiceWorker(page)
   })
 
   test('renders grouped linked discussions sidebar', async ({ page }) => {

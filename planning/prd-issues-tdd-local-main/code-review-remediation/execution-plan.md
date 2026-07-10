@@ -8,15 +8,15 @@ Source: `docs/issues/code-review-remediation/README.md`
 
 | Order | ID | Title | Type | Status | Blocked by |
 |-------|-----|-------|------|--------|------------|
-| 1 | sec-01 | Production MSW and test artifact lockdown | AFK | pending | — |
-| 2 | sec-03 | Repository access checks and DTO redaction | AFK | pending | — |
-| 3 | sec-05 | Production secrets and compose profile separation | AFK | pending | — |
-| 4 | fix-01 | Commit page navigation and error parity | AFK | pending | — |
-| 5 | fix-02 | MR page error handling and review threads | AFK | pending | — |
-| 6 | sec-02 | Internal network trust behind reverse proxy | HITL | pending | — |
-| 7 | sec-04 | Storage destructive ops and push enforcement | AFK | pending | sec-02 |
-| 8 | sec-06 | Web auth redirect and site gate policy | HITL | pending | — |
-| 9 | fix-03 | Commit change view test coverage gaps | AFK | pending | fix-01 |
+| 1 | sec-01 | Production MSW and test artifact lockdown | AFK | completed | — |
+| 2 | sec-03 | Repository access checks and DTO redaction | AFK | completed | — |
+| 3 | sec-05 | Production secrets and compose profile separation | AFK | completed | — |
+| 4 | fix-01 | Commit page navigation and error parity | AFK | completed | — |
+| 5 | fix-02 | MR page error handling and review threads | AFK | completed | — |
+| 6 | sec-02 | Internal network trust behind reverse proxy | HITL | completed | — |
+| 7 | sec-04 | Storage destructive ops and push enforcement | AFK | completed | sec-02 |
+| 8 | sec-06 | Web auth redirect and site gate policy | HITL | completed | — |
+| 9 | fix-03 | Commit change view test coverage gaps | AFK | completed | fix-01 |
 
 ## Dependency graph
 

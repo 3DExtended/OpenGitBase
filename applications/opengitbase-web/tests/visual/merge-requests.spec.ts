@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { blockServiceWorker } from './helpers'
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
@@ -205,12 +206,7 @@ test.describe('Merge request visuals', () => {
   })
 
   test('merge request detail page', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
-      void navigator.serviceWorker.getRegistrations().then(registrations =>
-        Promise.all(registrations.map(registration => registration.unregister())),
-      )
-    })
+    await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
@@ -221,12 +217,7 @@ test.describe('Merge request visuals', () => {
   })
 
   test('linked discussions sidebar', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
-      void navigator.serviceWorker.getRegistrations().then(registrations =>
-        Promise.all(registrations.map(registration => registration.unregister())),
-      )
-    })
+    await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)

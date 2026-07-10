@@ -11,7 +11,8 @@ const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:$
 
 export default defineConfig({
   testDir: './tests/visual',
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
@@ -36,10 +37,11 @@ export default defineConfig({
   webServer: {
     command: `pnpm dev --port ${playwrightPort}`,
     url: playwrightBaseUrl,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     env: {
       NUXT_PUBLIC_MSW: 'false',
       NUXT_PUBLIC_SITE_GATE_ENABLED: 'false',
+      NUXT_PUBLIC_DEPLOY_SHA: 'visual-test',
     },
   },
 })
