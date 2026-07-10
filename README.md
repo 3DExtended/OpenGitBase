@@ -50,8 +50,10 @@ The default stack runs the API, web UI, Postgres, **three storage nodes**, and t
 git dispatchers. Storage nodes are enrolled by an admin user and identified by
 machine certificates — fleet SSH keys are not checked into the repo.
 
-Repository replication (RF=3) requires all three storage nodes to be healthy before
-new repositories can be created.
+Repository replication uses a **four-copy (RF=4)** model on the default three-node fleet:
+primary and read replica colocate on `storage-1`; encrypted artifact replicas use
+`storage-2` and `storage-3`. All three storage nodes must be healthy before new
+repositories can be created. See [docs/prd/encrypted-replica-storage.md](docs/prd/encrypted-replica-storage.md).
 
 ### Prerequisites
 

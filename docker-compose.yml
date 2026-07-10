@@ -69,6 +69,11 @@ x-storage-common: &storage-common
   image: opengitbase-storage
   restart: unless-stopped
   build: *storage-build
+  # RF=4 local role mapping (see PlatformRf4FleetLayout):
+  #   storage-1 → write primary + read replica (plaintext bare git under /srv/git)
+  #   storage-2, storage-3 → encrypted replication artifacts under /var/lib/opengitbase/artifacts
+  environment:
+    STORAGE_ARTIFACT_ROOT: "/var/lib/opengitbase/artifacts"
   depends_on:
     api-1:
       condition: service_healthy

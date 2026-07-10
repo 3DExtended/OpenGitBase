@@ -15,7 +15,7 @@ if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
 fi
 
 # git user setup
-mkdir -p /home/git/.ssh /srv/git /var/lib/opengitbase
+mkdir -p /home/git/.ssh /srv/git /var/lib/opengitbase/artifacts /var/lib/opengitbase/watermarks
 chown -R git:git /home/git /srv/git
 chmod 700 /home/git/.ssh
 if [ -f /home/git/.ssh/authorized_keys ]; then
