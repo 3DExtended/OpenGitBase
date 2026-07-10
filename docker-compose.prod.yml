@@ -1,0 +1,27 @@
+# Production overlay — use with the base stack:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Requires Compose v2.24+ for `!reset` on published database/redis ports.
+# Set all secrets via environment or an untracked override before starting.
+# See docs/deployment/production-secrets.md for the full checklist.
+
+services:
+  api-1:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Debug__Features__EmailVerification: "false"
+
+  api-2:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Debug__Features__EmailVerification: "false"
+
+  api-migrate:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []

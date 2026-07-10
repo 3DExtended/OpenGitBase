@@ -13,12 +13,37 @@ namespace OpenGitBase.Api.Tests.Controllers;
 
 public class E2eControllerTests
 {
-    [Fact]
-    public void GetEmails_WhenE2eDisabled_ReturnsNotFound()
+    [Theory]
+    [InlineData("Production", false)]
+    [InlineData("Development", false)]
+    [InlineData("E2ETest", false)]
+    public void GetEmails_WhenE2eDisabled_ReturnsNotFound(string environmentName, bool captureEmail)
     {
-        var controller = CreateController(environmentName: "Production", captureEmail: false);
+        var controller = CreateController(environmentName, captureEmail);
 
         var result = controller.GetEmails(to: null);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("E2ETest")]
+    public void ResetDatabase_WhenCaptureEmailEnabled_AllowsConfiguredEnvironments(string environmentName)
+    {
+        var controller = CreateController(environmentName, captureEmail: true);
+
+        var result = controller.GetEmails(to: null);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ResetDatabase_WhenProductionEvenWithCaptureEmail_ReturnsNotFound()
+    {
+        var controller = CreateController(environmentName: "Production", captureEmail: true);
+
+        var result = await controller.ResetDatabaseAsync(CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
     }
