@@ -140,6 +140,14 @@ onMounted(async () => {
           >
             {{ t('nav.explore') }}
           </UButton>
+          <UButton
+            to="/pitch"
+            size="lg"
+            variant="outline"
+            icon="i-lucide-presentation"
+          >
+            {{ t('home.communityPitch') }}
+          </UButton>
         </div>
       </section>
 

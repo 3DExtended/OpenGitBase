@@ -84,7 +84,7 @@ flowchart TB
 | API | [applications/OpenGitBase.Api/](../applications/OpenGitBase.Api/) | Control plane: auth, metadata, replication orchestration, content reads |
 | Dispatcher | [applications/OpenGitBase.Dispatcher/](../applications/OpenGitBase.Dispatcher/) | Git Smart HTTP / SSH proxy; asks API for access + routing |
 | Storage node | [applications/repo-storage-layer/](../applications/repo-storage-layer/) | Bare git repos, hooks, internal HTTP API, peer mTLS sync |
-| Web UI | [applications/opengitbase-web/](../applications/opengitbase-web/) | Nuxt 4 SPA (cookie auth, hand-written API client) |
+| Web UI | [applications/opengitbase-web/](../applications/opengitbase-web/) | Nuxt 4 SPA (cookie auth, hand-written API client); community pitch at `/pitch` |
 | Shared .NET | [common/](../common/) | CQRS, EF Core, auth, encryption, DbContext |
 | Features | [features/](../features/) | Vertical slices (Users, Repository, StorageNode, MergeRequest, etc.) |
 
@@ -311,6 +311,7 @@ Registration: [FeatureRegistration.cs](../applications/OpenGitBase.Api/FeatureRe
 | [repository-web-browsing.md](prd/repository-web-browsing.md) | Content reads, replica routing |
 | [ha-storage-replication/README.md](issues/ha-storage-replication/README.md) | HA implementation slices |
 | [AGENTS.md](../AGENTS.md) | Agent onboarding |
+| [community-pitch.md](community-pitch.md) | Web UI contributor pitch at `/pitch` |
 
 ---
 

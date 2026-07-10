@@ -6,6 +6,7 @@ const RESERVED_TOP_LEVEL = new Set([
   'repos',
   'orgs',
   'explore',
+  'pitch',
   'sign-in',
   'sign-up',
   'sign-out',

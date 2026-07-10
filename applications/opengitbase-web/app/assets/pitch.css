@@ -1,0 +1,205 @@
+@import "reveal.js/reveal.css";
+
+.pitch-shell {
+  --r-background-color: var(--ogb-bg);
+  --r-main-font: var(--font-sans);
+  --r-heading-font: var(--font-sans);
+  --r-main-color: var(--ogb-text);
+  --r-heading-color: var(--ogb-text);
+  --r-link-color: var(--ogb-accent);
+  --r-link-color-hover: var(--ogb-accent-hover);
+  --r-selection-background-color: color-mix(in srgb, var(--ogb-accent) 35%, transparent);
+  --r-heading-text-transform: none;
+  --r-heading-font-weight: 600;
+  --r-main-font-size: 28px;
+  --r-heading1-size: 2.2em;
+  --r-heading2-size: 1.5em;
+  --r-heading3-size: 1.15em;
+  min-height: 100dvh;
+  background: var(--ogb-bg);
+  color: var(--ogb-text);
+}
+
+.pitch-shell .reveal {
+  height: 100dvh;
+}
+
+.pitch-shell .reveal .slides {
+  text-align: left;
+}
+
+.pitch-shell .reveal .slides section {
+  height: 100%;
+  padding: 0 2rem;
+}
+
+.pitch-slide-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
+}
+
+.pitch-slide-title h1 {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.pitch-slide-title p {
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  color: var(--ogb-text-muted);
+  max-width: 42rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.pitch-slide-default h2,
+.pitch-slide-columns h2,
+.pitch-slide-cta h2 {
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+
+.pitch-slide-subtitle {
+  color: var(--ogb-text-muted);
+  font-size: 1.05rem;
+  margin: -0.5rem 0 1.25rem;
+  max-width: 40rem;
+  line-height: 1.45;
+}
+
+.pitch-slide-lead {
+  font-size: 1.05rem;
+  color: var(--ogb-text-muted);
+  margin: 0 0 1rem;
+  max-width: 42rem;
+  line-height: 1.5;
+}
+
+.pitch-slide-default ul,
+.pitch-slide-cta ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  line-height: 1.55;
+}
+
+.pitch-slide-default li,
+.pitch-slide-cta li {
+  margin-bottom: 0.65rem;
+}
+
+.pitch-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.pitch-column {
+  background: color-mix(in srgb, var(--ogb-surface) 88%, var(--ogb-accent) 12%);
+  border: 1px solid var(--ogb-border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+}
+
+.pitch-column h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  color: var(--ogb-accent);
+}
+
+.pitch-column ul {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.pitch-column li {
+  margin-bottom: 0.35rem;
+}
+
+.pitch-note {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--ogb-text-muted);
+  font-style: italic;
+}
+
+.pitch-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.pitch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ogb-border);
+  background: var(--ogb-surface);
+  color: var(--ogb-text);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.pitch-link:hover {
+  border-color: var(--ogb-accent);
+  color: var(--ogb-accent);
+}
+
+.pitch-link-primary {
+  background: var(--ogb-accent);
+  border-color: var(--ogb-accent);
+  color: #fff;
+}
+
+.pitch-link-primary:hover {
+  background: var(--ogb-accent-hover);
+  border-color: var(--ogb-accent-hover);
+  color: #fff;
+}
+
+.pitch-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--ogb-border);
+  background: color-mix(in srgb, var(--ogb-surface) 90%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.pitch-toolbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--ogb-text);
+  text-decoration: none;
+}
+
+.pitch-toolbar-hint {
+  font-size: 0.8rem;
+  color: var(--ogb-text-muted);
+}
+
+.pitch-deck-wrap {
+  padding-top: 3rem;
+  height: 100dvh;
+  box-sizing: border-box;
+}

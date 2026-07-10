@@ -1,5 +1,6 @@
 const RESERVED_SLUGS = new Set([
   'explore',
+  'pitch',
   'sign-in',
   'sign-up',
   'settings',

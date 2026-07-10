@@ -6,6 +6,7 @@
   "nav": {
     "home": "Home",
     "explore": "Explore",
+    "pitch": "Community",
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out",
@@ -41,6 +42,7 @@
     "welcome": "Welcome to {instanceName}",
     "description": "A community-first Git forge for self-hosting and collaboration.",
     "getStarted": "Get started",
+    "communityPitch": "Community pitch",
     "recentPublic": "Recently updated public repositories",
     "viewAll": "View all",
     "noPublicRepos": "No public repositories yet."
@@ -543,6 +545,11 @@
     "subtitle": "Discover public repositories on this instance.",
     "searchPlaceholder": "Search repositories…",
     "empty": "No repositories match your search."
+  },
+  "pitch": {
+    "pageTitle": "Community pitch",
+    "toolbarHint": "Arrow keys to navigate · Esc for slide overview",
+    "exit": "Exit"
   },
   "admin": {
     "title": "Administration",

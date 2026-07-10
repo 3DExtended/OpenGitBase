@@ -35,6 +35,7 @@ is no copyleft requirement for qualifying free-tier users.
 | Document | Description |
 |----------|-------------|
 | [docs/PROJECT-STATE.md](docs/PROJECT-STATE.md) | Current implementation baseline, architecture, encryption posture |
+| [docs/community-pitch.md](docs/community-pitch.md) | Community pitch deck at `/pitch` |
 | [LICENSE](LICENSE) | Full license terms |
 | [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) | Paid production use |
 | [TRADEMARK.md](TRADEMARK.md) | Brand and fork naming rules |

@@ -55,7 +55,15 @@ The dev server listens on `http://localhost:3000` and proxies `/api` to the back
 | `pnpm build` | Production build (static SPA output) |
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | Vue/TS type checking |
+| `pnpm test` | Vitest unit tests |
+| `pnpm test:visual` | Playwright visual and UI regression tests |
 | `pnpm sync:api` | Export OpenAPI spec and regenerate TS client |
+
+## Community pitch (`/pitch`)
+
+Reveal.js contributor deck (fullscreen, no app shell). Edit slide copy in `app/data/communityPitchSlides.ts` and URLs in `app/utils/communityPitchLinks.ts`.
+
+See [docs/community-pitch.md](../../docs/community-pitch.md) for messaging baseline, editing guide, and test commands.
 
 Regenerate the API client from the repo root:
 
@@ -91,7 +99,7 @@ app/                  Nuxt 4 application code
   components/         AppHeader, AppSidebar
   composables/        useInstanceBranding
   layouts/            default shell layout
-  pages/              Route pages
+  pages/              Route pages (includes /pitch community deck)
 i18n/locales/         Externalized UI strings
 generated/api/        OpenAPI-generated client (regenerate via sync:api)
 openapi/              Exported swagger.json

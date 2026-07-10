@@ -167,6 +167,17 @@ function navButtonClass(active: boolean): string {
         {{ t('nav.explore') }}
       </UButton>
       <UButton
+        to="/pitch"
+        icon="i-lucide-presentation"
+        color="neutral"
+        variant="ghost"
+        block
+        class="justify-start"
+        :class="navButtonClass(navActive('/pitch'))"
+      >
+        {{ t('nav.pitch') }}
+      </UButton>
+      <UButton
         to="/sign-in"
         icon="i-lucide-log-in"
         color="neutral"

@@ -18,6 +18,7 @@ const showSidebarToggle = computed(() => auth.isAuthenticated || context.value =
 const navLinks = [
   { labelKey: 'nav.home', to: '/' },
   { labelKey: 'nav.explore', to: '/explore' },
+  { labelKey: 'nav.pitch', to: '/pitch' },
 ]
 
 function toggleTheme() {
