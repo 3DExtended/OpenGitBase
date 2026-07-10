@@ -312,6 +312,7 @@
       "new": "New merge request",
       "empty": "No merge requests yet.",
       "notFound": "Merge request not found.",
+      "loadFailed": "Could not load merge request details.",
       "create": "Create merge request",
       "createFailed": "Could not create merge request.",
       "tabs": {
@@ -494,8 +495,10 @@
       "browseFiles": "Browse files",
       "copySha": "Copy SHA",
       "copiedSha": "Copied commit SHA.",
+      "copyShaFailed": "Could not copy commit SHA.",
       "stats": "{files} files changed, +{insertions} −{deletions}",
       "emptyDiff": "No file changes in this commit.",
+      "emptyRootFiles": "No files in this root commit.",
       "parents": "Parents",
       "backToMr": "Back to merge request !{number}",
       "backToDiscussion": "Back to discussion #{number}"

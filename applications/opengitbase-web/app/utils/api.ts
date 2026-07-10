@@ -436,6 +436,7 @@ export interface RepositoryCommit {
   kind: 'diff' | 'root'
   diffFiles: MergeRequestDiffFile[]
   rootFiles: RepositoryCommitRootFile[]
+  replicationLag: RepositoryReplicationLag | null
 }
 
 export interface MergeRequestDiscussionLink {
@@ -965,6 +966,7 @@ function normalizeRepositoryCommit(raw: Record<string, unknown>): RepositoryComm
         changeType: String(file.changeType ?? 'added'),
       }
     }),
+    replicationLag: normalizeReplicationLag(raw.replicationLag),
   }
 }
 

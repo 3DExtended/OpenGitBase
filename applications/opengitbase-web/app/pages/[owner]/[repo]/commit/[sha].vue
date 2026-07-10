@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { RepositoryCommit } from '~/utils/api'
+import type { RepositoryCommit, RepositoryReplicationLag } from '~/utils/api'
+import { resolveCommitPageLoad } from '~/utils/commitPageLoad'
 import { repoBlobPath, repoHomePath, repoTreePath } from '~/utils/repoBrowse'
 
 const route = useRoute()
@@ -15,6 +16,14 @@ const shaParam = computed(() => String(route.params.sha))
 const commit = ref<RepositoryCommit | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+const forbidden = ref(false)
+const unavailable = ref(false)
+
+let loadSequence = 0
+
+const replicationLag = computed<RepositoryReplicationLag | null>(() =>
+  commit.value?.replicationLag ?? null,
+)
 
 const backLink = computed(() => {
   const from = String(route.query.from ?? '')
@@ -36,32 +45,38 @@ const backLink = computed(() => {
 })
 
 async function loadCommit(): Promise<void> {
+  const sequence = ++loadSequence
   loading.value = true
   error.value = null
+  forbidden.value = false
+  unavailable.value = false
+  commit.value = null
+
   const result = await api.repositoryContent.getCommit(owner.value, repoSlug.value, shaParam.value)
-  if (result.status === 404) {
-    error.value = t('repo.commit.notFound')
-    commit.value = null
-    loading.value = false
+  if (sequence !== loadSequence) {
     return
   }
-  if (result.error || !result.data) {
-    error.value = result.error ?? t('repo.commit.notFound')
-    commit.value = null
-    loading.value = false
-    return
-  }
-  commit.value = result.data
-  if (result.data.sha !== shaParam.value) {
+
+  const resolved = resolveCommitPageLoad(result, {
+    notFound: t('repo.commit.notFound'),
+    generic: t('repo.commit.notFound'),
+  })
+  forbidden.value = resolved.forbidden
+  unavailable.value = resolved.unavailable
+  error.value = resolved.error
+  commit.value = resolved.commit
+
+  if (resolved.commit && resolved.commit.sha !== shaParam.value) {
     await router.replace({
-      params: {
-        owner: owner.value,
-        repo: repoSlug.value,
-        sha: result.data.sha,
-      },
+      path: `/${owner.value}/${repoSlug.value}/commit/${resolved.commit.sha}`,
       query: route.query,
     })
   }
+
+  if (sequence !== loadSequence) {
+    return
+  }
+
   loading.value = false
 }
 
@@ -69,11 +84,16 @@ async function copySha(): Promise<void> {
   if (!commit.value) {
     return
   }
-  await navigator.clipboard.writeText(commit.value.sha)
-  toast.add({ title: t('repo.commit.copiedSha'), color: 'success' })
+  try {
+    await navigator.clipboard.writeText(commit.value.sha)
+    toast.add({ title: t('repo.commit.copiedSha'), color: 'success' })
+  }
+  catch {
+    toast.add({ title: t('repo.commit.copyShaFailed'), color: 'error' })
+  }
 }
 
-watch(shaParam, () => {
+watch([owner, repoSlug, shaParam], () => {
   void loadCommit()
 })
 
@@ -105,12 +125,24 @@ onMounted(() => {
       </UButton>
     </div>
 
-    <UCard v-if="loading || error || !commit">
+    <UCard v-if="loading || forbidden || unavailable || error || !commit">
       <p
         v-if="loading"
         class="text-sm text-[var(--ogb-text-muted)]"
       >
         {{ t('common.loading') }}
+      </p>
+      <p
+        v-else-if="forbidden"
+        class="text-sm text-[var(--ogb-text-muted)]"
+      >
+        {{ t('repo.browse.forbidden') }}
+      </p>
+      <p
+        v-else-if="unavailable"
+        class="text-sm text-[var(--ogb-text-muted)]"
+      >
+        {{ t('repo.browse.unavailable') }}
       </p>
       <p
         v-else
@@ -121,6 +153,8 @@ onMounted(() => {
     </UCard>
 
     <template v-else>
+      <RepoSyncBanner :lag="replicationLag" />
+
       <header class="space-y-3">
         <p class="font-mono text-sm text-[var(--ogb-text-muted)]">
           {{ commit.shortSha }}
@@ -181,7 +215,17 @@ onMounted(() => {
       />
 
       <UCard v-else>
-        <ul class="divide-y" style="border-color: var(--ogb-border);">
+        <p
+          v-if="!commit.rootFiles.length"
+          class="text-sm text-[var(--ogb-text-muted)]"
+        >
+          {{ t('repo.commit.emptyRootFiles') }}
+        </p>
+        <ul
+          v-else
+          class="divide-y"
+          style="border-color: var(--ogb-border);"
+        >
           <li
             v-for="file in commit.rootFiles"
             :key="file.path"

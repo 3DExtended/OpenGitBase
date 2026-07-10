@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  CommentAnchorInput,
   DiffSide,
   MergeRequest,
   MergeRequestChanges,
@@ -11,6 +12,8 @@ import type {
   RepositoryMember,
 } from '~/utils/api'
 import type { CollaborationThread } from '~/components/collaboration/types'
+import { resolveMergeRequestDetailLoad } from '~/utils/mergeRequestDetailLoad'
+import { resolveReviewReplyAnchor } from '~/utils/mergeRequestReviewReply'
 import { repoCommitPath } from '~/utils/repoBrowse'
 
 const route = useRoute()
@@ -31,6 +34,7 @@ const linkedDiscussions = ref<MergeRequestDiscussionLink[]>([])
 const members = ref<RepositoryMember[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+const partialLoadError = ref<string | null>(null)
 const activeTab = ref<'overview' | 'changes' | 'commits'>('overview')
 
 const commentBody = ref('')
@@ -78,11 +82,11 @@ const tabItems = computed(() => ([
   { label: t('repo.mergeRequests.tabs.commits'), value: 'commits' },
 ]))
 
-function lineKey(anchor: MergeRequestCommentAnchor | null | undefined): string {
-  if (!anchor) {
-    return ''
-  }
-  return `${anchor.filePath}:${anchor.lineNumber}:${anchor.diffSide}`
+function reviewReplyAnchor(
+  attachedAnchor: CommentAnchorInput | null,
+  lineDiffSide: DiffSide,
+): MergeRequestCommentAnchor | null {
+  return resolveReviewReplyAnchor(attachedAnchor, lineDiffSide)
 }
 
 function asThread(comment: MergeRequestComment): CollaborationThread {
@@ -125,6 +129,7 @@ function asThread(comment: MergeRequestComment): CollaborationThread {
 async function loadAll(): Promise<void> {
   loading.value = true
   error.value = null
+  partialLoadError.value = null
   const [mrResult, overviewResult, reviewResult, changesResult, commitsResult, linksResult] = await Promise.all([
     api.mergeRequests.get(owner.value, repoSlug.value, number.value),
     api.mergeRequests.listComments(owner.value, repoSlug.value, number.value, { type: 'overview' }),
@@ -133,21 +138,37 @@ async function loadAll(): Promise<void> {
     api.mergeRequests.listCommits(owner.value, repoSlug.value, number.value),
     api.mergeRequests.listDiscussionLinks(owner.value, repoSlug.value, number.value),
   ])
-  if (mrResult.error || !mrResult.data) {
-    error.value = mrResult.error ?? t('repo.mergeRequests.notFound')
+
+  const resolved = resolveMergeRequestDetailLoad({
+    mrResult,
+    overviewResult,
+    reviewResult,
+    changesResult,
+    commitsResult,
+    linksResult,
+    messages: {
+      notFound: t('repo.mergeRequests.notFound'),
+      loadFailed: t('repo.mergeRequests.loadFailed'),
+    },
+  })
+
+  if (resolved.error || !resolved.mr) {
+    error.value = resolved.error
+    mr.value = null
     loading.value = false
     return
   }
-  mr.value = mrResult.data
-  overviewComments.value = overviewResult.data ?? []
-  reviewComments.value = reviewResult.data ?? []
-  changes.value = changesResult.data
-  commits.value = commitsResult.data ?? []
-  linkedDiscussions.value = linksResult.data ?? []
-  if (mr.value) {
-    const membersResult = await api.repositoryMembers.list(mr.value.repositoryId)
-    members.value = membersResult.data ?? []
-  }
+
+  mr.value = resolved.mr
+  overviewComments.value = resolved.overviewComments
+  reviewComments.value = resolved.reviewComments
+  changes.value = resolved.changes
+  commits.value = resolved.commits
+  linkedDiscussions.value = resolved.linkedDiscussions
+  partialLoadError.value = resolved.partialLoadError
+
+  const membersResult = await api.repositoryMembers.list(mr.value.repositoryId)
+  members.value = membersResult.data ?? []
   loading.value = false
 }
 
@@ -192,7 +213,11 @@ async function postReviewComment(): Promise<void> {
   await loadAll()
 }
 
-async function replyToComment(parentCommentId: string, body: string, anchor: MergeRequestCommentAnchor | null): Promise<void> {
+async function replyToComment(
+  parentCommentId: string,
+  body: string,
+  anchor: MergeRequestCommentAnchor | null,
+): Promise<void> {
   const result = await api.mergeRequests.createComment(owner.value, repoSlug.value, number.value, {
     bodyMarkdown: body,
     parentCommentId,
@@ -206,12 +231,20 @@ async function replyToComment(parentCommentId: string, body: string, anchor: Mer
 }
 
 async function resolveComment(commentId: string): Promise<void> {
-  await api.mergeRequests.resolveComment(owner.value, repoSlug.value, number.value, commentId)
+  const result = await api.mergeRequests.resolveComment(owner.value, repoSlug.value, number.value, commentId)
+  if (result.error) {
+    replyError.value = result.error
+    return
+  }
   await loadAll()
 }
 
 async function unresolveComment(commentId: string): Promise<void> {
-  await api.mergeRequests.unresolveComment(owner.value, repoSlug.value, number.value, commentId)
+  const result = await api.mergeRequests.unresolveComment(owner.value, repoSlug.value, number.value, commentId)
+  if (result.error) {
+    replyError.value = result.error
+    return
+  }
   await loadAll()
 }
 
@@ -229,13 +262,17 @@ async function addDiscussionLink(discussionNumber: number, relationshipType: Mer
 }
 
 async function removeDiscussionLink(link: MergeRequestDiscussionLink): Promise<void> {
-  await api.mergeRequests.deleteDiscussionLink(
+  const result = await api.mergeRequests.deleteDiscussionLink(
     owner.value,
     repoSlug.value,
     number.value,
     link.discussionNumber,
     link.relationshipType,
   )
+  if (result.error) {
+    replyError.value = result.error
+    return
+  }
   await loadAll()
 }
 
@@ -413,12 +450,11 @@ onMounted(() => {
                     :resolved-label="t('repo.discussions.subThreadResolved')"
                     :outdated-label="t('repo.mergeRequests.outdated')"
                     :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
-                    @reply="(body, anchor) => replyToComment(comment.id, body, anchor ? {
-                      headCommitSha: anchor.commitSha,
-                      filePath: anchor.filePath,
-                      lineNumber: anchor.line,
-                      diffSide: 'new',
-                    } : null)"
+                    @reply="(body, anchor) => replyToComment(
+                      comment.id,
+                      body,
+                      reviewReplyAnchor(anchor, diffSide),
+                    )"
                     @resolve="resolveComment(comment.id)"
                     @unresolve="unresolveComment(comment.id)"
                   />
@@ -486,12 +522,19 @@ onMounted(() => {
             :owner="owner"
             :repo-slug="repoSlug"
             :linked-discussions="linkedDiscussions"
+            :can-manage="auth.isAuthenticated"
             :add-link="addDiscussionLink"
             :remove-link="removeDiscussionLink"
           />
         </aside>
       </div>
 
+      <UAlert
+        v-if="partialLoadError"
+        color="warning"
+        variant="subtle"
+        :description="partialLoadError"
+      />
       <UAlert
         v-if="replyError"
         color="error"

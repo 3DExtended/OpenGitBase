@@ -14,9 +14,12 @@ const props = defineProps<{
   owner: string
   repoSlug: string
   linkedDiscussions: MergeRequestDiscussionLink[]
+  canManage?: boolean
   addLink: (discussionNumber: number, relationshipType: MergeRequestLinkType) => Promise<boolean>
   removeLink: (link: MergeRequestDiscussionLink) => Promise<void>
 }>()
+
+const canManage = computed(() => props.canManage ?? true)
 
 const { t } = useI18n()
 const api = useApi()
@@ -141,6 +144,7 @@ async function linkDiscussion(number: number): Promise<void> {
               </p>
             </div>
             <UButton
+              v-if="canManage"
               variant="ghost"
               size="xs"
               icon="i-lucide-unlink"
@@ -152,6 +156,7 @@ async function linkDiscussion(number: number): Promise<void> {
       </section>
 
       <div
+        v-if="canManage"
         class="rounded-lg border"
         style="border-color: var(--ogb-border);"
       >
