@@ -448,6 +448,23 @@
       "limitTitle": "Storage limit reached",
       "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage."
     },
+    "byteOverride": {
+      "title": "Per-repository storage limit",
+      "eligibleTitle": "Override available",
+      "ineligibleTitle": "Override unavailable",
+      "orgNodesLabel": "Healthy org nodes",
+      "maxAllowedLabel": "Maximum override",
+      "currentOverrideLabel": "Current override",
+      "noOverride": "Platform default",
+      "inputLabel": "Custom byte limit",
+      "inputHelp": "Only applies when every copy of this repository is hosted on your organization's nodes.",
+      "inputPlaceholder": "Bytes (e.g. 5368709120)",
+      "save": "Save limit",
+      "clear": "Clear override",
+      "saved": "Storage limit updated.",
+      "saveFailed": "Unable to update storage limit.",
+      "unavailable": "Override eligibility is not available."
+    },
     "discussions": {
       "heading": "Discussions",
       "title": "Discussions",

@@ -28,4 +28,6 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
     public string? DefaultBranchName { get; set; }
 
     public PlacementPolicy? PlacementPolicy { get; set; }
+
+    public long? MaxBytesOverride { get; set; }
 }

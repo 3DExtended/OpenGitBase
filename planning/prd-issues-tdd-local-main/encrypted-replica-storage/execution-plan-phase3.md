@@ -6,8 +6,8 @@ Branch strategy: **main** (all work items committed sequentially on default bran
 
 | Order | ID | Title | Status |
 |-------|-----|-------|--------|
-| 1 | ers-15 | Cross-org encrypted placement algorithm | pending |
-| 2 | ers-16 | Per-repo byte overrides and capacity engine | pending |
+| 1 | ers-15 | Cross-org encrypted placement algorithm | complete |
+| 2 | ers-16 | Per-repo byte overrides and capacity engine | complete |
 
 ## Dependency graph
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Repository, RepositoryUsage } from '~/utils/api'
+import type { Repository, RepositoryByteOverrideEligibility, RepositoryUsage } from '~/utils/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -12,7 +12,12 @@ const repoSlug = computed(() => String(route.params.repo))
 
 const repo = ref<Repository | null>(null)
 const usage = ref<RepositoryUsage | null>(null)
+const byteOverrideEligibility = ref<RepositoryByteOverrideEligibility | null>(null)
 const loading = ref(true)
+const byteOverrideLoading = ref(false)
+const byteOverrideSaving = ref(false)
+const byteOverrideError = ref<string | null>(null)
+const byteOverrideSuccess = ref(false)
 
 const name = ref('')
 const isPrivate = ref(false)
@@ -23,6 +28,18 @@ const deleting = ref(false)
 const showDeleteConfirm = ref(false)
 
 useHead({ title: t('repo.settings.title') })
+
+async function loadByteOverrideEligibility(repositoryId: string) {
+  byteOverrideLoading.value = true
+  byteOverrideError.value = null
+  try {
+    const result = await api.repositories.byteOverrideEligibility(repositoryId)
+    byteOverrideEligibility.value = result.data
+  }
+  finally {
+    byteOverrideLoading.value = false
+  }
+}
 
 onMounted(async () => {
   loading.value = true
@@ -40,9 +57,34 @@ onMounted(async () => {
     isPrivate.value = repo.value.isPrivate
     const usageResult = await api.repositories.usage(repo.value.id)
     usage.value = usageResult.data
+    await loadByteOverrideEligibility(repo.value.id)
   }
   loading.value = false
 })
+
+async function saveByteOverride(maxBytesOverride: number | null) {
+  if (!repo.value) {
+    return
+  }
+  byteOverrideSaving.value = true
+  byteOverrideError.value = null
+  byteOverrideSuccess.value = false
+  try {
+    const result = await api.repositories.updateMaxBytesOverride(repo.value.id, { maxBytesOverride })
+    if (result.error || !result.data) {
+      byteOverrideError.value = result.error ?? t('repo.byteOverride.saveFailed')
+      return
+    }
+    repo.value = result.data
+    byteOverrideSuccess.value = true
+    await loadByteOverrideEligibility(repo.value.id)
+    const usageResult = await api.repositories.usage(repo.value.id)
+    usage.value = usageResult.data
+  }
+  finally {
+    byteOverrideSaving.value = false
+  }
+}
 
 async function save() {
   if (!repo.value) {
@@ -148,6 +190,15 @@ async function deleteRepo() {
       <StorageUsageMeter
         :usage="usage"
         :loading="false"
+      />
+
+      <RepositoryByteOverridePanel
+        :eligibility="byteOverrideEligibility"
+        :loading="byteOverrideLoading"
+        :saving="byteOverrideSaving"
+        :error="byteOverrideError"
+        :success="byteOverrideSuccess"
+        @save="saveByteOverride"
       />
 
       <UCard>

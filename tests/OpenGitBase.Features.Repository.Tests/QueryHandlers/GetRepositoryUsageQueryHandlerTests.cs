@@ -8,6 +8,7 @@ using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Repository;
 using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.Repository.QueryHandlers;
 using OpenGitBase.Features.Repository.Tests.Testing;
 using OpenGitBase.Features.Users.Entities;
@@ -53,6 +54,42 @@ public class GetRepositoryUsageQueryHandlerTests
                 Assert.Equal(quotaOptions.MaxBytes, usage.BytesLimit);
                 Assert.Equal(quotaOptions.MaxFileBytes, usage.FileSizeLimit);
             }
+        );
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenMaxBytesOverrideSet_ReturnsOverrideAsLimit()
+    {
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMapsterConfig>(
+            typeof(GetRepositoryUsageQueryHandler).Assembly,
+            typeof(UserEntity).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        await using var seedContext = await scope.CreateDbContextAsync();
+        var (repositoryId, _) = await RepositoryTestData.SeedPublicRepositoryAsync(seedContext);
+        var entity = await seedContext
+            .Set<RepositoryEntity>()
+            .SingleAsync(repository => repository.Id == repositoryId.Value);
+        entity.MaxBytesOverride = 5_368_709_120;
+        await seedContext.SaveChangesAsync();
+
+        var quotaOptions = new RepositoryStorageQuotaOptions { MaxBytes = 1_073_741_824 };
+        var contextFactory = scope.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
+        var handler = new GetRepositoryUsageQueryHandler(contextFactory, quotaOptions, queryProcessor);
+
+        var result = await handler.RunQueryAsync(
+            new GetRepositoryUsageQuery { RepositoryId = repositoryId },
+            CancellationToken.None
+        );
+
+        QueryHandlerResultAssert.AssertSome(
+            result,
+            usage => Assert.Equal(5_368_709_120, usage.BytesLimit)
         );
     }
 

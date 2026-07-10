@@ -233,9 +233,12 @@ public sealed class CreateRepositoryWithStorageQueryHandler
 
         if (organizationResult.IsNone)
         {
+            var requiredBytes = query.ModelToCreate.MaxBytesOverride is > 0
+                ? query.ModelToCreate.MaxBytesOverride.Value
+                : InitialRepositoryBytesEstimate;
             return new ReplicaSetPlannerRequest(
                 HealthyNodes: Array.Empty<StorageNodeDto>(),
-                RequiredBytesPerNode: InitialRepositoryBytesEstimate
+                RequiredBytesPerNode: requiredBytes
             );
         }
 
@@ -270,7 +273,9 @@ public sealed class CreateRepositoryWithStorageQueryHandler
             OwnerOrganizationId: ownerId,
             PlacementPolicy: placementPolicy,
             SelfHostPreference: settings.DefaultSelfHostPreference,
-            RequiredBytesPerNode: InitialRepositoryBytesEstimate
+            RequiredBytesPerNode: query.ModelToCreate.MaxBytesOverride is > 0
+                ? query.ModelToCreate.MaxBytesOverride.Value
+                : InitialRepositoryBytesEstimate
         );
     }
 

@@ -338,6 +338,69 @@ public class RepositoryController : ControllerBase
         return result.IsSome ? Ok(result.Get()) : NotFound();
     }
 
+    [HttpGet("{id:guid}/byte-override-eligibility")]
+    public async Task<IActionResult> GetByteOverrideEligibility(
+        Guid id,
+        CancellationToken cancellationToken
+    )
+    {
+        var getResult = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
+            cancellationToken
+        );
+
+        if (getResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        if (!await CanManageRepositoryAsync(getResult.Get(), cancellationToken).ConfigureAwait(false))
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryByteOverrideEligibilityQuery { RepositoryId = RepositoryId.From(id) },
+            cancellationToken
+        );
+
+        return result.IsSome ? Ok(result.Get()) : NotFound();
+    }
+
+    [HttpPatch("{id:guid}/max-bytes-override")]
+    public async Task<IActionResult> UpdateMaxBytesOverride(
+        Guid id,
+        [FromBody] UpdateRepositoryMaxBytesOverrideRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var getResult = await _queryProcessor.RunQueryAsync(
+            new GetRepositoryQuery { ModelId = RepositoryId.From(id) },
+            cancellationToken
+        );
+
+        if (getResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        if (!await CanManageRepositoryAsync(getResult.Get(), cancellationToken).ConfigureAwait(false))
+        {
+            return Forbid();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new UpdateRepositoryMaxBytesOverrideQuery
+            {
+                RepositoryId = RepositoryId.From(id),
+                MaxBytesOverride = request.MaxBytesOverride,
+            },
+            cancellationToken
+        );
+
+        return result.IsSome ? Ok(result.Get()) : NotFound();
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

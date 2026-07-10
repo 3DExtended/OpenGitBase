@@ -124,6 +124,15 @@ export interface Repository {
   isPrivate: boolean
   physicalPath?: string
   updatedAt?: string
+  maxBytesOverride?: number | null
+}
+
+export interface RepositoryByteOverrideEligibility {
+  eligible: boolean
+  reason: string
+  currentOverride: number | null
+  maxAllowedOverride: number
+  orgContributedNodeCount: number
 }
 
 export interface Organization {
@@ -570,6 +579,7 @@ function normalizeRepository(raw: Record<string, unknown>): Repository {
     isPrivate: Boolean(raw.isPrivate),
     physicalPath: raw.physicalPath ? String(raw.physicalPath) : undefined,
     updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined,
+    maxBytesOverride: raw.maxBytesOverride == null ? null : Number(raw.maxBytesOverride),
   }
 }
 
@@ -1513,6 +1523,36 @@ export function createApi(baseUrl: string) {
           method: 'PATCH',
           body: JSON.stringify(body),
         }),
+
+      byteOverrideEligibility: async (id: string) => {
+        const result = await request<Record<string, unknown>>(`/repository/${id}/byte-override-eligibility`)
+        if (!result.data) {
+          return { ...result, data: null } satisfies ApiResult<RepositoryByteOverrideEligibility>
+        }
+        return {
+          ...result,
+          data: {
+            eligible: Boolean(result.data.eligible),
+            reason: String(result.data.reason ?? ''),
+            currentOverride: result.data.currentOverride == null
+              ? null
+              : Number(result.data.currentOverride),
+            maxAllowedOverride: Number(result.data.maxAllowedOverride ?? 0),
+            orgContributedNodeCount: Number(result.data.orgContributedNodeCount ?? 0),
+          },
+        }
+      },
+
+      updateMaxBytesOverride: async (id: string, body: { maxBytesOverride: number | null }) => {
+        const result = await request<Record<string, unknown>>(`/repository/${id}/max-bytes-override`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        })
+        return {
+          ...result,
+          data: result.data ? normalizeRepository(result.data) : null,
+        }
+      },
     },
 
     repositoryMembers: {

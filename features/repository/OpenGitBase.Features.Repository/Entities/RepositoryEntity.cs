@@ -36,4 +36,6 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
     public string? DefaultBranchName { get; set; }
 
     public PlacementPolicy? PlacementPolicy { get; set; }
+
+    public long? MaxBytesOverride { get; set; }
 }

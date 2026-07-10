@@ -58,6 +58,13 @@ test.describe('Shell components @regression', () => {
       'org-storage-settings.png',
     )
   })
+
+  test('repository byte override panel', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-repo-byte-override')).toHaveScreenshot(
+      'repo-byte-override.png',
+    )
+  })
 })
 
 test.describe('Auth screens', () => {

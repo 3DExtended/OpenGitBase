@@ -42,8 +42,8 @@ public class GetRepositoryUsageQueryHandler
             return Option<RepositoryUsageDto>.None;
         }
 
-        var bytesLimit = await ResolveBytesLimitAsync(entity.OwnerUserId, cancellationToken)
-            .ConfigureAwait(false);
+        var bytesLimit = entity.MaxBytesOverride
+            ?? await ResolveBytesLimitAsync(entity.OwnerUserId, cancellationToken).ConfigureAwait(false);
 
         return Option.From(
             new RepositoryUsageDto

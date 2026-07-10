@@ -297,6 +297,18 @@ public class Startup
         services.AddScoped<RebalanceService>();
         services.AddScoped<AntiEntropyReconcilerService>();
         services.AddScoped<IColdRecoveryService, ColdRecoveryService>();
+        services.AddScoped<IRepositoryByteOverrideService, RepositoryByteOverrideService>();
+        services.AddTransient<
+            IQueryHandler<
+                GetRepositoryByteOverrideEligibilityQuery,
+                RepositoryByteOverrideEligibilityDto
+            >,
+            GetRepositoryByteOverrideEligibilityQueryHandler
+        >();
+        services.AddTransient<
+            IQueryHandler<UpdateRepositoryMaxBytesOverrideQuery, RepositoryDto>,
+            UpdateRepositoryMaxBytesOverrideQueryHandler
+        >();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler

@@ -867,6 +867,11 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        if (repositoryDto.MaxBytesOverride is > 0)
+        {
+            return repositoryDto.MaxBytesOverride.Value;
+        }
+
         var organizationResult = await _queryProcessor
             .RunQueryAsync(
                 new GetOrganizationQuery

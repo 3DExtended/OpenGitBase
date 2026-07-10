@@ -323,6 +323,33 @@ function toggleTheme() {
 
     <section
       class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-repo-byte-override"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Repository byte override
+      </h2>
+      <RepositoryByteOverridePanel
+        :eligibility="{
+          eligible: true,
+          reason: 'Eligible for per-repository byte override.',
+          currentOverride: 5368709120,
+          maxAllowedOverride: 10737418240,
+          orgContributedNodeCount: 5,
+        }"
+      />
+      <RepositoryByteOverridePanel
+        :eligibility="{
+          eligible: false,
+          reason: 'Organization must operate more than three healthy storage nodes.',
+          currentOverride: null,
+          maxAllowedOverride: 2147483648,
+          orgContributedNodeCount: 3,
+        }"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
       data-testid="visual-org-storage-settings"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
