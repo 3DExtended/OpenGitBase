@@ -17,13 +17,13 @@ Phase 1 only — platform four-copy encryption through E2E tests. Phase 2/3 (iss
 | 2 | ers-02 | RF=4 schema, repository keys, and artifact library | completed |
 | 3 | ers-03 | Storage artifact API and encrypted node isolation | completed |
 | 4 | ers-04 | Four-copy repository create | completed |
-| 5 | ers-05 | Encrypted quorum push | pending |
-| 6 | ers-06 | Read/write routing split | pending |
-| 7 | ers-07 | Hot promotion and cold recovery | pending |
-| 8 | ers-08 | RF=3 to RF=4 background backfill | pending |
-| 9 | ers-09 | Delete, rebalance, and anti-entropy extensions | pending |
-| 10 | ers-10 | Admin UI four-copy replication status | pending |
-| 11 | ers-11 | Phase 1 E2E and integration tests | pending |
+| 5 | ers-05 | Encrypted quorum push | completed |
+| 6 | ers-06 | Read/write routing split | completed |
+| 7 | ers-07 | Hot promotion and cold recovery | completed |
+| 8 | ers-08 | RF=3 to RF=4 background backfill | completed |
+| 9 | ers-09 | Delete, rebalance, and anti-entropy extensions | completed |
+| 10 | ers-10 | Admin UI four-copy replication status | completed |
+| 11 | ers-11 | Phase 1 E2E and integration tests | completed |
 
 ## Dependency graph
 
@@ -42,7 +42,8 @@ Phase 1 only — platform four-copy encryption through E2E tests. Phase 2/3 (iss
 | ers-02 | edc7b41 |
 | ers-03 | 0bbbe80 |
 | ers-04 | 68af814 |
-| ers-05 | |
+| infra | e36c65f |
+| ers-05 | (pending commit) |
 | ers-06 | |
 | ers-07 | |
 | ers-08 | |

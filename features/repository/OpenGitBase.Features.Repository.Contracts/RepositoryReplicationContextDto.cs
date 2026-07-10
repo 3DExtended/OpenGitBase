@@ -12,5 +12,7 @@ public sealed class RepositoryReplicationContextDto
 
     public string PhysicalPath { get; init; } = string.Empty;
 
+    public string ReplicationState { get; init; } = string.Empty;
+
     public IReadOnlyList<RepositoryReplicationPeerDto> Peers { get; init; } = [];
 }

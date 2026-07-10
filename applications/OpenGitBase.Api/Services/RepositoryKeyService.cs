@@ -56,7 +56,7 @@ public sealed class RepositoryKeyService : IRepositoryKeyService
         return entity.KeyVersion;
     }
 
-    public async Task<byte[]?> TryGetEphemeralKeyForPrimaryAsync(
+    public async Task<EphemeralRepositoryKey?> TryGetEphemeralKeyForPrimaryAsync(
         Guid repositoryId,
         Guid callerStorageNodeId,
         CancellationToken cancellationToken = default
@@ -94,8 +94,39 @@ public sealed class RepositoryKeyService : IRepositoryKeyService
             .FirstOrDefaultAsync(key => key.RepositoryId == repositoryId, cancellationToken)
             .ConfigureAwait(false);
 
-        return keyEntity is null
-            ? null
-            : _keyProtectionService.UnprotectKeyMaterial(keyEntity.KeyCiphertext);
+        if (keyEntity is null)
+        {
+            return null;
+        }
+
+        return new EphemeralRepositoryKey(
+            _keyProtectionService.UnprotectKeyMaterial(keyEntity.KeyCiphertext),
+            keyEntity.KeyVersion
+        );
+    }
+
+    public async Task<EphemeralRepositoryKey?> TryGetRepositoryKeyAsync(
+        Guid repositoryId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var keyEntity = await context
+            .Set<RepositoryKeyEntity>()
+            .FirstOrDefaultAsync(key => key.RepositoryId == repositoryId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (keyEntity is null)
+        {
+            return null;
+        }
+
+        return new EphemeralRepositoryKey(
+            _keyProtectionService.UnprotectKeyMaterial(keyEntity.KeyCiphertext),
+            keyEntity.KeyVersion
+        );
     }
 }

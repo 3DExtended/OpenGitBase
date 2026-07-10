@@ -22,6 +22,17 @@ const secondaryReplicas = computed(() =>
   detail.value?.replicas.filter(replica => replica.role !== 'Primary') ?? [],
 )
 
+function replicaRoleLabel(role: string): string {
+  switch (role) {
+    case 'ReadReplica':
+      return t('admin.replication.detail.readReplicaNode')
+    case 'EncryptedReplica':
+      return t('admin.replication.detail.encryptedReplicaNode')
+    default:
+      return t('admin.replication.detail.replicaNode')
+  }
+}
+
 async function loadDetail() {
   loading.value = true
   error.value = null
@@ -167,7 +178,7 @@ useAdminReplicationPoll(loadDetail)
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <UBadge color="neutral" variant="subtle">
-                    {{ t('admin.replication.detail.replicaNode') }}
+                    {{ replicaRoleLabel(replica.role) }}
                   </UBadge>
                   <div class="mt-1 font-medium">
                     {{ replica.nodeId || replica.storageNodeId }}
@@ -182,7 +193,10 @@ useAdminReplicationPoll(loadDetail)
               </div>
               <div class="mt-2 grid gap-1 text-xs text-[var(--ogb-text-muted)] sm:grid-cols-3">
                 <span>{{ t('admin.replication.detail.appliedWatermark') }}: {{ replica.appliedWatermark }}</span>
-                <span>{{ t('admin.replication.detail.lag') }}: {{ Math.max(0, detail.primaryWatermark - replica.appliedWatermark) }}</span>
+                <span v-if="replica.role === 'EncryptedReplica'">
+                  {{ t('admin.replication.detail.artifactWatermark') }}: {{ replica.artifactWatermark ?? '—' }}
+                </span>
+                <span>{{ t('admin.replication.detail.lag') }}: {{ Math.max(0, detail.primaryWatermark - (replica.role === 'EncryptedReplica' ? (replica.artifactWatermark ?? 0) : replica.appliedWatermark)) }}</span>
                 <span>{{ t('admin.replication.detail.lastSynced') }}: {{ replica.lastSyncedAt ?? '—' }}</span>
               </div>
             </UCard>

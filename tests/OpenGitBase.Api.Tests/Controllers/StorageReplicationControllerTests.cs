@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 
 namespace OpenGitBase.Api.Tests.Controllers;
@@ -13,7 +14,8 @@ public class StorageReplicationControllerTests
     public async Task QuorumReplicate_WhenUnauthorized_ReturnsUnauthorized()
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
-        var controller = new StorageReplicationController(queryProcessor)
+        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
+        var controller = new StorageReplicationController(queryProcessor, repositoryKeyService)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -31,7 +33,8 @@ public class StorageReplicationControllerTests
     public async Task GetReplicationContext_WhenUnauthorized_ReturnsUnauthorized()
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
-        var controller = new StorageReplicationController(queryProcessor)
+        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
+        var controller = new StorageReplicationController(queryProcessor, repositoryKeyService)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

@@ -11,4 +11,6 @@ public sealed class QuorumReplicateRepositoryQuery
     public StorageNodeId StorageNodeId { get; set; } = default!;
 
     public long AppliedWatermark { get; set; }
+
+    public IReadOnlyList<Guid> ConfirmedEncryptedNodeIds { get; set; } = [];
 }

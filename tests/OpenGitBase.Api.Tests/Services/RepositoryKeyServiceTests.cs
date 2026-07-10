@@ -86,7 +86,7 @@ public class RepositoryKeyServiceTests
             );
 
             Assert.NotNull(key);
-            Assert.Equal(32, key!.Length);
+            Assert.Equal(32, key!.KeyMaterial.Length);
         }
     }
 

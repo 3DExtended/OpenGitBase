@@ -17,5 +17,9 @@ public sealed class RepositoryAccessCheckResponse
 
     public StorageRoutingTarget? Primary { get; init; }
 
+    public StorageRoutingTarget? ReadReplica { get; init; }
+
+    public bool? WriteQuorumAvailable { get; init; }
+
     public IReadOnlyList<StorageRoutingTarget>? ReadTargets { get; init; }
 }

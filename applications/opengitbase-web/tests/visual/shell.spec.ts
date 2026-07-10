@@ -44,6 +44,13 @@ test.describe('Shell components @regression', () => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-sidebar')).toHaveScreenshot('app-sidebar.png')
   })
+
+  test('admin rf4 replication detail', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-admin-rf4-replication')).toHaveScreenshot(
+      'admin-rf4-replication.png',
+    )
+  })
 })
 
 test.describe('Auth screens', () => {

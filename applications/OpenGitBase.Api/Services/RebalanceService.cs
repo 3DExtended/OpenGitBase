@@ -74,6 +74,29 @@ public sealed class RebalanceService
     internal static void ClearPendingReplacement(Guid repositoryId, Guid replacementNodeId) =>
         PendingReplacements.TryRemove((repositoryId, replacementNodeId), out _);
 
+    private static ReplicationState EvaluateReplicationState(RepositoryEntity repository)
+    {
+        if (repository.ReplicationState is ReplicationState.Rf4Healthy or ReplicationState.Rf4Migrating or ReplicationState.Recovering)
+        {
+            var encryptedCount = repository.Replicas.Count(replica =>
+                replica.Role == RepositoryReplicaRole.EncryptedReplica
+                && replica.ArtifactWatermark >= repository.PrimaryWatermark
+            );
+            var plaintextInSync = repository.Replicas.Count(replica =>
+                replica.Role != RepositoryReplicaRole.EncryptedReplica
+                && ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)
+            );
+            return encryptedCount >= 1 && plaintextInSync >= 2
+                ? ReplicationState.Rf4Healthy
+                : ReplicationState.Degraded;
+        }
+
+        var inSyncCount = repository.Replicas.Count(replica =>
+            ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)
+        );
+        return inSyncCount >= 2 ? ReplicationState.Rf3Healthy : ReplicationState.Degraded;
+    }
+
     private async Task ReattachRecoveredNodesAsync(
         OpenGitBaseDbContext context,
         CancellationToken cancellationToken
@@ -144,12 +167,7 @@ public sealed class RebalanceService
                 }
             );
 
-            var inSyncCount = repository.Replicas.Count(replica =>
-                ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)
-            );
-            repository.ReplicationState = inSyncCount >= 2
-                ? ReplicationState.Rf3Healthy
-                : ReplicationState.Degraded;
+            repository.ReplicationState = EvaluateReplicationState(repository);
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             ClearPendingReplacement(repositoryId, replacementNodeId);
         }
@@ -221,13 +239,20 @@ public sealed class RebalanceService
             return;
         }
 
+        var provisionRole = deadReplica.Role switch
+        {
+            RepositoryReplicaRole.ReadReplica => nameof(RepositoryReplicaRole.ReadReplica),
+            RepositoryReplicaRole.EncryptedReplica => nameof(RepositoryReplicaRole.EncryptedReplica),
+            _ => nameof(RepositoryReplicaRole.Replica),
+        };
+
         var provision = await _storageProvisionerClient
             .ProvisionRepositoryAsync(
                 replacement,
                 token,
                 repository.PhysicalPath,
                 receiveMaxBytes: 0,
-                replicationRole: nameof(RepositoryReplicaRole.Replica),
+                replicationRole: provisionRole,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -236,17 +261,73 @@ public sealed class RebalanceService
             return;
         }
 
-        await _storageProvisionerClient
-            .SyncRepositoryFromPeerAsync(
-                replacement,
-                token,
-                repository.PhysicalPath,
-                primaryNode.InternalHost,
-                repository.PhysicalPath,
-                MtlsGitHttpPort,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        if (deadReplica.Role == RepositoryReplicaRole.EncryptedReplica)
+        {
+            var sourceEncrypted = repository.Replicas.FirstOrDefault(replica =>
+                replica.Role == RepositoryReplicaRole.EncryptedReplica
+                && replica.StorageNodeId != deadReplica.StorageNodeId
+                && replica.ArtifactWatermark >= repository.PrimaryWatermark
+            );
+            if (sourceEncrypted is null)
+            {
+                return;
+            }
+
+            var sourceNode = nodes.FirstOrDefault(node =>
+                node.Id.Value == sourceEncrypted.StorageNodeId
+            );
+            var sourceToken = sourceNode is null
+                ? null
+                : await GetApiTokenAsync(sourceNode.Id, cancellationToken).ConfigureAwait(false);
+            if (sourceNode is null || sourceToken is null)
+            {
+                return;
+            }
+
+            var artifact = await _storageProvisionerClient
+                .TryGetReplicationArtifactAsync(
+                    sourceNode,
+                    sourceToken,
+                    repository.Id,
+                    repository.PrimaryWatermark,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (!artifact.Success)
+            {
+                return;
+            }
+
+            var upload = await _storageProvisionerClient
+                .UploadReplicationArtifactAsync(
+                    replacement,
+                    token,
+                    repository.Id,
+                    repository.PrimaryWatermark,
+                    artifact.ManifestJson,
+                    artifact.BundlePayload,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (!upload.Success)
+            {
+                return;
+            }
+        }
+        else
+        {
+            await _storageProvisionerClient
+                .SyncRepositoryFromPeerAsync(
+                    replacement,
+                    token,
+                    repository.PhysicalPath,
+                    primaryNode.InternalHost,
+                    repository.PhysicalPath,
+                    MtlsGitHttpPort,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
 
         var replacedNodeId = deadReplica.StorageNodeId;
         context.Remove(deadReplica);
@@ -255,19 +336,19 @@ public sealed class RebalanceService
             {
                 RepositoryId = repository.Id,
                 StorageNodeId = replacement.Id.Value,
-                Role = RepositoryReplicaRole.Replica,
+                Role = deadReplica.Role == RepositoryReplicaRole.Primary
+                    ? RepositoryReplicaRole.Replica
+                    : deadReplica.Role,
                 AppliedWatermark = repository.PrimaryWatermark,
+                ArtifactWatermark = deadReplica.Role == RepositoryReplicaRole.EncryptedReplica
+                    ? repository.PrimaryWatermark
+                    : null,
                 LastSyncedAt = DateTimeOffset.UtcNow,
             }
         );
         TrackPendingReplacement(repository.Id, replacement.Id.Value, replacedNodeId);
 
-        var inSyncCount = repository.Replicas.Count(replica =>
-            ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)
-        );
-        repository.ReplicationState = inSyncCount >= 2
-            ? ReplicationState.Rf3Healthy
-            : ReplicationState.Degraded;
+        repository.ReplicationState = EvaluateReplicationState(repository);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

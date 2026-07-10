@@ -53,13 +53,16 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
             );
         }
 
-        var targetNodeIds = entity.Replicas.Count > 0
-            ? entity.Replicas.Select(replica => replica.StorageNodeId).ToList()
-            : [entity.StorageNodeId.Value];
-
         var deleteResults = new List<(Guid NodeId, bool Success)>();
-        foreach (var nodeId in targetNodeIds)
+        foreach (var replica in entity.Replicas.DefaultIfEmpty(
+                     new RepositoryReplicaEntity
+                     {
+                         StorageNodeId = entity.StorageNodeId!.Value,
+                         Role = RepositoryReplicaRole.Primary,
+                     }
+                 ))
         {
+            var nodeId = replica.StorageNodeId;
             var storageNodeId = StorageNodeId.From(nodeId);
             var storageNode = await _queryProcessor
                 .RunQueryAsync(
@@ -85,19 +88,41 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
                 continue;
             }
 
-            var deleteResult = await _storageProvisionerClient
-                .DeleteRepositoryAsync(
-                    storageNode.Get(),
-                    apiToken.Get(),
-                    entity.PhysicalPath,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            deleteResults.Add((nodeId, deleteResult.Success));
+            var deleteSuccess = true;
+            if (replica.Role == RepositoryReplicaRole.EncryptedReplica)
+            {
+                for (var watermark = 1L; watermark <= entity.PrimaryWatermark; watermark++)
+                {
+                    var artifactDelete = await _storageProvisionerClient
+                        .DeleteReplicationArtifactAsync(
+                            storageNode.Get(),
+                            apiToken.Get(),
+                            entity.Id,
+                            watermark,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    deleteSuccess &= artifactDelete.Success || artifactDelete.StatusCode == 404;
+                }
+            }
+            else
+            {
+                var deleteResult = await _storageProvisionerClient
+                    .DeleteRepositoryAsync(
+                        storageNode.Get(),
+                        apiToken.Get(),
+                        entity.PhysicalPath,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                deleteSuccess = deleteResult.Success;
+            }
+
+            deleteResults.Add((nodeId, deleteSuccess));
         }
 
         var successCount = deleteResults.Count(result => result.Success);
-        var requiredQuorum = entity.Replicas.Count >= 3 ? 2 : 1;
+        var requiredQuorum = entity.ReplicationState == ReplicationState.Rf4Healthy ? 3 : entity.Replicas.Count >= 3 ? 2 : 1;
         if (successCount < requiredQuorum)
         {
             return Option.From(

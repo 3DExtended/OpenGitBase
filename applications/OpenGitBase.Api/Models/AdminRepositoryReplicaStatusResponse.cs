@@ -10,6 +10,8 @@ public sealed class AdminRepositoryReplicaStatusResponse
 
     public long AppliedWatermark { get; init; }
 
+    public long? ArtifactWatermark { get; init; }
+
     public bool IsInSync { get; init; }
 
     public DateTimeOffset? LastSyncedAt { get; init; }

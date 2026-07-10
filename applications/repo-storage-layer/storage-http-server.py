@@ -10,6 +10,9 @@ import os
 import re
 import shutil
 import subprocess
+import binascii
+import base64
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -143,6 +146,12 @@ def store_replication_artifact(
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     bundle_path.write_bytes(bundle_bytes)
     return artifact_dir
+
+
+def delete_replication_artifact(repository_id: str, watermark: int) -> None:
+    artifact_dir = _artifact_directory(repository_id, watermark)
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
 
 
 def fetch_replication_artifact(repository_id: str, watermark: int) -> tuple[dict[str, Any], bytes]:
@@ -755,6 +764,10 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             self._handle_delete_ref()
             return
 
+        if parsed.path == "/internal/repos/import-bundle":
+            self._handle_import_bundle()
+            return
+
         if parsed.path != "/internal/repos":
             self.send_error(404)
             return
@@ -917,13 +930,78 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(200, {"refName": ref_name})
 
-    def do_DELETE(self) -> None:
-        if self.path != "/internal/repos":
-            self.send_error(404)
+    def _handle_import_bundle(self) -> None:
+        data = self._read_json()
+        physical_path = data.get("physicalPath", "")
+        bundle_base64 = data.get("bundleBase64", "")
+        if not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not bundle_base64:
+            self._send_json(400, {"error": "bundleBase64 is required."})
             return
 
+        try:
+            bundle_bytes = base64.b64decode(bundle_base64)
+        except (ValueError, binascii.Error):
+            self._send_json(400, {"error": "bundleBase64 must be valid base64."})
+            return
+
+        if os.path.exists(physical_path):
+            shutil.rmtree(physical_path)
+
+        os.makedirs(os.path.dirname(physical_path), exist_ok=True)
+        with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as bundle_file:
+            bundle_file.write(bundle_bytes)
+            bundle_path = bundle_file.name
+
+        try:
+            subprocess.run(
+                ["git", "clone", bundle_path, physical_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            subprocess.run(
+                ["git", "-C", physical_path, "config", "receive.denyCurrentBranch", "ignore"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _write_initial_watermark(physical_path)
+            _install_replication_hook(physical_path)
+            subprocess.run(
+                ["chown", "-R", "git:git", physical_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode("utf-8", errors="replace") if exc.stderr else str(exc)
+            self._send_json(500, {"error": f"Bundle import failed: {stderr}"})
+            return
+        finally:
+            os.unlink(bundle_path)
+
+        self._send_json(201, {"physicalPath": physical_path})
+
+    def do_DELETE(self) -> None:
         if not self._check_auth():
             self.send_error(401)
+            return
+
+        parsed = urlparse(self.path)
+        artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
+        if artifact_match:
+            delete_replication_artifact(
+                artifact_match.group("repository_id"),
+                int(artifact_match.group("watermark")),
+            )
+            self._send_json(200, {"deleted": True})
+            return
+
+        if parsed.path != "/internal/repos":
+            self.send_error(404)
             return
 
         data = self._read_json()

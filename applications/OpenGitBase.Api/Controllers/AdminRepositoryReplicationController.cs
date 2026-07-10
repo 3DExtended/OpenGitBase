@@ -187,10 +187,13 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
                             : string.Empty,
                         Role = replica.Role.ToString(),
                         AppliedWatermark = replica.AppliedWatermark,
-                        IsInSync = ReplicationSync.IsInSync(
-                            replica.AppliedWatermark,
-                            repository.PrimaryWatermark
-                        ),
+                        ArtifactWatermark = replica.ArtifactWatermark,
+                        IsInSync = replica.Role == RepositoryReplicaRole.EncryptedReplica
+                            ? replica.ArtifactWatermark >= repository.PrimaryWatermark
+                            : ReplicationSync.IsInSync(
+                                replica.AppliedWatermark,
+                                repository.PrimaryWatermark
+                            ),
                         LastSyncedAt = replica.LastSyncedAt,
                     })
                     .ToList(),

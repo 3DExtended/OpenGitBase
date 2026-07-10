@@ -29,4 +29,38 @@ public interface IStorageProvisionerClient
         int sourcePort,
         CancellationToken cancellationToken
     );
+
+    Task<StorageProvisionerResult> UploadReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        string manifestJson,
+        byte[] bundlePayload,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<ReplicationArtifactFetchResult> TryGetReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<StorageProvisionerResult> DeleteReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<StorageProvisionerResult> ImportRepositoryBundleAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        byte[] bundlePlaintext,
+        CancellationToken cancellationToken = default
+    );
 }

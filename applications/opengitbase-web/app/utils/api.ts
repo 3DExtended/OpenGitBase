@@ -70,6 +70,7 @@ export interface AdminRepositoryReplicaStatusDto {
   nodeId: string
   role: string
   appliedWatermark: number
+  artifactWatermark?: number | null
   isInSync: boolean
   lastSyncedAt?: string | null
 }

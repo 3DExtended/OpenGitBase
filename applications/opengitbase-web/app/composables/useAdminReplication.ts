@@ -15,7 +15,8 @@ export function repositoryNeedsAttention(summary: {
   maxWatermarkLag: number
   replicaCount: number
 }): boolean {
-  return summary.replicationState !== 'Rf3Healthy'
+  const healthyStates = new Set(['Rf3Healthy', 'Rf4Healthy'])
+  return !healthyStates.has(summary.replicationState)
     || !summary.writeQuorumAvailable
     || summary.maxWatermarkLag > 0
     || summary.replicaCount < 3
@@ -24,11 +25,14 @@ export function repositoryNeedsAttention(summary: {
 export function replicationStateBadgeColor(state: string): 'success' | 'warning' | 'error' | 'neutral' {
   switch (state) {
     case 'Rf3Healthy':
+    case 'Rf4Healthy':
       return 'success'
     case 'Rf1Backfilling':
+    case 'Rf4Migrating':
       return 'warning'
     case 'Degraded':
     case 'Promoting':
+    case 'Recovering':
       return 'error'
     default:
       return 'neutral'
@@ -36,7 +40,7 @@ export function replicationStateBadgeColor(state: string): 'success' | 'warning'
 }
 
 export function provisioningProgressPercent(replicaCount: number): number {
-  return Math.min(100, Math.round((replicaCount / 3) * 100))
+  return Math.min(100, Math.round((replicaCount / 4) * 100))
 }
 
 export function syncProgressPercent(maxWatermarkLag: number, primaryWatermark: number): number {

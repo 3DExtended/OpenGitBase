@@ -10,6 +10,7 @@ using OpenGitBase.Features.GitAccessToken.Contracts;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.PublicGitSshKey.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.RepositoryMember.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -686,16 +687,34 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 ResolvedUserId = response.ResolvedUserId,
                 RepositoryId = response.RepositoryId,
                 EffectiveRole = response.EffectiveRole,
-                Reason = "Write quorum unavailable: fewer than two storage nodes are healthy.",
+                Reason = "Write quorum unavailable: encrypted replication quorum cannot be met.",
             };
         }
 
         var readTargets = routingDto
-            .Targets.Where(target => target.IsInSync)
-            .OrderByDescending(target => target.IsPrimary)
+            .Targets.Where(target =>
+                target.IsInSync
+                && !string.Equals(
+                    target.Role,
+                    nameof(RepositoryReplicaRole.EncryptedReplica),
+                    StringComparison.Ordinal
+                )
+            )
+            .OrderByDescending(target =>
+                string.Equals(
+                    target.Role,
+                    nameof(RepositoryReplicaRole.ReadReplica),
+                    StringComparison.Ordinal
+                )
+            )
+            .ThenByDescending(target => target.IsPrimary)
             .ThenBy(target => target.StorageNodeId)
             .Select(RepositoryAccessCheckRoutingMapper.MapRoutingTarget)
             .ToList();
+
+        var readReplica = readTargets.FirstOrDefault(target =>
+            string.Equals(target.Role, nameof(RepositoryReplicaRole.ReadReplica), StringComparison.Ordinal)
+        );
 
         if (operation == RepositoryOperation.ReadGit && readTargets.Count == 0)
         {
@@ -725,6 +744,8 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             StorageNodeInternalGitHttpPort = selectedTarget.InternalGitHttpPort,
             ReplicationEpoch = routingDto.ReplicationEpoch,
             Primary = RepositoryAccessCheckRoutingMapper.MapRoutingTarget(primary),
+            ReadReplica = readReplica,
+            WriteQuorumAvailable = routingDto.WriteQuorumAvailable,
             ReadTargets = readTargets,
         };
     }

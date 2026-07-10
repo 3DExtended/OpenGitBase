@@ -3,6 +3,7 @@ using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
@@ -79,6 +80,145 @@ public class PromotePrimaryReplicaQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenRf4PrimaryUnhealthy_PromotesInSyncReadReplica()
+    {
+        var repositoryId = Guid.NewGuid();
+        var oldPrimaryId = Guid.NewGuid();
+        var readReplicaId = Guid.NewGuid();
+        var encId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            oldPrimaryId,
+            readReplicaId,
+            encId,
+            primaryWatermark: 5,
+            readWatermark: 5
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.IsSome);
+            Assert.True(result.Get().Promoted);
+            Assert.Equal(readReplicaId, result.Get().NewPrimaryStorageNodeId);
+            Assert.Equal(2, result.Get().ReplicationEpoch);
+        }
+    }
+
+    private static async Task<(PromotePrimaryReplicaQueryHandler Handler, ServiceProvider Provider)>
+        CreateRf4HandlerAsync(
+            Guid repositoryId,
+            Guid oldPrimaryId,
+            Guid readReplicaId,
+            Guid encId,
+            long primaryWatermark,
+            long readWatermark
+        )
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(connection);
+        services.AddSingleton<IFeatureAssemblyProvider>(
+            new FeatureAssemblyProvider(
+                [
+                    typeof(RepositoryMapsterConfig).Assembly,
+                    typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
+                ]
+            )
+        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
+
+        var provider = services.BuildServiceProvider();
+        var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+            context.Set<StorageNodeEntity>().AddRange(
+                new StorageNodeEntity
+                {
+                    Id = oldPrimaryId,
+                    NodeId = "storage-1",
+                    InternalHost = "storage-1",
+                    InternalHttpPort = 8081,
+                    IsHealthy = false,
+                    RegisteredAt = DateTimeOffset.UtcNow,
+                },
+                new StorageNodeEntity
+                {
+                    Id = readReplicaId,
+                    NodeId = "storage-2",
+                    InternalHost = "storage-2",
+                    InternalHttpPort = 8081,
+                    IsHealthy = true,
+                    RegisteredAt = DateTimeOffset.UtcNow,
+                },
+                new StorageNodeEntity
+                {
+                    Id = encId,
+                    NodeId = "storage-3",
+                    InternalHost = "storage-3",
+                    InternalHttpPort = 8081,
+                    IsHealthy = true,
+                    RegisteredAt = DateTimeOffset.UtcNow,
+                }
+            );
+            context.Set<RepositoryEntity>().Add(
+                new RepositoryEntity
+                {
+                    Id = repositoryId,
+                    Name = "repo",
+                    Slug = "repo",
+                    OwnerUserId = Guid.NewGuid(),
+                    PhysicalPath = $"/srv/git/{repositoryId}.git",
+                    StorageNodeId = oldPrimaryId,
+                    PrimaryStorageNodeId = oldPrimaryId,
+                    PrimaryWatermark = primaryWatermark,
+                    ReplicationEpoch = 1,
+                    ReplicationState = ReplicationState.Rf4Healthy,
+                    Replicas =
+                    [
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = oldPrimaryId,
+                            Role = RepositoryReplicaRole.Primary,
+                            AppliedWatermark = primaryWatermark,
+                        },
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = readReplicaId,
+                            Role = RepositoryReplicaRole.ReadReplica,
+                            AppliedWatermark = readWatermark,
+                        },
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = encId,
+                            Role = RepositoryReplicaRole.EncryptedReplica,
+                            ArtifactWatermark = primaryWatermark,
+                        },
+                    ],
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        return (provider.GetRequiredService<PromotePrimaryReplicaQueryHandler>(), provider);
+    }
+
     private static async Task<(PromotePrimaryReplicaQueryHandler Handler, ServiceProvider Provider)>
         CreateHandlerAsync(
             Guid repositoryId,
@@ -104,6 +244,7 @@ public class PromotePrimaryReplicaQueryHandlerTests
             )
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
         services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
 
         var provider = services.BuildServiceProvider();

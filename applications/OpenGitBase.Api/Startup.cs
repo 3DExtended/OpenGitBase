@@ -263,8 +263,10 @@ public class Startup
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
         services.AddScoped<Rf1BackfillService>();
+        services.AddScoped<Rf4BackfillService>();
         services.AddScoped<RebalanceService>();
         services.AddScoped<AntiEntropyReconcilerService>();
+        services.AddSingleton<IColdRecoveryService, ColdRecoveryService>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler

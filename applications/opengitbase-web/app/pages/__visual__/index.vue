@@ -319,6 +319,53 @@ function toggleTheme() {
           </div>
         </div>
       </UCard>
+    <section
+      class="mt-10 max-w-5xl space-y-4"
+      data-testid="visual-admin-rf4-replication"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin RF=4 replication detail
+      </h2>
+      <UCard>
+        <div class="flex flex-wrap items-center gap-3">
+          <AdminReplicationStateBadge state="Rf4Healthy" />
+          <UBadge color="success" variant="subtle">
+            Write quorum: yes
+          </UBadge>
+          <span class="text-sm text-[var(--ogb-text-muted)]">Primary watermark: 12</span>
+          <span class="text-sm text-[var(--ogb-text-muted)]">Epoch: 3</span>
+        </div>
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">Replicas</h3>
+        </template>
+        <div class="grid gap-4 md:grid-cols-3">
+          <UCard class="border-[var(--ogb-accent)] bg-[var(--ogb-bg)]">
+            <UBadge color="primary" variant="subtle">Primary</UBadge>
+            <div class="mt-2 font-medium">storage-1</div>
+            <div class="text-xs text-[var(--ogb-text-muted)]">Applied watermark: 12</div>
+          </UCard>
+          <div class="space-y-3 md:col-span-2">
+            <UCard class="bg-[var(--ogb-bg)]">
+              <UBadge color="neutral" variant="subtle">Read replica</UBadge>
+              <div class="mt-1 font-medium">storage-2</div>
+              <div class="text-xs text-[var(--ogb-text-muted)]">Applied watermark: 12</div>
+            </UCard>
+            <UCard class="bg-[var(--ogb-bg)]">
+              <UBadge color="neutral" variant="subtle">Encrypted replica</UBadge>
+              <div class="mt-1 font-medium">storage-3</div>
+              <div class="text-xs text-[var(--ogb-text-muted)]">Artifact watermark: 12</div>
+            </UCard>
+            <UCard class="bg-[var(--ogb-bg)]">
+              <UBadge color="neutral" variant="subtle">Encrypted replica</UBadge>
+              <div class="mt-1 font-medium">storage-4</div>
+              <div class="text-xs text-[var(--ogb-text-muted)]">Artifact watermark: 11</div>
+              <UBadge class="mt-2" color="warning" variant="subtle">Lagging</UBadge>
+            </UCard>
+          </div>
+        </div>
+      </UCard>
     </section>
   </div>
 </template>

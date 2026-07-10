@@ -69,6 +69,181 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             cancellationToken
         );
 
+    public async Task<StorageProvisionerResult> UploadReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        string manifestJson,
+        byte[] bundlePayload,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return StorageProvisionerResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/{repositoryId:D}/artifacts/{watermark}";
+        using var manifestDocument = JsonDocument.Parse(manifestJson);
+        var payload = JsonSerializer.Serialize(
+            new
+            {
+                manifest = manifestDocument.RootElement,
+                bundleBase64 = Convert.ToHexString(bundlePayload).ToLowerInvariant(),
+            }
+        );
+        using var request = new HttpRequestMessage(HttpMethod.Put, requestUri)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode is 200 or 201)
+        {
+            return StorageProvisionerResult.Ok((int)response.StatusCode);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        return StorageProvisionerResult.Fail(
+            (int)response.StatusCode,
+            string.IsNullOrWhiteSpace(body)
+                ? $"Artifact upload failed with status {(int)response.StatusCode}."
+                : body
+        );
+    }
+
+    public async Task<ReplicationArtifactFetchResult> TryGetReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return ReplicationArtifactFetchResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/{repositoryId:D}/artifacts/{watermark}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if ((int)response.StatusCode != 200)
+        {
+            return ReplicationArtifactFetchResult.Fail(
+                (int)response.StatusCode,
+                string.IsNullOrWhiteSpace(body)
+                    ? $"Artifact fetch failed with status {(int)response.StatusCode}."
+                    : body
+            );
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var manifestJson = document.RootElement.GetProperty("manifest").GetRawText();
+        var bundleHex = document.RootElement.GetProperty("bundleBase64").GetString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(bundleHex))
+        {
+            return ReplicationArtifactFetchResult.Fail(502, "Artifact response missing bundle payload.");
+        }
+
+        return ReplicationArtifactFetchResult.Ok(manifestJson, Convert.FromHexString(bundleHex));
+    }
+
+    public async Task<StorageProvisionerResult> DeleteReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        long watermark,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return StorageProvisionerResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/{repositoryId:D}/artifacts/{watermark}";
+        using var request = new HttpRequestMessage(HttpMethod.Delete, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode is 200 or 204 or 404)
+        {
+            return StorageProvisionerResult.Ok((int)response.StatusCode);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        return StorageProvisionerResult.Fail(
+            (int)response.StatusCode,
+            string.IsNullOrWhiteSpace(body)
+                ? $"Artifact delete failed with status {(int)response.StatusCode}."
+                : body
+        );
+    }
+
+    public async Task<StorageProvisionerResult> ImportRepositoryBundleAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        byte[] bundlePlaintext,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return StorageProvisionerResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/import-bundle";
+        var payload = JsonSerializer.Serialize(
+            new
+            {
+                physicalPath,
+                bundleBase64 = Convert.ToBase64String(bundlePlaintext),
+            }
+        );
+        using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((int)response.StatusCode is 200 or 201)
+        {
+            return StorageProvisionerResult.Ok((int)response.StatusCode);
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        return StorageProvisionerResult.Fail(
+            (int)response.StatusCode,
+            string.IsNullOrWhiteSpace(body)
+                ? $"Bundle import failed with status {(int)response.StatusCode}."
+                : body
+        );
+    }
+
     private async Task<StorageProvisionerResult> SendSyncFromAsync(
         StorageNodeDto node,
         string apiToken,

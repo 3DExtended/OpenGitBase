@@ -608,6 +608,9 @@
       "states": {
         "Rf1Backfilling": "Backfilling",
         "Rf3Healthy": "RF=3 healthy",
+        "Rf4Healthy": "RF=4 healthy",
+        "Rf4Migrating": "Migrating to RF=4",
+        "Recovering": "Recovering",
         "Degraded": "Degraded",
         "Promoting": "Promoting"
       },
@@ -622,6 +625,9 @@
         "replicasTitle": "Replica set",
         "primaryNode": "Primary",
         "replicaNode": "Replica",
+        "readReplicaNode": "Read replica",
+        "encryptedReplicaNode": "Encrypted replica",
+        "artifactWatermark": "Artifact watermark",
         "appliedWatermark": "Applied watermark",
         "lag": "Lag",
         "inSync": "In sync",

@@ -99,7 +99,15 @@ public sealed class CommitReplicationWatermarkQueryHandler
         foreach (var replica in entity.Replicas.Where(replica =>
                      quorumIds.Contains(replica.StorageNodeId)))
         {
-            replica.AppliedWatermark = query.NewWatermark;
+            if (replica.Role == RepositoryReplicaRole.EncryptedReplica)
+            {
+                replica.ArtifactWatermark = query.NewWatermark;
+            }
+            else
+            {
+                replica.AppliedWatermark = query.NewWatermark;
+            }
+
             replica.LastSyncedAt = now;
         }
 

@@ -94,41 +94,129 @@ public sealed class AntiEntropyReconcilerService
             return;
         }
 
-        foreach (var replica in repository.Replicas.Where(replica =>
-                     !ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)))
+        foreach (var replica in repository.Replicas)
         {
-            if (!nodeById.TryGetValue(replica.StorageNodeId, out var replicaNode))
+            if (replica.Role == RepositoryReplicaRole.EncryptedReplica)
             {
-                continue;
-            }
-
-            var token = await GetApiTokenAsync(replicaNode.Id, cancellationToken)
-                .ConfigureAwait(false);
-            if (token is null)
-            {
-                continue;
-            }
-
-            var sync = await _storageProvisionerClient
-                .SyncRepositoryFromPeerAsync(
-                    replicaNode,
-                    token,
-                    repository.PhysicalPath,
-                    primaryNode.InternalHost,
-                    repository.PhysicalPath,
-                    MtlsGitHttpPort,
-                    cancellationToken
+                if (
+                    replica.ArtifactWatermark is null
+                    || replica.ArtifactWatermark < repository.PrimaryWatermark
                 )
-                .ConfigureAwait(false);
+                {
+                    await RepairEncryptedArtifactAsync(
+                            repository,
+                            replica,
+                            nodeById,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                }
 
-            if (sync.Success)
+                continue;
+            }
+
+            if (!ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark))
             {
-                replica.AppliedWatermark = repository.PrimaryWatermark;
-                replica.LastSyncedAt = DateTimeOffset.UtcNow;
+                if (!nodeById.TryGetValue(replica.StorageNodeId, out var replicaNode))
+                {
+                    continue;
+                }
+
+                var token = await GetApiTokenAsync(replicaNode.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                if (token is null)
+                {
+                    continue;
+                }
+
+                var sync = await _storageProvisionerClient
+                    .SyncRepositoryFromPeerAsync(
+                        replicaNode,
+                        token,
+                        repository.PhysicalPath,
+                        primaryNode.InternalHost,
+                        repository.PhysicalPath,
+                        MtlsGitHttpPort,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (sync.Success)
+                {
+                    replica.AppliedWatermark = repository.PrimaryWatermark;
+                    replica.LastSyncedAt = DateTimeOffset.UtcNow;
+                }
             }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RepairEncryptedArtifactAsync(
+        RepositoryEntity repository,
+        RepositoryReplicaEntity replica,
+        IReadOnlyDictionary<Guid, StorageNodeDto> nodeById,
+        CancellationToken cancellationToken
+    )
+    {
+        var sourceReplica = repository.Replicas
+            .Where(candidate =>
+                candidate.Role == RepositoryReplicaRole.EncryptedReplica
+                && candidate.StorageNodeId != replica.StorageNodeId
+                && candidate.ArtifactWatermark >= repository.PrimaryWatermark
+            )
+            .FirstOrDefault();
+        if (sourceReplica is null)
+        {
+            return;
+        }
+
+        if (
+            !nodeById.TryGetValue(sourceReplica.StorageNodeId, out var sourceNode)
+            || !nodeById.TryGetValue(replica.StorageNodeId, out var targetNode)
+        )
+        {
+            return;
+        }
+
+        var sourceToken = await GetApiTokenAsync(sourceNode.Id, cancellationToken)
+            .ConfigureAwait(false);
+        var targetToken = await GetApiTokenAsync(targetNode.Id, cancellationToken)
+            .ConfigureAwait(false);
+        if (sourceToken is null || targetToken is null)
+        {
+            return;
+        }
+
+        var artifact = await _storageProvisionerClient
+            .TryGetReplicationArtifactAsync(
+                sourceNode,
+                sourceToken,
+                repository.Id,
+                repository.PrimaryWatermark,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (!artifact.Success)
+        {
+            return;
+        }
+
+        var upload = await _storageProvisionerClient
+            .UploadReplicationArtifactAsync(
+                targetNode,
+                targetToken,
+                repository.Id,
+                repository.PrimaryWatermark,
+                artifact.ManifestJson,
+                artifact.BundlePayload,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (upload.Success)
+        {
+            replica.ArtifactWatermark = repository.PrimaryWatermark;
+            replica.LastSyncedAt = DateTimeOffset.UtcNow;
+        }
     }
 
     private async Task<string?> GetApiTokenAsync(

@@ -54,6 +54,7 @@ public sealed class HaStorageBackgroundService : BackgroundService
                 if (now >= backfillDue)
                 {
                     await RunRf1BackfillAsync(stoppingToken).ConfigureAwait(false);
+                    await RunRf4BackfillAsync(stoppingToken).ConfigureAwait(false);
                     backfillDue = now.AddSeconds(_options.BackfillIntervalSeconds);
                 }
 
@@ -119,6 +120,13 @@ public sealed class HaStorageBackgroundService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var backfill = scope.ServiceProvider.GetRequiredService<Rf1BackfillService>();
+        await backfill.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunRf4BackfillAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var backfill = scope.ServiceProvider.GetRequiredService<Rf4BackfillService>();
         await backfill.RunOnceAsync(cancellationToken).ConfigureAwait(false);
     }
 

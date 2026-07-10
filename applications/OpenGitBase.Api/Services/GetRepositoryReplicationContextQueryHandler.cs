@@ -82,6 +82,7 @@ public sealed class GetRepositoryReplicationContextQueryHandler
                 PrimaryWatermark = entity.PrimaryWatermark,
                 IsPrimary = callerReplica.Role == RepositoryReplicaRole.Primary,
                 PhysicalPath = entity.PhysicalPath,
+                ReplicationState = entity.ReplicationState.ToString(),
                 Peers = peers,
             }
         );

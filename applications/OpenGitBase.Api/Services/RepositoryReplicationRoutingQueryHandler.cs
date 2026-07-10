@@ -87,12 +87,32 @@ public sealed class RepositoryReplicationRoutingQueryHandler
             .ToDictionaryAsync(node => node.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        var healthyCount = entity.Replicas.Count(replica =>
+        var routingReplicas = entity.Replicas
+            .Where(replica => replica.Role != RepositoryReplicaRole.EncryptedReplica)
+            .ToList();
+
+        var healthyPlaintextCount = routingReplicas.Count(replica =>
             nodes.TryGetValue(replica.StorageNodeId, out var node) && node.IsHealthy
         );
+        var healthyEncryptedCount = entity.Replicas.Count(replica =>
+            replica.Role == RepositoryReplicaRole.EncryptedReplica
+            && nodes.TryGetValue(replica.StorageNodeId, out var node)
+            && node.IsHealthy
+        );
+        var primaryHealthy = entity.Replicas.Any(replica =>
+            replica.StorageNodeId == entity.PrimaryStorageNodeId
+            && nodes.TryGetValue(replica.StorageNodeId, out var node)
+            && node.IsHealthy
+        );
 
-        var targets = entity
-            .Replicas.Select(replica =>
+        var writeQuorumAvailable = entity.ReplicationState switch
+        {
+            ReplicationState.Rf4Healthy => primaryHealthy && healthyEncryptedCount >= 1,
+            _ => healthyPlaintextCount >= 2,
+        };
+
+        var targets = routingReplicas
+            .Select(replica =>
             {
                 nodes.TryGetValue(replica.StorageNodeId, out var node);
                 var inSync = node?.IsHealthy == true
@@ -119,7 +139,7 @@ public sealed class RepositoryReplicationRoutingQueryHandler
             new RepositoryReplicationRoutingDto
             {
                 ReplicationEpoch = entity.ReplicationEpoch,
-                WriteQuorumAvailable = healthyCount >= 2,
+                WriteQuorumAvailable = writeQuorumAvailable,
                 Targets = targets,
             }
         );

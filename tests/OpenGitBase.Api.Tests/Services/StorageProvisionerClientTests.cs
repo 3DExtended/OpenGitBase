@@ -35,7 +35,7 @@ public class StorageProvisionerClientTests
             "secret-token",
             "/srv/git/repo.git",
             52_428_800,
-            CancellationToken.None
+            cancellationToken: CancellationToken.None
         );
 
         Assert.True(result.Success);
@@ -58,7 +58,7 @@ public class StorageProvisionerClientTests
             "wrong-token",
             "/srv/git/repo.git",
             52_428_800,
-            CancellationToken.None
+            cancellationToken: CancellationToken.None
         );
 
         Assert.False(result.Success);
@@ -99,7 +99,7 @@ public class StorageProvisionerClientTests
             string.Empty,
             "/srv/git/repo.git",
             52_428_800,
-            CancellationToken.None
+            cancellationToken: CancellationToken.None
         );
 
         Assert.False(result.Success);
