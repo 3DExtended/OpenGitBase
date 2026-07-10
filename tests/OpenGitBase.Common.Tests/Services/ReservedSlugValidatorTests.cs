@@ -4,21 +4,34 @@ namespace OpenGitBase.Common.Tests.Services;
 
 public class ReservedSlugValidatorTests
 {
+    public static TheoryData<string> ReservedSlugs =>
+    [
+        "__visual__",
+        "admin",
+        "api",
+        "explore",
+        "forgot-password",
+        "gate",
+        "health",
+        "invite",
+        "opengitbase",
+        "orgs",
+        "pitch",
+        "register",
+        "repos",
+        "reset-password",
+        "settings",
+        "sign-in",
+        "sign-out",
+        "sign-up",
+        "status",
+        "swagger",
+        "verify-email",
+        "EXPLORE",
+    ];
+
     [Theory]
-    [InlineData("explore")]
-    [InlineData("sign-in")]
-    [InlineData("sign-up")]
-    [InlineData("settings")]
-    [InlineData("api")]
-    [InlineData("register")]
-    [InlineData("health")]
-    [InlineData("swagger")]
-    [InlineData("__visual__")]
-    [InlineData("forgot-password")]
-    [InlineData("reset-password")]
-    [InlineData("verify-email")]
-    [InlineData("sign-out")]
-    [InlineData("EXPLORE")]
+    [MemberData(nameof(ReservedSlugs))]
     public void IsReserved_WhenSlugIsReserved_ReturnsTrue(string slug)
     {
         Assert.True(ReservedSlugValidator.IsReserved(slug));

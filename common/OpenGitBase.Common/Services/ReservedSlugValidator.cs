@@ -1,24 +1,31 @@
-﻿﻿namespace OpenGitBase.Common.Services;
+﻿namespace OpenGitBase.Common.Services;
 
 public static class ReservedSlugValidator
 {
+    // Keep in sync with applications/opengitbase-web/app/utils/slug-validation.ts
     private static readonly HashSet<string> ReservedSlugs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "opengitbase",
-        "admin",
-        "explore",
-        "sign-in",
-        "sign-up",
-        "settings",
-        "api",
-        "register",
-        "health",
-        "swagger",
         "__visual__",
+        "admin",
+        "api",
+        "explore",
         "forgot-password",
+        "gate",
+        "health",
+        "invite",
+        "opengitbase",
+        "orgs",
+        "pitch",
+        "register",
+        "repos",
         "reset-password",
-        "verify-email",
+        "settings",
+        "sign-in",
         "sign-out",
+        "sign-up",
+        "status",
+        "swagger",
+        "verify-email",
     };
 
     public static bool IsReserved(string slug) =>

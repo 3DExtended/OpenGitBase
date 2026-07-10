@@ -1,28 +1,11 @@
-export type SidebarContext = 'guest' | 'global' | 'owner' | 'repo' | 'settings' | 'admin'
+import { isReservedSlug } from '~/utils/slug-validation'
 
-const RESERVED_TOP_LEVEL = new Set([
-  'settings',
-  'admin',
-  'repos',
-  'orgs',
-  'explore',
-  'pitch',
-  'status',
-  'sign-in',
-  'sign-up',
-  'sign-out',
-  'verify-email',
-  'forgot-password',
-  'reset-password',
-  'gate',
-  'invite',
-  '__visual__',
-])
+export type SidebarContext = 'guest' | 'global' | 'owner' | 'repo' | 'settings' | 'admin'
 
 type PathContext = 'owner' | 'repo'
 
 function resolveOwnerOrRepoContext(parts: string[]): PathContext | null {
-  if (parts.length < 1 || RESERVED_TOP_LEVEL.has(parts[0]!)) {
+  if (parts.length < 1 || isReservedSlug(parts[0]!)) {
     return null
   }
   if (parts.length === 1) {
