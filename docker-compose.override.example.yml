@@ -19,8 +19,18 @@
 # Full stack (initial bootstrap only):
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 
+# Compose override files REPLACE entire `environment` maps per service — they do not
+# merge with docker-compose.yml. Repeat required base vars from x-api-environment below.
+
 x-api-env: &api-env
   environment:
+    # Required base vars (from docker-compose.yml x-api-environment)
+    ASPNETCORE_ENVIRONMENT: Development
+    ASPNETCORE_URLS: http://+:8080
+    Sql__ConnectionString: "Host=postgres;Port=5432;Database=opengitbase;Username=postgres;Password=postgres"
+    REDIS_URL: "redis://redis:6379"
+    GIT_SSH_ENABLED: "false"
+
     # Local dev clone URLs (production uses https://opengitbase.com from docker-compose.yml)
     Git__PublicBaseUrl: "http://localhost:8089"
 

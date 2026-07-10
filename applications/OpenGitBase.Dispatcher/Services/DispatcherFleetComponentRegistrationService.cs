@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using System.Net;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenGitBase.Dispatcher.Options;
@@ -77,6 +78,6 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
         );
     }
 
-    private static bool IsSuccess(System.Net.HttpStatusCode status) =>
+    private static bool IsSuccess(HttpStatusCode status) =>
         (int)status is >= 200 and < 300;
 }
