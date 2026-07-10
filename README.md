@@ -34,6 +34,7 @@ is no copyleft requirement for qualifying free-tier users.
 
 | Document | Description |
 |----------|-------------|
+| [docs/PROJECT-STATE.md](docs/PROJECT-STATE.md) | Current implementation baseline, architecture, encryption posture |
 | [LICENSE](LICENSE) | Full license terms |
 | [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) | Paid production use |
 | [TRADEMARK.md](TRADEMARK.md) | Brand and fork naming rules |
@@ -135,6 +136,16 @@ docker compose -f docker-compose.yml -f docker-compose.ssh.yml --profile ssh up 
 ```
 
 Set `GIT_SSH_ENABLED=true` on API and dispatchers via `docker-compose.ssh.yml`.
+
+### Production compose
+
+For a production-oriented stack profile (no `Development` environment, no debug email bypass, no published Postgres/Redis ports), use:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Before starting, override all cryptographic secrets and database credentials. The API fails fast in `Production` when committed dev placeholder values are still configured. See [docs/deployment/production-secrets.md](docs/deployment/production-secrets.md).
 
 ### Cloudflare tunnel
 
