@@ -11,6 +11,7 @@ public class InternalNetworkOptions
         "/api/v1/storage-nodes/healthy",
         "/api/v1/storage-nodes/bootstrap",
         "/api/v1/fleet/bootstrap",
+        "/api/v1/internal/fleet-components",
         "/api/v1/internal/repositories/push-validation",
         "/internal/e2e",
     ];

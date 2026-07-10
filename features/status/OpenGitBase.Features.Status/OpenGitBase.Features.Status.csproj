@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenGitBase.Features.Status</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="7.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenGitBase.Features.Status.Contracts\OpenGitBase.Features.Status.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Common\OpenGitBase.Common.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -189,6 +189,18 @@ public class Startup
             Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
                 ?? new StorageNodeOptions()
         );
+        services.Configure<FleetComponentOptions>(Configuration.GetSection("FleetComponent"));
+        services.AddSingleton(
+            sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<FleetComponentOptions>>().Value
+        );
+        if (Environment.IsEnvironment("E2ETest"))
+        {
+            services.PostConfigure<FleetComponentOptions>(options =>
+            {
+                options.SelfRegistrationEnabled = false;
+            });
+        }
+
         var gitOptions =
             Configuration.GetSection("Git").Get<GitOptions>() ?? new GitOptions();
         if (bool.TryParse(Configuration["GIT_SSH_ENABLED"], out var sshEnabledFromEnv))
@@ -262,6 +274,7 @@ public class Startup
 
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
+        services.AddHostedService<ApiFleetComponentRegistrationService>();
         services.AddScoped<Rf1BackfillService>();
         services.AddScoped<Rf4BackfillService>();
         services.AddScoped<RebalanceService>();

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>OpenGitBase.Features.Status.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs\OpenGitBase.Cqrs.csproj" />
+    <ProjectReference Include="..\..\..\common\OpenGitBase.Cqrs.EfCore\OpenGitBase.Cqrs.EfCore.csproj" />
+  </ItemGroup>
+
+</Project>
