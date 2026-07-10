@@ -1,7 +1,11 @@
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+const webRoot = dirname(fileURLToPath(import.meta.url))
+const mockWorkerPath = join(webRoot, 'public/mockServiceWorker.js')
+const mockWorkerBackupPath = join(webRoot, 'public/.mockServiceWorker.js.build-backup')
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -89,4 +93,25 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: '2025-06-21',
+
+  hooks: {
+    'build:before'() {
+      if (process.env.NUXT_PUBLIC_MSW === 'true') {
+        return
+      }
+      if (existsSync(mockWorkerPath)) {
+        copyFileSync(mockWorkerPath, mockWorkerBackupPath)
+        unlinkSync(mockWorkerPath)
+      }
+    },
+    'build:done'() {
+      if (process.env.NUXT_PUBLIC_MSW === 'true') {
+        return
+      }
+      if (existsSync(mockWorkerBackupPath)) {
+        copyFileSync(mockWorkerBackupPath, mockWorkerPath)
+        unlinkSync(mockWorkerBackupPath)
+      }
+    },
+  },
 })

@@ -1,8 +1,9 @@
+import { isMswEnabled } from '~/utils/mswEnabled'
+
 export default defineNuxtPlugin(async () => {
   const config = useRuntimeConfig()
 
-  const mswEnabled = config.public.msw === 'true'
-    || (import.meta.client && window.location.search.includes('msw=1'))
+  const mswEnabled = isMswEnabled(String(config.public.msw))
 
   if (import.meta.client && 'serviceWorker' in navigator && !mswEnabled) {
     const registrations = await navigator.serviceWorker.getRegistrations()

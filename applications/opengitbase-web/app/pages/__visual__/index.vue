@@ -1,6 +1,7 @@
 <script setup lang="ts">
 definePageMeta({
   layout: false,
+  middleware: 'visual-dev-only',
 })
 
 const { instanceName, instanceLogoUrl } = useInstanceBranding()
