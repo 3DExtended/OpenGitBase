@@ -23,6 +23,8 @@ internal static class HttpServerHost
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<DispatcherOptions>>()
             .Value;
 
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
         app.Map(
             "{*path}",
             async context =>

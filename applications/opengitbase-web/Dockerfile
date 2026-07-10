@@ -39,7 +39,12 @@ RUN --mount=type=bind,source=.deploy-patch,target=/repo/.deploy-patch,rw \
 
 FROM caddy:2-alpine AS runtime
 
+RUN apk add --no-cache curl
+
 COPY applications/opengitbase-web/docker/Caddyfile /etc/caddy/Caddyfile
+COPY applications/opengitbase-web/docker/entrypoint.sh /docker/entrypoint.sh
+RUN chmod +x /docker/entrypoint.sh
 COPY --from=build /app/.output/public /srv
 
 EXPOSE 8080
+ENTRYPOINT ["/docker/entrypoint.sh"]

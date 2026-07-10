@@ -10,6 +10,11 @@
 	}
 
 	route {
+		@health path /health
+		handle @health {
+			respond "ok" 200
+		}
+
 		@api path /api /api/*
 		handle @api {
 			uri strip_prefix /api

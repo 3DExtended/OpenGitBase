@@ -157,6 +157,8 @@ internal static class SshSessionRunner
         });
 
         services.AddHttpClient<RepositoryAccessCheckClient>();
+        services.AddHttpClient<FleetComponentRegistrationClient>();
+        services.AddHostedService<DispatcherFleetComponentRegistrationService>();
         services.AddHttpClient<GitHttpProxyService>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<GitSmartHttpPathParser>();

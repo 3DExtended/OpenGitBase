@@ -13,4 +13,10 @@ public class DispatcherOptions
     public string StorageSshUser { get; set; } = "git";
 
     public int StorageSshConnectTimeoutSeconds { get; set; } = 30;
+
+    public bool FleetSelfRegistrationEnabled { get; set; } = true;
+
+    public string? FleetProbeUrl { get; set; }
+
+    public int FleetHeartbeatIntervalSeconds { get; set; } = 30;
 }

@@ -55,11 +55,16 @@ x-web-common: &web-common
     api-2:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
     interval: 10s
     timeout: 5s
     retries: 5
     start_period: 10s
+  environment:
+    FLEET_API_URL: "http://api-lb:8080"
+    FleetComponent__ProbeUrl: "http://127.0.0.1:8080/health"
+    FleetComponent__SelfRegistrationEnabled: "true"
+    FleetComponent__HeartbeatIntervalSeconds: "30"
 
 x-storage-build: &storage-build
   context: ./applications/repo-storage-layer
@@ -106,7 +111,7 @@ x-dispatcher-common: &dispatcher-common
     storage-3:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "pgrep -f 'OpenGitBase.Dispatcher.dll --serve-http' > /dev/null"]
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8082/health >/dev/null || exit 1"]
     interval: 5s
     timeout: 3s
     retries: 5
@@ -215,6 +220,9 @@ services:
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-1"
       Dispatcher__HttpPort: "8082"
+      Dispatcher__FleetSelfRegistrationEnabled: "true"
+      Dispatcher__FleetProbeUrl: "http://127.0.0.1:8082/health"
+      Dispatcher__FleetHeartbeatIntervalSeconds: "30"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
       GIT_SSH_ENABLED: "false"
@@ -228,6 +236,9 @@ services:
       Dispatcher__ApiUrl: "http://api-lb:8080"
       Dispatcher__DispatcherId: "dispatcher-2"
       Dispatcher__HttpPort: "8082"
+      Dispatcher__FleetSelfRegistrationEnabled: "true"
+      Dispatcher__FleetProbeUrl: "http://127.0.0.1:8082/health"
+      Dispatcher__FleetHeartbeatIntervalSeconds: "30"
       Dispatcher__StorageSshPrivateKeyPath: "/run/secrets/dispatcher_storage_ssh"
       Dispatcher__StorageSshUser: "git"
       GIT_SSH_ENABLED: "false"
@@ -288,10 +299,14 @@ services:
   web-1:
     <<: *web-common
     container_name: opengitbase_web_1
+    environment:
+      FleetComponent__InstanceId: web-1
 
   web-2:
     <<: *web-common
     container_name: opengitbase_web_2
+    environment:
+      FleetComponent__InstanceId: web-2
 
   opengitbase_cloudflare_tunnel:
     profiles:
