@@ -8,5 +8,6 @@ public sealed record ReplicaSetPlannerRequest(
     Guid? OwnerOrganizationId = null,
     PlacementPolicy PlacementPolicy = PlacementPolicy.Inherit,
     SelfHostPreference SelfHostPreference = SelfHostPreference.PlatformOnly,
-    long RequiredBytesPerNode = 0
+    long RequiredBytesPerNode = 0,
+    IReadOnlyDictionary<Guid, int>? RepositoryCountsByNodeId = null
 );

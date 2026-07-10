@@ -20,7 +20,12 @@ public static class ReplicaSetPlanner
 
         if (request.OwnerOrganizationId is null)
         {
-            return SelectPlatformDefault(FilterPlatformNodes(nodes));
+            return SelectPlatformDefault(
+                FilterPlatformNodes(nodes),
+                nodes,
+                repoOwnerOrganizationId: null,
+                request
+            );
         }
 
         var orgId = request.OwnerOrganizationId.Value;
@@ -43,16 +48,14 @@ public static class ReplicaSetPlanner
                 node.OwnerOrganizationId is null
                 || node.HostingScope == HostingScope.CrossOrgAllowed
             )
-            .OrderByDescending(node => node.OwnerOrganizationId is null)
-            .ThenByDescending(node => node.FreeBytesAvailable)
-            .ThenBy(node => node.NodeId, StringComparer.Ordinal)
             .ToList();
 
         return tier switch
         {
-            0 => SelectPlatformDefault(platformNodes) ?? SelectPlatformDefault(nodes),
-            1 => SelectTier1(orgNodes, externalEncrypted),
-            2 => SelectTier2(orgNodes, externalEncrypted),
+            0 => SelectPlatformDefault(platformNodes, nodes, orgId, request)
+                ?? SelectPlatformDefault(nodes, nodes, orgId, request),
+            1 => SelectTier1(orgNodes, externalEncrypted, orgId, request),
+            2 => SelectTier2(orgNodes, externalEncrypted, orgId, request),
             3 => SelectTier3(orgNodes),
             _ => null,
         };
@@ -98,15 +101,18 @@ public static class ReplicaSetPlanner
     ) => nodes.Where(node => node.OwnerOrganizationId is null).ToList();
 
     private static ReplicaSetSelection? SelectPlatformDefault(
-        IReadOnlyList<StorageNodeDto> healthyNodes
+        IReadOnlyList<StorageNodeDto> platformNodes,
+        IReadOnlyList<StorageNodeDto> encryptedCandidates,
+        Guid? repoOwnerOrganizationId,
+        ReplicaSetPlannerRequest request
     )
     {
-        if (healthyNodes.Count < RequiredHealthyNodes)
+        if (platformNodes.Count < RequiredHealthyNodes)
         {
             return null;
         }
 
-        var ordered = healthyNodes
+        var ordered = platformNodes
             .OrderByDescending(node => node.FreeBytesAvailable)
             .ThenBy(node => node.NodeId, StringComparer.Ordinal)
             .ToList();
@@ -116,55 +122,98 @@ public static class ReplicaSetPlanner
         var primaryAndRead =
             byNodeId.GetValueOrDefault(PlatformRf4FleetLayout.PrimaryAndReadNodeId) ?? ordered[0];
 
-        var encryptedA = SelectEncryptedNode(
-            ordered,
-            preferredNodeId: PlatformRf4FleetLayout.EncryptedReplicaNodeIdA,
-            excluded: [primaryAndRead.Id]
-        );
-        var encryptedB = SelectEncryptedNode(
-            ordered,
-            preferredNodeId: PlatformRf4FleetLayout.EncryptedReplicaNodeIdB,
-            excluded: [primaryAndRead.Id, encryptedA.Id]
-        );
+        var encryptedA =
+            SelectEncryptedReplica(
+                encryptedCandidates,
+                repoOwnerOrganizationId,
+                request,
+                excluded: [primaryAndRead.Id]
+            )
+            ?? SelectEncryptedNode(
+                ordered,
+                preferredNodeId: PlatformRf4FleetLayout.EncryptedReplicaNodeIdA,
+                excluded: [primaryAndRead.Id]
+            );
+
+        var encryptedB =
+            SelectEncryptedReplica(
+                encryptedCandidates,
+                repoOwnerOrganizationId,
+                request,
+                excluded: [primaryAndRead.Id, encryptedA.Id]
+            )
+            ?? SelectEncryptedNode(
+                ordered,
+                preferredNodeId: PlatformRf4FleetLayout.EncryptedReplicaNodeIdB,
+                excluded: [primaryAndRead.Id, encryptedA.Id]
+            );
 
         return new ReplicaSetSelection(primaryAndRead, primaryAndRead, encryptedA, encryptedB);
     }
 
     private static ReplicaSetSelection? SelectTier1(
         IReadOnlyList<StorageNodeDto> orgNodes,
-        IReadOnlyList<StorageNodeDto> externalEncrypted
+        IReadOnlyList<StorageNodeDto> externalEncrypted,
+        Guid repoOwnerOrganizationId,
+        ReplicaSetPlannerRequest request
     )
     {
-        if (orgNodes.Count < 1 || externalEncrypted.Count < 2)
+        if (orgNodes.Count < 1)
         {
             return null;
         }
 
         var primaryAndRead = orgNodes[0];
-        var encryptedA = SelectExternalEncrypted(externalEncrypted, excluded: [primaryAndRead.Id]);
-        var encryptedB = SelectExternalEncrypted(
+        var encryptedA = SelectEncryptedReplica(
             externalEncrypted,
+            repoOwnerOrganizationId,
+            request,
+            excluded: [primaryAndRead.Id]
+        );
+        if (encryptedA is null)
+        {
+            return null;
+        }
+
+        var encryptedB = SelectEncryptedReplica(
+            externalEncrypted,
+            repoOwnerOrganizationId,
+            request,
             excluded: [primaryAndRead.Id, encryptedA.Id]
         );
+        if (encryptedB is null)
+        {
+            return null;
+        }
+
         return new ReplicaSetSelection(primaryAndRead, primaryAndRead, encryptedA, encryptedB);
     }
 
     private static ReplicaSetSelection? SelectTier2(
         IReadOnlyList<StorageNodeDto> orgNodes,
-        IReadOnlyList<StorageNodeDto> externalEncrypted
+        IReadOnlyList<StorageNodeDto> externalEncrypted,
+        Guid repoOwnerOrganizationId,
+        ReplicaSetPlannerRequest request
     )
     {
-        if (orgNodes.Count < 2 || externalEncrypted.Count < 1)
+        if (orgNodes.Count < 2)
         {
             return null;
         }
 
         var primaryAndRead = orgNodes[0];
         var orgEncrypted = orgNodes[1];
-        var external = SelectExternalEncrypted(
+        var external = SelectEncryptedReplica(
             externalEncrypted,
+            repoOwnerOrganizationId,
+            request,
             excluded: [primaryAndRead.Id, orgEncrypted.Id]
         );
+        if (external is null)
+        {
+            return null;
+        }
+
         return new ReplicaSetSelection(primaryAndRead, primaryAndRead, orgEncrypted, external);
     }
 
@@ -181,21 +230,19 @@ public static class ReplicaSetPlanner
         return new ReplicaSetSelection(primaryAndRead, primaryAndRead, encryptedA, encryptedB);
     }
 
-    private static StorageNodeDto SelectExternalEncrypted(
+    private static StorageNodeDto? SelectEncryptedReplica(
         IReadOnlyList<StorageNodeDto> candidates,
+        Guid? repoOwnerOrganizationId,
+        ReplicaSetPlannerRequest request,
         IReadOnlyCollection<StorageNodeId> excluded
-    )
-    {
-        var preferredPlatform = candidates.FirstOrDefault(node =>
-            node.OwnerOrganizationId is null && !excluded.Contains(node.Id)
+    ) =>
+        EncryptedReplicaPlacementEngine.SelectBest(
+            candidates,
+            repoOwnerOrganizationId,
+            request.RequiredBytesPerNode,
+            excluded,
+            request.RepositoryCountsByNodeId
         );
-        if (preferredPlatform is not null)
-        {
-            return preferredPlatform;
-        }
-
-        return candidates.First(node => !excluded.Contains(node.Id));
-    }
 
     private static StorageNodeDto SelectEncryptedNode(
         IReadOnlyList<StorageNodeDto> ordered,
