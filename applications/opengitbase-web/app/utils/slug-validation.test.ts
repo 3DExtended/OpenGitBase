@@ -7,4 +7,9 @@ describe('slug-validation', () => {
     expect(isReservedSlug('pitch')).toBe(true)
     expect(validateSlug('pitch')).toBe('slug.reserved')
   })
+
+  it('reserves status so it does not collide with /status route', () => {
+    expect(isReservedSlug('status')).toBe(true)
+    expect(validateSlug('status')).toBe('slug.reserved')
+  })
 })

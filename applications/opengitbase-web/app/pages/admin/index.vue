@@ -14,6 +14,13 @@ const sections = computed(() => [
     available: true,
   },
   {
+    title: t('admin.status.title'),
+    description: t('admin.status.description'),
+    to: '/admin/status',
+    icon: 'i-lucide-activity',
+    available: true,
+  },
+  {
     title: t('admin.replication.title'),
     description: t('admin.replication.description'),
     to: '/admin/repositories',

@@ -12,7 +12,57 @@
     "signOut": "Sign out",
     "settings": "Settings",
     "toggleSidebar": "Toggle sidebar",
-    "toggleTheme": "Toggle theme"
+    "toggleTheme": "Toggle theme",
+    "status": "System status"
+  },
+  "footer": {
+    "tagline": "OpenGitBase — self-hosted Git forge",
+    "poweredBy": "Powered by OpenGitBase"
+  },
+  "status": {
+    "title": "System status",
+    "subtitle": "Live health for website, API, Git, storage, and data stores.",
+    "overall": "Overall status",
+    "lastUpdated": "Last updated {time}",
+    "loadError": "Unable to load status",
+    "notAvailable": "—",
+    "noMessage": "—",
+    "noInstances": "No instances registered",
+    "instanceCount": "{count} instances",
+    "adminIncident": "Manage incident",
+    "adminStorage": "Storage fleet",
+    "health": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "unhealthy": "Unhealthy"
+    },
+    "incident": {
+      "info": "Information",
+      "warning": "Warning",
+      "outage": "Outage"
+    },
+    "groups": {
+      "website": "Website",
+      "api": "API",
+      "git": "Git",
+      "storage": "Storage",
+      "dataStores": "Data stores"
+    },
+    "columns": {
+      "instance": "Instance",
+      "status": "Status",
+      "lastChecked": "Last checked",
+      "responseTime": "Response time",
+      "lastSeen": "Last seen",
+      "message": "Message"
+    },
+    "charts": {
+      "uptimeTitle": "90-day uptime",
+      "uptimeSubtitle": "Daily uptime percentage. Toggle groups to overlay component lines.",
+      "stateMixTitle": "Overall state mix",
+      "stateMixSubtitle": "Daily share of healthy, degraded, and unhealthy samples.",
+      "empty": "History will appear after the status aggregator collects samples."
+    }
   },
   "sidebar": {
     "create": "Create",
@@ -46,9 +96,6 @@
     "recentPublic": "Recently updated public repositories",
     "viewAll": "View all",
     "noPublicRepos": "No public repositories yet."
-  },
-  "footer": {
-    "poweredBy": "Powered by OpenGitBase"
   },
   "auth": {
     "fields": {
@@ -559,6 +606,23 @@
     "storage": {
       "title": "Storage fleet",
       "description": "View storage nodes, create enrollments, and manage dispatcher SSH keys."
+    },
+    "status": {
+      "title": "Status & incidents",
+      "description": "Publish operator incident banners on the public status page.",
+      "preview": "View public page",
+      "messageLabel": "Incident message",
+      "messagePlaceholder": "Describe the impact and current state for visitors.",
+      "severityLabel": "Severity",
+      "severity": {
+        "info": "Information",
+        "warning": "Warning",
+        "outage": "Outage"
+      },
+      "save": "Publish banner",
+      "resolve": "Resolve banner",
+      "activeTitle": "Active incident",
+      "error": "Unable to update incident banner"
     },
     "replication": {
       "title": "Repository replication",

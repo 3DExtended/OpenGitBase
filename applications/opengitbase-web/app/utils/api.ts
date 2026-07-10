@@ -1,5 +1,10 @@
 import { normalizeCommentId } from './discussionCommentHash'
 import { normalizeRepositoryMemberRole } from './discussionPermissions'
+import type {
+  PublicStatusHistory,
+  PublicStatusIncident,
+  PublicStatusSnapshot,
+} from './publicStatus'
 
 export interface ApiResult<T> {
   data: T | null
@@ -2364,6 +2369,12 @@ export function createApi(baseUrl: string) {
       },
     },
 
+    status: {
+      get: () => request<PublicStatusSnapshot>('/public/status'),
+      getHistory: (days = 90) =>
+        request<PublicStatusHistory>(`/public/status/history?days=${days}`),
+    },
+
     admin: {
       storageNodes: {
         list: () => request<StorageNodeDto[]>('/admin/storage-nodes'),
@@ -2409,6 +2420,16 @@ export function createApi(baseUrl: string) {
         },
         getRepository: (repositoryId: string) =>
           request<AdminRepositoryReplicationDetailDto>(`/admin/repositories/${repositoryId}/replication`),
+      },
+      status: {
+        getIncident: () => request<PublicStatusIncident | null>('/admin/status/incident'),
+        setIncident: (body: { message: string, severity: string }) =>
+          request<PublicStatusIncident>('/admin/status/incident', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+        resolveIncident: () =>
+          request<null>('/admin/status/incident/resolve', { method: 'POST' }),
       },
     },
   }

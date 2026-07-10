@@ -19,6 +19,7 @@ const navLinks = [
   { labelKey: 'nav.home', to: '/' },
   { labelKey: 'nav.explore', to: '/explore' },
   { labelKey: 'nav.pitch', to: '/pitch' },
+  { labelKey: 'nav.status', to: '/status' },
 ]
 
 function toggleTheme() {

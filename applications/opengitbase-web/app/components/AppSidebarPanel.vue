@@ -59,6 +59,7 @@ const settingsNavItems = computed(() => {
 const adminNavItems = computed(() => [
   { label: t('admin.title'), to: '/admin', icon: 'i-lucide-shield', exact: true },
   { label: t('admin.storage.title'), to: '/admin/storage', icon: 'i-lucide-server' },
+  { label: t('admin.status.title'), to: '/admin/status', icon: 'i-lucide-activity' },
   { label: t('admin.replication.title'), to: '/admin/repositories', icon: 'i-lucide-database-backup' },
 ])
 

@@ -72,5 +72,7 @@ function closeMobileDrawer() {
         </aside>
       </div>
     </Teleport>
+
+    <AppSiteFooter />
   </div>
 </template>
