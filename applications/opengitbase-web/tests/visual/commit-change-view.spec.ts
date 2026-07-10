@@ -136,16 +136,19 @@ async function installCommitRoutes(page: import('@playwright/test').Page) {
   })
 }
 
+test('gallery unified diff fixture', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('ogb-site-gate-unlocked', '1')
+  })
+  await page.goto(`${baseURL}/__visual__/?msw=1`)
+  await page.waitForLoadState('networkidle')
+  await disableAnimations(page)
+  await expect(page.getByTestId('visual-commit-unified-diff')).toHaveScreenshot('visual-commit-unified-diff.png')
+})
+
 test.describe('Commit change view', () => {
   test.beforeEach(async ({ page }) => {
     await blockServiceWorker(page)
-  })
-
-  test('gallery unified diff fixture', async ({ page }) => {
-    await page.goto(`${baseURL}/__visual__/?msw=1`)
-    await page.waitForLoadState('networkidle')
-    await disableAnimations(page)
-    await expect(page.getByTestId('visual-commit-unified-diff')).toHaveScreenshot('visual-commit-unified-diff.png')
   })
 
   test('commit page renders diff', async ({ page }) => {

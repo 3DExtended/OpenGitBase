@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storage_merge import check_mergeability, execute_merge, get_diff, list_commits_since_merge_base
+from storage_merge import check_mergeability, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 
 class StorageMergeTests(unittest.TestCase):
@@ -123,6 +123,11 @@ class StorageMergeTests(unittest.TestCase):
         result = check_mergeability(self.repo_path, self.main_sha, feature_sha)
         self.assertEqual(result["status"], "mergeable")
         self.assertTrue(result["canFastForward"])
+
+    def test_is_ancestor_commit_detects_linear_history(self) -> None:
+        feature_sha = self._create_branch("feature", "feature.txt", "feature\n", "add feature")
+        self.assertTrue(is_ancestor_commit(self.repo_path, self.main_sha, feature_sha))
+        self.assertFalse(is_ancestor_commit(self.repo_path, feature_sha, self.main_sha))
 
     def test_mergeability_conflicting_pair_reports_conflicts(self) -> None:
         feature_sha = self._create_branch("feature", "README.md", "# Feature\n", "feature change")

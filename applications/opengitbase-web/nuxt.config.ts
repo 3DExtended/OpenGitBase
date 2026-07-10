@@ -45,7 +45,11 @@ export default defineNuxtConfig({
 
   css: ['~/assets/main.css'],
 
-  devtools: { enabled: process.env.NUXT_PUBLIC_MSW !== 'true' },
+  devtools: {
+    enabled:
+      process.env.NUXT_PUBLIC_MSW !== 'true'
+      && process.env.NUXT_PUBLIC_DEPLOY_SHA !== 'visual-test',
+  },
 
   runtimeConfig: {
     public: {

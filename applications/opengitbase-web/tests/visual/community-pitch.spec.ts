@@ -43,7 +43,8 @@ test.describe('Community pitch @regression', () => {
     )
   })
 
-  test('header exposes Community nav link on home', async ({ page }) => {
+  test('header exposes Community nav link on home', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'Header nav links are desktop-only')
     await page.route('**/api/account/me', route =>
       route.fulfill({ status: 401, body: '' }),
     )
