@@ -27,6 +27,7 @@ const {
   ownerProfile,
   ownerRepos,
   isOrgMember,
+  isOrgOwner,
   loading,
 } = useSidebarWorkspace()
 
@@ -109,6 +110,37 @@ const repoNavItems = computed(() => {
   return items.filter(item => !item.requiresAuth)
 })
 
+const orgSettingsNavItems = computed(() => {
+  if (
+    ownerProfile.value?.kind !== 'organization'
+    || !ownerSlug.value
+    || !isOrgMember.value
+  ) {
+    return []
+  }
+
+  const owner = ownerSlug.value
+  const items = [
+    {
+      label: t('org.members.title'),
+      to: `/${owner}/members`,
+      icon: 'i-lucide-users',
+      active: route.path === `/${owner}/members`,
+    },
+  ]
+
+  if (isOrgOwner.value) {
+    items.push({
+      label: t('org.storage.nav'),
+      to: `/${owner}/storage`,
+      icon: 'i-lucide-hard-drive',
+      active: route.path === `/${owner}/storage`,
+    })
+  }
+
+  return items
+})
+
 const ownerNavItems = computed(() => {
   if (!ownerSlug.value) {
     return []
@@ -121,15 +153,8 @@ const ownerNavItems = computed(() => {
       icon: 'i-lucide-layout-grid',
       active: route.path === `/${owner}`,
     },
+    ...orgSettingsNavItems.value,
   ]
-  if (ownerProfile.value?.kind === 'organization' && isOrgMember.value) {
-    items.push({
-      label: t('org.members.title'),
-      to: `/${owner}/members`,
-      icon: 'i-lucide-users',
-      active: route.path === `/${owner}/members`,
-    })
-  }
   return items
 })
 
@@ -354,12 +379,31 @@ function navButtonClass(active: boolean): string {
           >
             <span v-if="expanded">{{ item.label }}</span>
           </UButton>
+
+          <template v-if="expanded && orgSettingsNavItems.length">
+            <p class="mb-1 mt-4 px-2 text-xs font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+              {{ t('org.settings') }}
+            </p>
+            <UButton
+              v-for="item in orgSettingsNavItems"
+              :key="item.to"
+              :to="item.to"
+              :icon="item.icon"
+              color="neutral"
+              variant="ghost"
+              block
+              class="justify-start"
+              :class="navButtonClass(item.active)"
+            >
+              {{ item.label }}
+            </UButton>
+          </template>
         </template>
 
         <!-- Owner context -->
         <template v-else-if="context === 'owner'">
           <UButton
-            v-for="item in ownerNavItems"
+            v-for="item in ownerNavItems.slice(0, 1)"
             :key="item.to"
             :to="item.to"
             :icon="item.icon"
@@ -371,6 +415,38 @@ function navButtonClass(active: boolean): string {
           >
             <span v-if="expanded">{{ item.label }}</span>
           </UButton>
+
+          <template v-if="expanded && orgSettingsNavItems.length">
+            <p class="mb-1 mt-4 px-2 text-xs font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+              {{ t('org.settings') }}
+            </p>
+            <UButton
+              v-for="item in orgSettingsNavItems"
+              :key="item.to"
+              :to="item.to"
+              :icon="item.icon"
+              color="neutral"
+              variant="ghost"
+              block
+              class="justify-start"
+              :class="navButtonClass(item.active)"
+            >
+              {{ item.label }}
+            </UButton>
+          </template>
+          <template v-else-if="!expanded && orgSettingsNavItems.length">
+            <UButton
+              v-for="item in orgSettingsNavItems"
+              :key="item.to"
+              :to="item.to"
+              :icon="item.icon"
+              color="neutral"
+              variant="ghost"
+              class="mx-auto"
+              :class="navButtonClass(item.active)"
+              :title="item.label"
+            />
+          </template>
 
           <template v-if="expanded && ownerRepos.length">
             <p class="mb-1 mt-4 px-2 text-xs font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">

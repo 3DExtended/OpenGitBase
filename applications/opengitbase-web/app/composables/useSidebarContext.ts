@@ -4,6 +4,8 @@ export type SidebarContext = 'guest' | 'global' | 'owner' | 'repo' | 'settings' 
 
 type PathContext = 'owner' | 'repo'
 
+const OWNER_SUB_ROUTES = new Set(['members', 'storage'])
+
 function resolveOwnerOrRepoContext(parts: string[]): PathContext | null {
   if (parts.length < 1 || isReservedSlug(parts[0]!)) {
     return null
@@ -11,7 +13,7 @@ function resolveOwnerOrRepoContext(parts: string[]): PathContext | null {
   if (parts.length === 1) {
     return 'owner'
   }
-  if (parts.length === 2 && parts[1] === 'members') {
+  if (parts.length === 2 && OWNER_SUB_ROUTES.has(parts[1]!)) {
     return 'owner'
   }
   if (parts.length >= 2) {

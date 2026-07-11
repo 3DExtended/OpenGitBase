@@ -20,6 +20,7 @@ export function useSidebarWorkspace() {
   const orgs = useState<Organization[]>('sidebarOrgs', () => [])
   const ownerProfile = useState<OwnerProfile | null>('sidebarOwnerProfile', () => null)
   const isOrgMember = useState('sidebarIsOrgMember', () => false)
+  const isOrgOwner = useState('sidebarIsOrgOwner', () => false)
   const workspaceLoaded = useState('sidebarWorkspaceLoaded', () => false)
   const loading = ref(false)
 
@@ -61,12 +62,25 @@ export function useSidebarWorkspace() {
 
     if (result.data?.kind === 'organization' && auth.isAuthenticated) {
       const orgsResult = await api.organizations.list()
-      isOrgMember.value = orgsResult.data?.some(
+      const organization = orgsResult.data?.find(
         org => (org.slug ?? org.name).toLowerCase() === slug.toLowerCase(),
-      ) ?? false
+      )
+      isOrgMember.value = organization != null
+      isOrgOwner.value = false
+
+      if (organization) {
+        const membersResult = await api.organizations.members.list(organization.id)
+        const username = auth.user?.username?.toLowerCase()
+        isOrgOwner.value = membersResult.data?.some(
+          member =>
+            member.role === 1
+            && member.username?.toLowerCase() === username,
+        ) ?? false
+      }
     }
     else {
       isOrgMember.value = false
+      isOrgOwner.value = false
     }
   }
 
@@ -78,6 +92,7 @@ export function useSidebarWorkspace() {
         orgs.value = []
         ownerProfile.value = null
         isOrgMember.value = false
+        isOrgOwner.value = false
         workspaceLoaded.value = false
       }
     },
@@ -109,6 +124,7 @@ export function useSidebarWorkspace() {
     ownerProfile,
     ownerRepos,
     isOrgMember,
+    isOrgOwner,
     loading,
   }
 }

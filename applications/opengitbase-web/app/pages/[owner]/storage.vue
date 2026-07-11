@@ -5,6 +5,7 @@ definePageMeta({ middleware: 'auth' })
 
 const route = useRoute()
 const api = useApi()
+const { t } = useI18n()
 
 const orgSlug = computed(() => String(route.params.owner))
 const organizationId = ref<string | null>(null)
@@ -96,7 +97,7 @@ async function saveSettings() {
     </UButton>
 
     <h1 class="text-2xl font-semibold">
-      Organization storage
+      {{ t('org.storage.title') }}
     </h1>
 
     <UAlert

@@ -247,6 +247,10 @@
       "submit": "Create organization"
     },
     "settings": "Organization settings",
+    "storage": {
+      "title": "Organization storage",
+      "nav": "Storage"
+    },
     "members": {
       "title": "Members",
       "listTitle": "Current members",
