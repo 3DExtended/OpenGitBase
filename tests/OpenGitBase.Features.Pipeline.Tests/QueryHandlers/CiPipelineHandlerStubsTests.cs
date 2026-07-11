@@ -412,8 +412,7 @@ internal sealed class PipelineHandlerTestScope : IAsyncDisposable
 
     public static async Task<PipelineHandlerTestScope> CreateAsync()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider(

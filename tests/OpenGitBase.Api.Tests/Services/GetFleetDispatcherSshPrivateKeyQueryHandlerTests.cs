@@ -1,10 +1,11 @@
-﻿using Microsoft.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.StorageNode;
@@ -18,8 +19,7 @@ public class GetFleetDispatcherSshPrivateKeyQueryHandlerTests
     [Fact]
     public async Task RunQueryAsync_ValidToken_ReturnsKeyOnce()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        await using var connection = SqliteTestConnection.OpenInMemory();
 
         var hasher = new PasswordHasherService();
         var protection = new EmailProtectionService(

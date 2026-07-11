@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -213,8 +213,7 @@ public class AdminRepositoryReplicationControllerTests
         ServiceProvider Provider
     )> CreateControllerAsync()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor

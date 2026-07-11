@@ -11,57 +11,62 @@ using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 
 namespace OpenGitBase.Api.Tests.Base;
 
+[Collection(ApiTestCollection.Name)]
 public abstract class ControllerTestBase
     : IClassFixture<WebApplicationFactory<ApiEntryPoint>>,
         IDisposable
 {
+    private static readonly Lock DatabaseGate = new();
     private readonly SqliteConnection _connection;
     private bool _isDisposed;
 
     protected ControllerTestBase(WebApplicationFactory<ApiEntryPoint> factory)
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
-        _connection.Open();
-
-        Factory = factory.WithWebHostBuilder(builder =>
+        lock (DatabaseGate)
         {
-            builder.UseEnvironment("E2ETest");
-            builder.ConfigureServices(services =>
+            _connection = SqliteTestConnection.OpenInMemory();
+
+            Factory = factory.WithWebHostBuilder(builder =>
             {
-                AuthTestServerConfiguration.ConfigureDatabase(services, _connection);
-                AuthTestServerConfiguration.ConfigureOptions(services);
-                AuthTestServerConfiguration.ConfigureGoogleValidator(services);
+                builder.UseEnvironment("E2ETest");
+                builder.ConfigureServices(services =>
+                {
+                    AuthTestServerConfiguration.ConfigureDatabase(services, _connection);
+                    AuthTestServerConfiguration.ConfigureOptions(services);
+                    AuthTestServerConfiguration.ConfigureGoogleValidator(services);
+                });
             });
-        });
 
-        Client = Factory.CreateClient();
+            Client = Factory.CreateClient();
 
-        using var scope = Factory.Services.CreateScope();
-        var serviceProvider = scope.ServiceProvider;
-        QueryProcessor = serviceProvider.GetRequiredService<IQueryProcessor>();
-        JwtTokenGenerator = serviceProvider.GetRequiredService<IJWTTokenGenerator>();
-        PasswordHasher = serviceProvider.GetRequiredService<IPasswordHasherService>();
-        ContextFactory = serviceProvider.GetRequiredService<
-            IDbContextFactory<OpenGitBaseDbContext>
-        >();
-        Cache = serviceProvider.GetRequiredService<IMemoryCache>();
+            using var scope = Factory.Services.CreateScope();
+            var serviceProvider = scope.ServiceProvider;
+            QueryProcessor = serviceProvider.GetRequiredService<IQueryProcessor>();
+            JwtTokenGenerator = serviceProvider.GetRequiredService<IJWTTokenGenerator>();
+            PasswordHasher = serviceProvider.GetRequiredService<IPasswordHasherService>();
+            ContextFactory = serviceProvider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            Cache = serviceProvider.GetRequiredService<IMemoryCache>();
 
-        using var initScope = Factory.Services.CreateScope();
-        var initProvider = initScope.ServiceProvider;
-        var contextFactory = initProvider.GetRequiredService<
-            IDbContextFactory<OpenGitBaseDbContext>
-        >();
-        using var context = contextFactory.CreateDbContext();
-        context.Database.EnsureCreated();
-        AuthTestServerConfiguration.SeedDefaultStorageNode(
-            contextFactory,
-            initProvider.GetRequiredService<IPasswordHasherService>(),
-            initProvider.GetRequiredService<IEmailProtectionService>()
-        );
+            using var initScope = Factory.Services.CreateScope();
+            var initProvider = initScope.ServiceProvider;
+            var contextFactory = initProvider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            using var context = contextFactory.CreateDbContext();
+            context.Database.EnsureCreated();
+            AuthTestServerConfiguration.SeedDefaultStorageNode(
+                contextFactory,
+                initProvider.GetRequiredService<IPasswordHasherService>(),
+                initProvider.GetRequiredService<IEmailProtectionService>()
+            );
+        }
     }
 
     protected HttpClient Client { get; }

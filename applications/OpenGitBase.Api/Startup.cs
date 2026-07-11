@@ -283,10 +283,14 @@ public class Startup
 
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
-        services.AddHostedService<ApiFleetComponentRegistrationService>();
-        services.AddHostedService<GitPushReceivedConsumer>();
-        services.AddHostedService<JobDispatchCoordinator>();
-        services.AddHostedService<JobTimeoutEnforcerService>();
+        if (!Environment.IsEnvironment("E2ETest"))
+        {
+            services.AddHostedService<ApiFleetComponentRegistrationService>();
+            services.AddHostedService<GitPushReceivedConsumer>();
+            services.AddHostedService<JobDispatchCoordinator>();
+            services.AddHostedService<JobTimeoutEnforcerService>();
+        }
+
         services.Configure<StatusProbeOptions>(Configuration.GetSection("StatusProbe"));
         services.AddSingleton(
             sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StatusProbeOptions>>().Value

@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +7,7 @@ using OpenGitBase.Api;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Cqrs.DependencyInjection;
 using OpenGitBase.Features.Organization.Contracts;
@@ -98,8 +99,7 @@ public class UserDeleteAccountQueryHandlerTests
 
     private static async Task<Fixture> CreateFixtureAsync()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(

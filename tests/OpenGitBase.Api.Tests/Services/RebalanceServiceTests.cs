@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -78,8 +78,7 @@ public class RebalanceServiceTests
             Guid replacementNodeId
         )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
         queryProcessor

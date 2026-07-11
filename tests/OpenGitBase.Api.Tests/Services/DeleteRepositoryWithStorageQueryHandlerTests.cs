@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -109,8 +109,7 @@ public class DeleteRepositoryWithStorageQueryHandlerTests
         IStorageProvisionerClient Provisioner
     )> CreateHandlerAsync(Guid repositoryId, IReadOnlyList<Guid> nodeIds)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
         var provisioner = Substitute.For<IStorageProvisionerClient>();

@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -326,8 +326,8 @@ public class Rf4ReplicationTests
             bool encryptedHealthy
         )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
+
         var services = new ServiceCollection();
         services.AddSingleton(connection);
         services.AddSingleton<IFeatureAssemblyProvider>(
@@ -387,8 +387,8 @@ public class Rf4ReplicationTests
             IStorageProvisionerClient? provisioner = null
         )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
+
         var queryProcessor = configureProcessor ?? Substitute.For<IQueryProcessor>();
         if (configureProcessor is null)
         {

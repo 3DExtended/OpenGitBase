@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -123,8 +123,7 @@ public class PromotePrimaryReplicaQueryHandlerTests
             long readWatermark
         )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton(connection);
@@ -230,8 +229,7 @@ public class PromotePrimaryReplicaQueryHandlerTests
             long replicationEpoch = 1
         )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton(connection);

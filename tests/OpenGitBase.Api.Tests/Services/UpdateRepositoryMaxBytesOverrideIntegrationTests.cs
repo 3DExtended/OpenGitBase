@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -52,8 +52,7 @@ public class UpdateRepositoryMaxBytesOverrideIntegrationTests
     private static async Task<(UpdateRepositoryMaxBytesOverrideQueryHandler Handler, ServiceProvider Provider)>
         CreateIntegrationHandlerAsync(Guid orgId, Guid repositoryId)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(

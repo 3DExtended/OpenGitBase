@@ -1,0 +1,3 @@
+namespace OpenGitBase.Features.StorageNode.Tests.QueryHandlers;
+
+public class UpdateStorageNodeCapacityQueryHandlerTests;

@@ -1,0 +1,3 @@
+namespace OpenGitBase.Features.Organization.Tests.QueryHandlers;
+
+public class GetOrganizationStorageQuotaQueryHandlerTests;

@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,6 +10,7 @@ using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Users.Entities;
@@ -136,8 +137,7 @@ public class AdminUserSeedServiceTests
 
     private static async Task<Fixture> CreateFixtureAsync(AdminSeedOptions options)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(

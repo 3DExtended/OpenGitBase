@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -186,8 +186,7 @@ public class UpdateRepositoryMaxBytesOverrideQueryHandlerTests
         IRepositoryByteOverrideService ByteOverrideService
     )> CreateHandlerAsync(Guid repositoryId, long? existingOverride = null)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(

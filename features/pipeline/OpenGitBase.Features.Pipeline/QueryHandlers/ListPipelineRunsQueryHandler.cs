@@ -31,9 +31,9 @@ public sealed class ListPipelineRunsQueryHandler
         var runs = await context
             .Set<PipelineRunEntity>()
             .Where(entity => entity.RepositoryId == query.RepositoryId)
-            .OrderByDescending(entity => entity.CreatedAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        runs = runs.OrderByDescending(entity => entity.CreatedAt).ToList();
         return Option.From((IReadOnlyList<PipelineRunDto>)runs.Select(_mapper.Map<PipelineRunDto>).ToList());
     }
 }

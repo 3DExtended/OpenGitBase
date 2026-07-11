@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -50,8 +50,7 @@ public class CreateRepositoryWithStorageQueryHandlerTests
     [Fact]
     public async Task RunQueryAsync_ProvisionsAllThreeNodesAndPersistsReplicaRows()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        await using var connection = SqliteTestConnection.OpenInMemory();
 
         var nodes = CreateNodes(3);
         var queryProcessor = Substitute.For<IQueryProcessor>();
@@ -214,8 +213,8 @@ public class CreateRepositoryWithStorageQueryHandlerTests
         IStorageProvisionerClient provisioner
     )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        connection.Open();
+        var connection = SqliteTestConnection.OpenInMemory();
+
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([typeof(RepositoryMapsterConfig).Assembly])

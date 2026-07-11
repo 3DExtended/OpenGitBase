@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -55,8 +55,7 @@ public class Rf1BackfillServiceTests
         IReadOnlyList<Guid> healthyNodeIds
     )
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var connection = SqliteTestConnection.OpenInMemory();
 
         var queryProcessor = Substitute.For<IQueryProcessor>();
         var healthyNodes = healthyNodeIds

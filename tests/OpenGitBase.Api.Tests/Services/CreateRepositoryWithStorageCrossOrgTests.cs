@@ -1,4 +1,4 @@
-﻿using Mapster;
+using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -23,8 +23,7 @@ public class CreateRepositoryWithStorageCrossOrgTests
     [Fact]
     public async Task RunQueryAsync_OrgRepo_PersistsCrossOrgEncryptedReplicas()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        await using var connection = SqliteTestConnection.OpenInMemory();
 
         var orgA = Guid.NewGuid();
         var orgB = Guid.NewGuid();

@@ -28,14 +28,16 @@ public sealed class JobDispatchCoordinator : BackgroundService
             await using var context = await contextFactory
                 .CreateDbContextAsync(stoppingToken)
                 .ConfigureAwait(false);
-            var queuedJobIds = await context
+            var queuedJobs = await context
                 .Set<PipelineJobEntity>()
                 .Where(entity => entity.Status == PipelineJobStatus.Queued)
-                .OrderBy(entity => entity.CreatedAt)
-                .Select(entity => entity.Id)
                 .Take(25)
                 .ToListAsync(stoppingToken)
                 .ConfigureAwait(false);
+            var queuedJobIds = queuedJobs
+                .OrderBy(entity => entity.CreatedAt)
+                .Select(entity => entity.Id)
+                .ToList();
 
             foreach (var jobId in queuedJobIds)
             {

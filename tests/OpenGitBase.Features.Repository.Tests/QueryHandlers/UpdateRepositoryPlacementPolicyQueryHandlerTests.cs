@@ -1,0 +1,3 @@
+namespace OpenGitBase.Features.Repository.Tests.QueryHandlers;
+
+public class UpdateRepositoryPlacementPolicyQueryHandlerTests;

@@ -21,8 +21,7 @@ public sealed class InMemoryFeatureTestScope<TDbContext, TMapsterConfig> : IAsyn
         params Assembly[] additionalConfigurationAssemblies
     )
     {
-        _connection = new SqliteConnection("Data Source=:memory:");
-        _connection.Open();
+        _connection = SqliteTestConnection.OpenInMemory();
 
         var assemblies = new List<Assembly> { handlerAssembly };
         assemblies.AddRange(additionalConfigurationAssemblies);
