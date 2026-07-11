@@ -55,6 +55,19 @@ async function mockAuthenticatedOrgApis(page: import('@playwright/test').Page) {
       }),
     }),
   )
+  await page.route('**/api/public/owners/opengitbase', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        slug: 'opengitbase',
+        name: 'OpenGitBase',
+        kind: 'organization',
+        bio: 'Official org.',
+        repositories: [],
+      }),
+    }),
+  )
 }
 
 test.beforeEach(async ({ page }) => {
@@ -68,6 +81,39 @@ test('org sidebar shows members when org display name differs from slug', async 
   await page.goto('/acme-corp')
   await page.waitForLoadState('networkidle')
   await expect(page.getByRole('link', { name: 'Sign in' })).toHaveCount(0)
+
+  const sidebar = page.getByTestId('sidebar-panel')
+  await expect(sidebar).toBeVisible()
+  await expect(sidebar.getByRole('link', { name: 'Members' })).toBeVisible()
+})
+
+test('reserved seeded org slug opengitbase uses org sidebar', async ({ page }) => {
+  await mockAuthenticatedOrgApis(page)
+  await page.route('**/api/organization', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: '44444444-4444-4444-4444-444444444444',
+        name: 'OpenGitBase',
+        slug: 'opengitbase',
+      }]),
+    }),
+  )
+  await page.route('**/api/organization/by-slug/opengitbase', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: '44444444-4444-4444-4444-444444444444',
+        name: 'OpenGitBase',
+        slug: 'opengitbase',
+      }),
+    }),
+  )
+
+  await page.goto('/opengitbase')
+  await page.waitForLoadState('networkidle')
 
   const sidebar = page.getByTestId('sidebar-panel')
   await expect(sidebar).toBeVisible()

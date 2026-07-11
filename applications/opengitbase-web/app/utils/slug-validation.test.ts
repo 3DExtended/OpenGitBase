@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isReservedSlug, validateSlug } from './slug-validation'
+import { isReservedSlug, isStaticAppRouteSegment, validateSlug } from './slug-validation'
 
 const RESERVED_WEB_ROUTES = [
   '__visual__',
@@ -38,5 +38,15 @@ describe('slug-validation', () => {
 
   it('allows normal usernames', () => {
     expect(validateSlug('validuser')).toBeNull()
+  })
+
+  it('reserves opengitbase for new slug creation', () => {
+    expect(isReservedSlug('opengitbase')).toBe(true)
+    expect(validateSlug('opengitbase')).toBe('slug.reserved')
+  })
+
+  it('treats opengitbase as a valid owner route segment for sidebar context', () => {
+    expect(isStaticAppRouteSegment('opengitbase')).toBe(false)
+    expect(isStaticAppRouteSegment('explore')).toBe(true)
   })
 })

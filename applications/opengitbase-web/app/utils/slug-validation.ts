@@ -29,6 +29,15 @@ export function isReservedSlug(slug: string): boolean {
   return RESERVED_SLUGS.has(slug.trim().toLowerCase())
 }
 
+/** First path segments that map to app pages, not owner/org profiles. */
+const STATIC_APP_ROUTE_SEGMENTS = new Set(
+  [...RESERVED_SLUGS].filter(slug => slug !== 'opengitbase'),
+)
+
+export function isStaticAppRouteSegment(segment: string): boolean {
+  return STATIC_APP_ROUTE_SEGMENTS.has(segment.trim().toLowerCase())
+}
+
 export function validateSlug(slug: string): string | null {
   const trimmed = slug.trim()
   if (!trimmed) {

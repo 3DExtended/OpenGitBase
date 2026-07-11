@@ -1,4 +1,4 @@
-import { isReservedSlug } from '~/utils/slug-validation'
+import { isStaticAppRouteSegment } from '~/utils/slug-validation'
 
 export type SidebarContext = 'guest' | 'global' | 'owner' | 'repo' | 'settings' | 'admin'
 
@@ -7,7 +7,7 @@ type PathContext = 'owner' | 'repo'
 const OWNER_SUB_ROUTES = new Set(['members', 'storage'])
 
 function resolveOwnerOrRepoContext(parts: string[]): PathContext | null {
-  if (parts.length < 1 || isReservedSlug(parts[0]!)) {
+  if (parts.length < 1 || isStaticAppRouteSegment(parts[0]!)) {
     return null
   }
   if (parts.length === 1) {
