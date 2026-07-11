@@ -163,11 +163,15 @@ public sealed class StatusAggregatorService
                 continue;
             }
 
+            var probeUrl = FleetProbeUrlNormalizer.Normalize(
+                component.InstanceId,
+                component.ProbeUrl
+            );
             instances.Add(
                 await _probeEngine
                     .ProbeHttpAsync(
                         component.InstanceId,
-                        component.ProbeUrl,
+                        probeUrl,
                         _options.TimeoutMs,
                         _options.SlowThresholdMs,
                         cancellationToken

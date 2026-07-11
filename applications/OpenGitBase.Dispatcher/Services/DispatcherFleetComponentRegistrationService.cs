@@ -31,9 +31,7 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
         }
 
         var instanceId = _options.DispatcherId;
-        var probeUrl =
-            _options.FleetProbeUrl
-            ?? $"http://{instanceId}:{_options.HttpPort}/health";
+        var probeUrl = ResolveProbeUrl(instanceId);
 
         await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
 
@@ -81,4 +79,19 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
 
     private static bool IsSuccess(HttpStatusCode status) =>
         (int)status is >= 200 and < 300;
+
+    private string ResolveProbeUrl(string instanceId)
+    {
+        var configured = _options.FleetProbeUrl?.Trim();
+        if (
+            !string.IsNullOrWhiteSpace(configured)
+            && !configured.Contains("127.0.0.1", StringComparison.Ordinal)
+            && !configured.Contains("localhost", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return configured;
+        }
+
+        return $"http://{instanceId}:{_options.HttpPort}/health";
+    }
 }

@@ -54,6 +54,37 @@ public class RegisterFleetComponentQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_NormalizesLocalhostProbeUrlToDockerDns()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        await using var provider = CreateProvider(connection);
+        await using var scope = provider.CreateAsyncScope();
+        await EnsureCreatedAsync(scope);
+
+        var handler = scope.ServiceProvider.GetRequiredService<RegisterFleetComponentQueryHandler>();
+        await handler.RunQueryAsync(
+            new RegisterFleetComponentQuery
+            {
+                ComponentType = FleetComponentType.Git,
+                InstanceId = "dispatcher-1",
+                ProbeUrl = "http://127.0.0.1:8082/health",
+            },
+            CancellationToken.None
+        );
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var entity = await context
+            .Set<Entities.FleetComponentEntity>()
+            .SingleAsync(component => component.InstanceId == "dispatcher-1");
+        Assert.Equal("http://dispatcher-1:8082/health", entity.ProbeUrl);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_ReRegistrationUpdatesProbeUrl()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

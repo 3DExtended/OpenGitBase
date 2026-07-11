@@ -3,7 +3,10 @@ set -eu
 
 API_URL="${FLEET_API_URL:-http://api-lb:8080}"
 INSTANCE_ID="${FleetComponent__InstanceId:-${HOSTNAME:-web}}"
-PROBE_URL="${FleetComponent__ProbeUrl:-http://${INSTANCE_ID}:8080/health}"
+PROBE_URL="${FleetComponent__ProbeUrl:-}"
+if [ -z "${PROBE_URL}" ] || echo "${PROBE_URL}" | grep -qE '127\.0\.0\.1|localhost'; then
+  PROBE_URL="http://${INSTANCE_ID}:8080/health"
+fi
 HEARTBEAT_INTERVAL="${FleetComponent__HeartbeatIntervalSeconds:-30}"
 
 register_component() {

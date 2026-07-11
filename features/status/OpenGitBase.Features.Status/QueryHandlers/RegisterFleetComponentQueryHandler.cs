@@ -5,6 +5,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Status.Contracts;
 using OpenGitBase.Features.Status.Entities;
+using OpenGitBase.Features.Status.Services;
 
 namespace OpenGitBase.Features.Status.QueryHandlers;
 
@@ -48,6 +49,7 @@ public sealed class RegisterFleetComponentQueryHandler
             )
             .ConfigureAwait(false);
 
+        var probeUrl = FleetProbeUrlNormalizer.Normalize(instanceId, query.ProbeUrl);
         var now = DateTimeOffset.UtcNow;
         if (existing is null)
         {
@@ -56,7 +58,7 @@ public sealed class RegisterFleetComponentQueryHandler
                 Id = Guid.NewGuid(),
                 ComponentType = query.ComponentType,
                 InstanceId = instanceId,
-                ProbeUrl = query.ProbeUrl.Trim(),
+                ProbeUrl = probeUrl,
                 Version = string.IsNullOrWhiteSpace(query.Version) ? null : query.Version.Trim(),
                 RegisteredAt = now,
                 LastHeartbeatAt = now,
@@ -66,7 +68,7 @@ public sealed class RegisterFleetComponentQueryHandler
         }
         else
         {
-            existing.ProbeUrl = query.ProbeUrl.Trim();
+            existing.ProbeUrl = probeUrl;
             existing.Version = string.IsNullOrWhiteSpace(query.Version) ? null : query.Version.Trim();
             existing.LastHeartbeatAt = now;
             existing.IsHealthy = true;
