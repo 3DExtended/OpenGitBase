@@ -57,16 +57,27 @@ export function useSidebarWorkspace() {
   }
 
   async function loadOwnerProfile(slug: string): Promise<void> {
+    isOrgMember.value = false
+    isOrgOwner.value = false
+
     const result = await api.discovery.getProfile(slug)
     ownerProfile.value = result.data
 
     if (result.data?.kind === 'organization' && auth.isAuthenticated) {
       const orgsResult = await api.organizations.list()
-      const organization = orgsResult.data?.find(
-        org => (org.slug ?? org.name).toLowerCase() === slug.toLowerCase(),
+      const normalizedSlug = slug.toLowerCase()
+      let organization = orgsResult.data?.find(
+        org => (org.slug ?? org.name).toLowerCase() === normalizedSlug,
       )
+
+      if (!organization) {
+        const bySlug = await api.organizations.getBySlug(slug)
+        if (bySlug.data) {
+          organization = orgsResult.data?.find(org => org.id === bySlug.data!.id) ?? null
+        }
+      }
+
       isOrgMember.value = organization != null
-      isOrgOwner.value = false
 
       if (organization) {
         const membersResult = await api.organizations.members.list(organization.id)
@@ -77,10 +88,6 @@ export function useSidebarWorkspace() {
             && member.username?.toLowerCase() === username,
         ) ?? false
       }
-    }
-    else {
-      isOrgMember.value = false
-      isOrgOwner.value = false
     }
   }
 

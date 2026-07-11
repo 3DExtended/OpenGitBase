@@ -31,7 +31,7 @@ const mockRepos = [
 const mockOrgs = [
   {
     id: '44444444-4444-4444-4444-444444444444',
-    name: 'acme-corp',
+    name: 'Acme Corp',
     slug: 'acme-corp',
   },
 ]
@@ -178,7 +178,7 @@ export const handlers = [
     return HttpResponse.json(mockRepos.filter(r => !r.isPrivate))
   }),
 
-  http.get('/api/profile/:owner', ({ params }) => {
+  http.get('/api/public/owners/:owner', ({ params }) => {
     const owner = String(params.owner)
     if (owner === 'acme-corp') {
       return HttpResponse.json({
