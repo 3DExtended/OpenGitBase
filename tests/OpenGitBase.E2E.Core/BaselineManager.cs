@@ -94,7 +94,7 @@ public sealed class BaselineManager : IBaselineContext
 
     public async Task AssertMatchesCommittedAsync(CancellationToken cancellationToken = default)
     {
-        await FinalizeOperationsAsync(cancellationToken).ConfigureAwait(false);
+        await FinalizeOperationsAsync().ConfigureAwait(false);
         var baselineRoot = Path.Combine(E2eEnvironment.BaselinesRoot, _baselineRelativePath);
         foreach (var (relativePath, actual) in _capturedFiles)
         {
@@ -125,7 +125,7 @@ public sealed class BaselineManager : IBaselineContext
 
     public async Task UpdateCommittedAsync(CancellationToken cancellationToken = default)
     {
-        await FinalizeOperationsAsync(cancellationToken).ConfigureAwait(false);
+        await FinalizeOperationsAsync().ConfigureAwait(false);
         var baselineRoot = Path.Combine(E2eEnvironment.BaselinesRoot, _baselineRelativePath);
         Directory.CreateDirectory(baselineRoot);
         foreach (var (relativePath, content) in _capturedFiles)
@@ -136,7 +136,7 @@ public sealed class BaselineManager : IBaselineContext
         }
     }
 
-    private Task FinalizeOperationsAsync(CancellationToken cancellationToken)
+    private Task FinalizeOperationsAsync()
     {
         _capturedFiles["operations.json"] = _transcript.SerializeNormalized(_normalizer);
         return Task.CompletedTask;

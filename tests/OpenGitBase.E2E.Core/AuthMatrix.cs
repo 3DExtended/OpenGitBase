@@ -54,13 +54,13 @@ public sealed class AuthMatrixContext
 
 public static class AuthMatrixRunner
 {
-    public static async Task<HttpCapture> ExecuteAsync(
+    public static Task<HttpCapture> ExecuteAsync(
         AuthMatrixCase matrixCase,
         AuthMatrixContext context,
         CancellationToken cancellationToken = default)
     {
         var client = context.ResolveClient(matrixCase.Actor);
-        return await client.SendAsync(matrixCase.Method, matrixCase.RelativeUrl, matrixCase.Body, cancellationToken)
-            .ConfigureAwait(false);
+        return client.SendAsync(matrixCase.Method, matrixCase.RelativeUrl, matrixCase.Body, cancellationToken)
+;
     }
 }

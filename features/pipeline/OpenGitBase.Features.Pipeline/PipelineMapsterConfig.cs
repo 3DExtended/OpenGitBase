@@ -27,6 +27,7 @@ public class PipelineMapsterConfig : IRegister
             .NewConfig<PipelineJobEntity, PipelineJobDto>()
             .Map(dest => dest.Id, src => PipelineJobId.From(src.Id))
             .Map(dest => dest.RunId, src => PipelineRunId.From(src.RunId));
+        config.NewConfig<PipelineJobLogEntity, PipelineJobLogDto>();
         config
             .NewConfig<BaseImageCatalogEntity, BaseImageCatalogEntryDto>()
             .Map(dest => dest.Id, src => BaseImageCatalogEntryId.From(src.Id));

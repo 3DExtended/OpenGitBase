@@ -9,4 +9,8 @@ public sealed class UpdatePipelineJobStatusQuery : IQuery<PipelineJobDto, Update
     public PipelineJobStatus Status { get; set; }
 
     public string Message { get; set; } = string.Empty;
+
+    public string? LogSection { get; set; }
+
+    public IReadOnlyList<string> LogLines { get; set; } = [];
 }

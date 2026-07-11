@@ -78,9 +78,9 @@ public static class E2eScenarioHelpers
         return doc.RootElement.GetProperty("number").GetInt32().ToString();
     }
 
-    public static async Task WaitForStorageProvisioningAsync(CancellationToken cancellationToken = default)
+    public static Task WaitForStorageProvisioningAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+        return Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
     }
 
     public static string ExtractUserIdFromJwt(string jwt)

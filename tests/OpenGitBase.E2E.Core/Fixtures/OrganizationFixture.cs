@@ -38,16 +38,16 @@ public sealed class OrganizationFixture
         return new OrganizationSeed(organizationId, slug, name);
     }
 
-    public async Task AddMemberAsync(
+    public Task AddMemberAsync(
         AuthenticatedClient owner,
         string organizationId,
         string memberUsername,
         CancellationToken cancellationToken = default)
     {
         _transcript.Describe($"Add organization member {memberUsername}");
-        await owner.Client.PostAsync(
+        return owner.Client.PostAsync(
             $"/organization/{organizationId}/members",
             new { identifier = memberUsername },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 }

@@ -60,6 +60,38 @@ public sealed class UpdatePipelineJobStatusQueryHandler
                 }
             );
 
+        var normalizedLogLines = query
+            .LogLines.Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => line.TrimEnd('\r', '\n'))
+            .Where(line => line.Length > 0)
+            .ToList();
+        if (normalizedLogLines.Count == 0 && !string.IsNullOrWhiteSpace(query.Message))
+        {
+            normalizedLogLines.Add(query.Message.Trim());
+        }
+
+        if (normalizedLogLines.Count > 0)
+        {
+            var section = string.IsNullOrWhiteSpace(query.LogSection)
+                ? "script"
+                : query.LogSection.Trim();
+            var timestamp = DateTimeOffset.UtcNow;
+            foreach (var line in normalizedLogLines)
+            {
+                context.Set<PipelineJobLogEntity>()
+                    .Add(
+                        new PipelineJobLogEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            JobId = job.Id,
+                            Section = section,
+                            Line = line.Length <= 4000 ? line : line[..4000],
+                            Timestamp = timestamp,
+                        }
+                    );
+            }
+        }
+
         if (query.Status is PipelineJobStatus.Passed or PipelineJobStatus.Failed or PipelineJobStatus.Cancelled)
         {
             var identity = await context

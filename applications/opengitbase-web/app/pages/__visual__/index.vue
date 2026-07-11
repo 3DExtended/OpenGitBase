@@ -266,6 +266,33 @@ function toggleTheme() {
     </section>
 
     <section
+      class="mt-10 max-w-4xl space-y-4"
+      data-testid="visual-pipelines"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Pipelines
+      </h2>
+      <UCard>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between gap-3 rounded border p-3" style="border-color: var(--ogb-border);">
+            <div>
+              <p class="font-medium">refs/heads/main</p>
+              <p class="font-mono text-xs text-[var(--ogb-text-muted)]">abc123def456</p>
+            </div>
+            <CollaborationStatusBadge label="Passed" color="success" />
+          </div>
+          <div class="rounded border p-3 font-mono text-xs" style="border-color: var(--ogb-border); background-color: var(--ogb-bg);">
+            [workspace] Workspace prepared at /tmp/opengitbase-agent/run-1/repo
+            <br>
+            [script] Running test suite...
+            <br>
+            [script] All tests passed.
+          </div>
+        </div>
+      </UCard>
+    </section>
+
+    <section
       class="mt-10 max-w-3xl space-y-4"
       data-testid="visual-merge-request-banner"
     >

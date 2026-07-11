@@ -467,6 +467,35 @@ export interface RepositoryCommit {
   replicationLag: RepositoryReplicationLag | null
 }
 
+export type PipelineRunStatus = 'Queued' | 'Running' | 'Passed' | 'Failed' | 'Cancelled'
+export type PipelineJobStatus = PipelineRunStatus | 'Blocked'
+
+export interface PipelineJobLog {
+  section: string
+  line: string
+  timestamp: string
+}
+
+export interface PipelineJob {
+  id: string
+  runId: string
+  name: string
+  stage: string
+  runsOn: string
+  status: PipelineJobStatus
+  createdAt: string
+}
+
+export interface PipelineRun {
+  id: string
+  repositoryId: string
+  ref: string
+  afterSha: string
+  status: PipelineRunStatus
+  createdAt: string
+  jobs: PipelineJob[]
+}
+
 export interface MergeRequestDiscussionLink {
   discussionNumber: number
   relationshipType: MergeRequestLinkType
@@ -996,6 +1025,72 @@ function normalizeRepositoryCommit(raw: Record<string, unknown>): RepositoryComm
       }
     }),
     replicationLag: normalizeReplicationLag(raw.replicationLag),
+  }
+}
+
+const PIPELINE_RUN_STATUS_MAP: Record<number, PipelineRunStatus> = {
+  0: 'Queued',
+  1: 'Running',
+  2: 'Passed',
+  3: 'Failed',
+  4: 'Cancelled',
+}
+
+const PIPELINE_JOB_STATUS_MAP: Record<number, PipelineJobStatus> = {
+  0: 'Queued',
+  1: 'Running',
+  2: 'Passed',
+  3: 'Failed',
+  4: 'Cancelled',
+  5: 'Blocked',
+}
+
+function normalizePipelineRunStatus(raw: unknown): PipelineRunStatus {
+  if (typeof raw === 'string' && ['Queued', 'Running', 'Passed', 'Failed', 'Cancelled'].includes(raw)) {
+    return raw as PipelineRunStatus
+  }
+  return PIPELINE_RUN_STATUS_MAP[Number(raw)] ?? 'Queued'
+}
+
+function normalizePipelineJobStatus(raw: unknown): PipelineJobStatus {
+  if (typeof raw === 'string' && ['Queued', 'Running', 'Passed', 'Failed', 'Cancelled', 'Blocked'].includes(raw)) {
+    return raw as PipelineJobStatus
+  }
+  return PIPELINE_JOB_STATUS_MAP[Number(raw)] ?? 'Queued'
+}
+
+function normalizePipelineJob(raw: Record<string, unknown>): PipelineJob {
+  return {
+    id: normalizeId(raw.id),
+    runId: normalizeId(raw.runId),
+    name: String(raw.name ?? ''),
+    stage: String(raw.stage ?? ''),
+    runsOn: String(raw.runsOn ?? ''),
+    status: normalizePipelineJobStatus(raw.status),
+    createdAt: String(raw.createdAt ?? ''),
+  }
+}
+
+function normalizePipelineRun(raw: Record<string, unknown>): PipelineRun {
+  const jobs = Array.isArray(raw.jobs)
+    ? (raw.jobs as Record<string, unknown>[]).map(normalizePipelineJob)
+    : []
+  return {
+    id: normalizeId(raw.id),
+    repositoryId: normalizeId(raw.repositoryId),
+    ref: String(raw.ref ?? ''),
+    afterSha: String(raw.afterSha ?? ''),
+    status: normalizePipelineRunStatus(raw.status),
+    createdAt: String(raw.createdAt ?? ''),
+    jobs,
+  }
+}
+
+function normalizePipelineJobLog(raw: Record<string, unknown>): PipelineJobLog {
+  return {
+    section: String(raw.section ?? 'script'),
+    line: String(raw.line ?? ''),
+    timestamp: String(raw.timestamp ?? ''),
   }
 }
 
@@ -1871,6 +1966,50 @@ export function createApi(baseUrl: string) {
         return {
           ...result,
           data: result.data ? normalizeRepositoryCommit(result.data) : null,
+        }
+      },
+    },
+
+    pipelines: {
+      list: async (owner: string, slug: string) => {
+        const repoResult = await request<Record<string, unknown>>(
+          `/repository/by-slug/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}`,
+        )
+        if (!repoResult.data) {
+          return { ...repoResult, data: null } satisfies ApiResult<PipelineRun[]>
+        }
+
+        const repositoryId = normalizeId(repoResult.data.id)
+        const result = await request<Record<string, unknown>[]>(`/repository/${repositoryId}/pipelines`)
+        return {
+          ...result,
+          data: result.data?.map(normalizePipelineRun) ?? null,
+        }
+      },
+
+      getRun: async (runId: string) => {
+        const result = await request<Record<string, unknown>>(`/pipeline/runs/${encodeURIComponent(runId)}`)
+        return {
+          ...result,
+          data: result.data ? normalizePipelineRun(result.data) : null,
+        }
+      },
+
+      getJobLogs: async (jobId: string) => {
+        const result = await request<Record<string, unknown>[]>(`/pipeline/jobs/${encodeURIComponent(jobId)}/logs`)
+        return {
+          ...result,
+          data: result.data?.map(normalizePipelineJobLog) ?? null,
+        }
+      },
+
+      cancelJob: async (jobId: string) => {
+        const result = await request<Record<string, unknown>>(`/pipeline/jobs/${encodeURIComponent(jobId)}/cancel`, {
+          method: 'POST',
+        })
+        return {
+          ...result,
+          data: result.data ? normalizePipelineJob(result.data) : null,
         }
       },
     },

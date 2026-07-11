@@ -43,7 +43,7 @@ namespace OpenGitBase.Common.Migrations
                 table: "merge_requests",
                 type: "uuid",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: Guid.Empty);
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsDraft",
@@ -64,7 +64,7 @@ namespace OpenGitBase.Common.Migrations
                 table: "merge_requests",
                 type: "uuid",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: Guid.Empty);
 
             migrationBuilder.AddColumn<string>(
                 name: "SourceHeadSha",

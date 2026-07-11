@@ -39,7 +39,7 @@ internal static class MergeRequestProjection
                 cancellationToken
             );
 
-    public static async Task<bool> HasActivePairAsync(
+    public static Task<bool> HasActivePairAsync(
         OpenGitBaseDbContext context,
         Guid repositoryId,
         string sourceRef,
@@ -54,7 +54,7 @@ internal static class MergeRequestProjection
             (int)MergeRequestStatus.Approved,
         };
 
-        return await context
+        return context
             .Set<MergeRequestEntity>()
             .AnyAsync(
                 entity =>
@@ -64,7 +64,7 @@ internal static class MergeRequestProjection
                     && activeStatuses.Contains(entity.Status),
                 cancellationToken
             )
-            .ConfigureAwait(false);
+;
     }
 
     public static async Task<IReadOnlyDictionary<Guid, string>> ResolveUsernamesAsync(

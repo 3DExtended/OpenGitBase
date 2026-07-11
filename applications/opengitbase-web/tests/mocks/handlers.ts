@@ -117,6 +117,37 @@ const mockDiscussionDetail = {
   ],
 }
 
+const mockPipelineRuns = [
+  {
+    id: '99999999-0000-0000-0000-000000000001',
+    repositoryId: '11111111-1111-1111-1111-111111111111',
+    ref: 'refs/heads/main',
+    afterSha: 'abc123def4567890abcdef1234567890abcdef12',
+    status: 'Passed',
+    createdAt: '2026-07-10T10:00:00.000Z',
+    jobs: [
+      {
+        id: '99999999-0000-0000-0000-000000000011',
+        runId: '99999999-0000-0000-0000-000000000001',
+        name: 'build',
+        stage: 'build',
+        runsOn: 'ogb-hosted',
+        status: 'Passed',
+        createdAt: '2026-07-10T10:00:05.000Z',
+      },
+      {
+        id: '99999999-0000-0000-0000-000000000012',
+        runId: '99999999-0000-0000-0000-000000000001',
+        name: 'test',
+        stage: 'test',
+        runsOn: 'ogb-hosted',
+        status: 'Passed',
+        createdAt: '2026-07-10T10:00:20.000Z',
+      },
+    ],
+  },
+]
+
 export const handlers = [
   http.get('/api/account/me', () => {
     return HttpResponse.json(mockUser)
@@ -248,6 +279,46 @@ export const handlers = [
       bytesLimit: 1073741824,
       fileSizeLimit: 52428800,
     })
+  }),
+
+  http.get('/api/repository/:id/pipelines', ({ params }) => {
+    if (params.id === '11111111-1111-1111-1111-111111111111') {
+      return HttpResponse.json(mockPipelineRuns)
+    }
+    return HttpResponse.json([])
+  }),
+
+  http.get('/api/pipeline/runs/:runId', ({ params }) => {
+    const run = mockPipelineRuns.find(item => item.id === params.runId)
+    if (!run) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    return HttpResponse.json(run)
+  }),
+
+  http.get('/api/pipeline/jobs/:jobId/logs', ({ params }) => {
+    const logs = {
+      '99999999-0000-0000-0000-000000000011': [
+        {
+          section: 'workspace',
+          line: 'Workspace prepared at /tmp/opengitbase-agent/run-1/repo',
+          timestamp: '2026-07-10T10:00:06.000Z',
+        },
+      ],
+      '99999999-0000-0000-0000-000000000012': [
+        {
+          section: 'script',
+          line: 'Running test suite...',
+          timestamp: '2026-07-10T10:00:22.000Z',
+        },
+        {
+          section: 'script',
+          line: 'All tests passed.',
+          timestamp: '2026-07-10T10:00:40.000Z',
+        },
+      ],
+    } as Record<string, unknown[]>
+    return HttpResponse.json(logs[String(params.jobId)] ?? [])
   }),
 
   http.get('/api/public-git-ssh-key', () => {

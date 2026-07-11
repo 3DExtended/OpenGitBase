@@ -92,11 +92,11 @@ public sealed class E2eApiClient : IDisposable
         };
     }
 
-    public async Task<HttpCapture> GetAsync(string relativeUrl, CancellationToken cancellationToken = default) =>
-        await SendAsync(HttpMethod.Get, relativeUrl, null, cancellationToken).ConfigureAwait(false);
+    public Task<HttpCapture> GetAsync(string relativeUrl, CancellationToken cancellationToken = default) =>
+SendAsync(HttpMethod.Get, relativeUrl, null, cancellationToken);
 
-    public async Task<HttpCapture> PostAsync(string relativeUrl, object? body = null, CancellationToken cancellationToken = default) =>
-        await SendAsync(HttpMethod.Post, relativeUrl, body, cancellationToken).ConfigureAwait(false);
+    public Task<HttpCapture> PostAsync(string relativeUrl, object? body = null, CancellationToken cancellationToken = default) =>
+SendAsync(HttpMethod.Post, relativeUrl, body, cancellationToken);
 
     public async Task<IReadOnlyList<CapturedEmail>> GetCapturedEmailsAsync(string to, CancellationToken cancellationToken = default)
     {

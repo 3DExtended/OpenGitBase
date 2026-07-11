@@ -90,6 +90,12 @@ const repoNavItems = computed(() => {
       active: matchesSidebarRoute(route.path, `/${owner}/${repo}/merge-requests`),
     },
     {
+      label: t('repo.pipelines.title'),
+      to: `/${owner}/${repo}/pipelines`,
+      icon: 'i-lucide-workflow',
+      active: matchesSidebarRoute(route.path, `/${owner}/${repo}/pipelines`),
+    },
+    {
       label: t('repo.settings.title'),
       to: `/${owner}/${repo}/settings`,
       icon: 'i-lucide-settings',

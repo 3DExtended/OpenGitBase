@@ -174,10 +174,10 @@ public sealed class MergeRequestRefService
         };
     }
 
-    public async Task<MergeRequestStorageContext?> LoadStorageContextAsync(
+    public Task<MergeRequestStorageContext?> LoadStorageContextAsync(
         RepositoryDto repository,
         CancellationToken cancellationToken
-    ) => await LoadStorageContextInternalAsync(repository, cancellationToken).ConfigureAwait(false);
+    ) => LoadStorageContextInternalAsync(repository, cancellationToken);
 
     private async Task<MergeRequestStorageContext?> LoadStorageContextInternalAsync(
         RepositoryDto repository,

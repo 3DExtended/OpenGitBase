@@ -28,16 +28,28 @@ public sealed class ProcessSandboxExecutor : ISandboxExecutor
         using var process = Process.Start(info);
         if (process is null)
         {
-            return new SandboxExecutionResult { Success = false, ExitCode = -1, DurationMs = 0 };
+            return new SandboxExecutionResult
+            {
+                Success = false,
+                ExitCode = -1,
+                DurationMs = 0,
+                StdErr = "Unable to start sandbox process.",
+            };
         }
 
+        var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stdOut = await stdOutTask.ConfigureAwait(false);
+        var stdErr = await stdErrTask.ConfigureAwait(false);
         var elapsedMs = (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         return new SandboxExecutionResult
         {
             Success = process.ExitCode == 0,
             ExitCode = process.ExitCode,
             DurationMs = elapsedMs,
+            StdOut = stdOut,
+            StdErr = stdErr,
         };
     }
 }

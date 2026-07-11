@@ -82,7 +82,7 @@ public static class PromotionIndexer
             .ToList();
     }
 
-    public static async Task WriteMarkdownAsync(
+    public static Task WriteMarkdownAsync(
         IReadOnlyList<PromotionCandidate> candidates,
         string outputPath,
         CancellationToken cancellationToken = default)
@@ -101,7 +101,7 @@ public static class PromotionIndexer
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        await File.WriteAllTextAsync(outputPath, sb.ToString(), cancellationToken).ConfigureAwait(false);
+        return File.WriteAllTextAsync(outputPath, sb.ToString(), cancellationToken);
     }
 
     private static void ScanFile(string file, string repoRoot, List<PromotionCandidate> candidates)

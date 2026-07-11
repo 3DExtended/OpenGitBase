@@ -13,4 +13,6 @@ public sealed class PipelineRunDto
     public PipelineRunStatus Status { get; set; } = PipelineRunStatus.Queued;
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    public IReadOnlyList<PipelineJobDto> Jobs { get; set; } = [];
 }

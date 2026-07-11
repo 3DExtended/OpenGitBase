@@ -31,6 +31,21 @@ public sealed class GetPipelineRunQueryHandler : IQueryHandler<GetPipelineRunQue
             .Set<PipelineRunEntity>()
             .FirstOrDefaultAsync(entity => entity.Id == query.RunId.Value, cancellationToken)
             .ConfigureAwait(false);
-        return run is null ? Option<PipelineRunDto>.None : Option.From(_mapper.Map<PipelineRunDto>(run));
+        if (run is null)
+        {
+            return Option<PipelineRunDto>.None;
+        }
+
+        var jobs = await context
+            .Set<PipelineJobEntity>()
+            .Where(entity => entity.RunId == run.Id)
+            .OrderBy(entity => entity.CreatedAt)
+            .Select(entity => _mapper.Map<PipelineJobDto>(entity))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var runDto = _mapper.Map<PipelineRunDto>(run);
+        runDto.Jobs = jobs;
+        return Option.From(runDto);
     }
 }

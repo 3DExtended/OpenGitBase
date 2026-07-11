@@ -124,6 +124,21 @@ namespace OpenGitBase.Common.Migrations
                     table.PrimaryKey("PK_PlatformEgressAllowlist", x => x.Id);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "PipelineJobLog",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    JobId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Section = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Line = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: false),
+                    Timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PipelineJobLog", x => x.Id);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_DependencyPromotionRequest_RecipeKey_CreatedAt",
                 table: "DependencyPromotionRequest",
@@ -145,6 +160,11 @@ namespace OpenGitBase.Common.Migrations
                 table: "PlatformEgressAllowlist",
                 column: "Domain",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PipelineJobLog_JobId_Timestamp",
+                table: "PipelineJobLog",
+                columns: new[] { "JobId", "Timestamp" });
         }
 
         /// <inheritdoc />
@@ -161,6 +181,9 @@ namespace OpenGitBase.Common.Migrations
 
             migrationBuilder.DropTable(
                 name: "PlatformEgressAllowlist");
+
+            migrationBuilder.DropTable(
+                name: "PipelineJobLog");
 
             migrationBuilder.DropColumn(
                 name: "StageOrderJson",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RepositoryCommit, RepositoryReplicationLag } from '~/utils/api'
+import type { PipelineRun, RepositoryCommit, RepositoryReplicationLag } from '~/utils/api'
 import { resolveCommitPageLoad } from '~/utils/commitPageLoad'
 import { repoBlobPath, repoHomePath, repoTreePath } from '~/utils/repoBrowse'
 
@@ -18,12 +18,46 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const forbidden = ref(false)
 const unavailable = ref(false)
+const pipelineRun = ref<PipelineRun | null>(null)
 
 let loadSequence = 0
 
 const replicationLag = computed<RepositoryReplicationLag | null>(() =>
   commit.value?.replicationLag ?? null,
 )
+
+const pipelineLabel = computed(() => {
+  if (!pipelineRun.value) {
+    return null
+  }
+  switch (pipelineRun.value.status) {
+    case 'Queued':
+      return t('repo.commit.pipelineQueued')
+    case 'Running':
+      return t('repo.commit.pipelineRunning')
+    case 'Passed':
+      return t('repo.commit.pipelinePassed')
+    case 'Failed':
+      return t('repo.commit.pipelineFailed')
+    case 'Cancelled':
+      return t('repo.commit.pipelineCancelled')
+  }
+})
+
+const pipelineColor = computed<'neutral' | 'info' | 'success' | 'warning' | 'error'>(() => {
+  switch (pipelineRun.value?.status) {
+    case 'Running':
+      return 'info'
+    case 'Passed':
+      return 'success'
+    case 'Cancelled':
+      return 'warning'
+    case 'Failed':
+      return 'error'
+    default:
+      return 'neutral'
+  }
+})
 
 const backLink = computed(() => {
   const from = String(route.query.from ?? '')
@@ -51,6 +85,7 @@ async function loadCommit(): Promise<void> {
   forbidden.value = false
   unavailable.value = false
   commit.value = null
+  pipelineRun.value = null
 
   const result = await api.repositoryContent.getCommit(owner.value, repoSlug.value, shaParam.value)
   if (sequence !== loadSequence) {
@@ -66,6 +101,10 @@ async function loadCommit(): Promise<void> {
   error.value = resolved.error
   commit.value = resolved.commit
 
+  if (resolved.commit) {
+    await loadPipelineForCommit(resolved.commit.sha)
+  }
+
   if (resolved.commit && resolved.commit.sha !== shaParam.value) {
     await router.replace({
       path: `/${owner.value}/${repoSlug.value}/commit/${resolved.commit.sha}`,
@@ -78,6 +117,14 @@ async function loadCommit(): Promise<void> {
   }
 
   loading.value = false
+}
+
+async function loadPipelineForCommit(sha: string): Promise<void> {
+  const runsResult = await api.pipelines.list(owner.value, repoSlug.value)
+  if (runsResult.error || !runsResult.data) {
+    return
+  }
+  pipelineRun.value = runsResult.data.find(run => run.afterSha === sha) ?? null
 }
 
 async function copySha(): Promise<void> {
@@ -174,6 +221,16 @@ onMounted(() => {
               })
             }}
           </span>
+          <NuxtLink
+            v-if="pipelineRun && pipelineLabel"
+            :to="`/${owner}/${repoSlug}/pipelines/${pipelineRun.id}`"
+            class="inline-flex"
+          >
+            <CollaborationStatusBadge
+              :label="pipelineLabel"
+              :color="pipelineColor"
+            />
+          </NuxtLink>
         </div>
         <div
           v-if="commit.parents.length"

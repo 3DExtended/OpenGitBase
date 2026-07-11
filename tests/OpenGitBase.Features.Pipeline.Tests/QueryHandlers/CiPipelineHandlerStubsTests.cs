@@ -26,6 +26,10 @@ public class ListPipelineRunsQueryHandlerTests;
 
 public class GetPipelineRunQueryHandlerTests;
 
+public class GetPipelineJobQueryHandlerTests;
+
+public class GetPipelineJobLogsQueryHandlerTests;
+
 public class ClaimPipelineJobQueryHandlerTests
 {
     [Fact]

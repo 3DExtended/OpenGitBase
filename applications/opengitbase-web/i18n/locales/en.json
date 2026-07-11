@@ -457,6 +457,19 @@
       "bannerTitle": "Create a merge request",
       "bannerDescription": "{branch} is {count} commit(s) ahead of the default branch."
     },
+    "pipelines": {
+      "title": "Pipelines",
+      "empty": "No pipeline runs yet.",
+      "emptyDescription": "Add .opengitbase-ci.yml to this repository to start running CI.",
+      "readDocs": "Read CI docs",
+      "runNotFound": "Pipeline run not found.",
+      "viewRun": "View run",
+      "cancelJob": "Cancel",
+      "logs": "Logs",
+      "noLogs": "No logs yet.",
+      "pollingHint": "Logs auto-refresh while jobs are running.",
+      "jobs": "Jobs"
+    },
     "storage": {
       "title": "Storage usage",
       "unavailable": "Storage usage data is not available.",
@@ -584,7 +597,13 @@
       "emptyRootFiles": "No files in this root commit.",
       "parents": "Parents",
       "backToMr": "Back to merge request !{number}",
-      "backToDiscussion": "Back to discussion #{number}"
+      "backToDiscussion": "Back to discussion #{number}",
+      "pipelineStatus": "Pipeline",
+      "pipelineQueued": "Pipeline queued",
+      "pipelineRunning": "Pipeline running",
+      "pipelinePassed": "Pipeline passed",
+      "pipelineFailed": "Pipeline failed",
+      "pipelineCancelled": "Pipeline cancelled"
     },
     "browse": {
       "syncing": "Syncing… content may be slightly behind the primary.",

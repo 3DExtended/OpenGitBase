@@ -134,6 +134,22 @@ async function installCommitRoutes(page: import('@playwright/test').Page) {
   await page.route('**/api/repository-member/**', async (route) => {
     await route.fulfill({ json: [] })
   })
+
+  await page.route('**/api/repository/11111111-1111-1111-1111-111111111111/pipelines', async (route) => {
+    await route.fulfill({
+      json: [
+        {
+          id: '99999999-0000-0000-0000-000000000001',
+          repositoryId: '11111111-1111-1111-1111-111111111111',
+          ref: 'refs/heads/main',
+          afterSha: commitDetailPayload.sha,
+          status: 'Passed',
+          createdAt: '2026-07-10T10:00:00.000Z',
+          jobs: [],
+        },
+      ],
+    })
+  })
 }
 
 test('gallery unified diff fixture', async ({ page }) => {

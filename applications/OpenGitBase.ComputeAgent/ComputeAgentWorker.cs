@@ -11,6 +11,7 @@ namespace OpenGitBase.ComputeAgent;
 
 public sealed class ComputeAgentWorker : BackgroundService
 {
+    private const int MaxLogLinesPerUpdate = 200;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ComputeAgentOptions _options;
     private readonly ISandboxExecutor _sandboxExecutor;
@@ -136,13 +137,15 @@ public sealed class ComputeAgentWorker : BackgroundService
         await ExecuteDependencyInstallsAsync(client, payload.Job, payload.Job.Id.Value, workspacePath, env, cancellationToken)
             .ConfigureAwait(false);
 
-        await client
-            .PostAsJsonAsync(
-                $"pipeline/jobs/{payload.Job.Id.Value}/status",
-                new { status = PipelineJobStatus.Running, message = "Compute agent started job." },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        await PostJobStatusAsync(
+            client,
+            payload.Job.Id.Value,
+            PipelineJobStatus.Running,
+            "Compute agent started job.",
+            "workspace",
+            [$"Workspace prepared at {workspacePath}."],
+            cancellationToken
+        ).ConfigureAwait(false);
 
         using var timeoutCts = payload.Job.TimeoutSeconds > 0
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
@@ -160,19 +163,17 @@ public sealed class ComputeAgentWorker : BackgroundService
                 timeoutCts?.Token ?? cancellationToken
             )
             .ConfigureAwait(false);
-        await client
-            .PostAsJsonAsync(
-                $"pipeline/jobs/{payload.Job.Id.Value}/status",
-                new
-                {
-                    status = execution.Success ? PipelineJobStatus.Passed : PipelineJobStatus.Failed,
-                    message = execution.Success
-                        ? "ProcessSandboxExecutor completed successfully."
-                        : $"ProcessSandboxExecutor failed with exit code {execution.ExitCode}.",
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        await PostJobStatusAsync(
+            client,
+            payload.Job.Id.Value,
+            execution.Success ? PipelineJobStatus.Passed : PipelineJobStatus.Failed,
+            execution.Success
+                ? "ProcessSandboxExecutor completed successfully."
+                : $"ProcessSandboxExecutor failed with exit code {execution.ExitCode}.",
+            "script",
+            BuildExecutionLogLines(execution),
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     private async Task<string> MaterializeWorkspaceAsync(
@@ -284,6 +285,18 @@ public sealed class ComputeAgentWorker : BackgroundService
                     cancellationToken
                 )
                 .ConfigureAwait(false);
+
+            await PostJobStatusAsync(
+                client,
+                jobId,
+                PipelineJobStatus.Running,
+                result.Success
+                    ? $"Dependency install succeeded for {recipeKey}."
+                    : $"Dependency install failed for {recipeKey} (exit {result.ExitCode}).",
+                "install",
+                BuildExecutionLogLines(result),
+                cancellationToken
+            ).ConfigureAwait(false);
         }
     }
 
@@ -303,6 +316,48 @@ public sealed class ComputeAgentWorker : BackgroundService
         return JsonSerializer.Deserialize<Dictionary<string, string>>(environmentJson)
             ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
+
+    private static IReadOnlyList<string> BuildExecutionLogLines(SandboxExecutionResult result)
+    {
+        var lines = new List<string>(MaxLogLinesPerUpdate + 2);
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+        {
+            lines.AddRange(SplitLines(result.StdOut));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.StdErr))
+        {
+            lines.AddRange(SplitLines(result.StdErr).Select(line => $"stderr: {line}"));
+        }
+
+        lines.Add($"exit_code={result.ExitCode}");
+        lines.Add($"duration_ms={result.DurationMs}");
+        return lines.Take(MaxLogLinesPerUpdate).ToList();
+    }
+
+    private static IEnumerable<string> SplitLines(string value) =>
+        value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static Task PostJobStatusAsync(
+        HttpClient client,
+        Guid jobId,
+        PipelineJobStatus status,
+        string message,
+        string logSection,
+        IReadOnlyList<string> logLines,
+        CancellationToken cancellationToken
+    ) =>
+        client.PostAsJsonAsync(
+            $"pipeline/jobs/{jobId}/status",
+            new
+            {
+                status,
+                message,
+                logSection,
+                logLines,
+            },
+            cancellationToken
+        );
 
     private async Task WaitForClaimWakeAsync(CancellationToken cancellationToken)
     {

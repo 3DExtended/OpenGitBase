@@ -986,6 +986,35 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("PipelineJob", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Pipeline.Entities.PipelineJobLogEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Line")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Section")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId", "Timestamp");
+
+                    b.ToTable("PipelineJobLog", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Pipeline.Entities.PipelineRunEntity", b =>
                 {
                     b.Property<Guid>("Id")

@@ -1,19 +1,26 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
+using OpenGitBase.Features.Repository.Contracts;
 
 namespace OpenGitBase.Api.Controllers;
 
 [ApiController]
-[Authorize]
 public sealed class PipelineController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
+    private readonly RepositoryContentAuthorizationService _authorization;
 
-    public PipelineController(IQueryProcessor queryProcessor)
+    public PipelineController(
+        IQueryProcessor queryProcessor,
+        RepositoryContentAuthorizationService authorization
+    )
     {
         _queryProcessor = queryProcessor;
+        _authorization = authorization;
     }
 
     [HttpPost("api/v1/internal/pipelines/git-push-ingest")]
@@ -33,8 +40,17 @@ public sealed class PipelineController : ControllerBase
     }
 
     [HttpGet("repository/{repositoryId:guid}/pipelines")]
+    [AllowAnonymous]
     public async Task<IActionResult> ListRepositoryRuns(Guid repositoryId, CancellationToken cancellationToken)
     {
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(repositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            return MapAccessFailure(access);
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new ListPipelineRunsQuery { RepositoryId = repositoryId },
             cancellationToken
@@ -43,13 +59,27 @@ public sealed class PipelineController : ControllerBase
     }
 
     [HttpGet("pipeline/runs/{runId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetRun(Guid runId, CancellationToken cancellationToken)
     {
         var result = await _queryProcessor.RunQueryAsync(
             new GetPipelineRunQuery { RunId = PipelineRunId.From(runId) },
             cancellationToken
         ).ConfigureAwait(false);
-        return ToActionResult(result);
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(result.Get().RepositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            return MapAccessFailure(access);
+        }
+
+        return Ok(result.Get());
     }
 
     [HttpPost("pipeline/jobs/claim")]
@@ -77,13 +107,53 @@ public sealed class PipelineController : ControllerBase
                 JobId = PipelineJobId.From(jobId),
                 Status = request.Status,
                 Message = request.Message,
+                LogSection = request.LogSection,
+                LogLines = request.LogLines ?? [],
             },
             cancellationToken
         ).ConfigureAwait(false);
         return ToActionResult(result);
     }
 
+    [HttpGet("pipeline/jobs/{jobId:guid}/logs")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetJobLogs(Guid jobId, CancellationToken cancellationToken)
+    {
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (jobResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var runResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineRunQuery { RunId = jobResult.Get().RunId },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (runResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(runResult.Get().RepositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            return MapAccessFailure(access);
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobLogsQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return ToActionResult(result);
+    }
+
     [HttpPost("pipeline/jobs/{jobId:guid}/cancel")]
+    [Authorize]
     public async Task<IActionResult> CancelJob(Guid jobId, CancellationToken cancellationToken)
     {
         var result = await _queryProcessor.RunQueryAsync(
@@ -267,4 +337,15 @@ public sealed class PipelineController : ControllerBase
 
         return Guid.Empty;
     }
+
+    private IActionResult MapAccessFailure(RepositoryContentAccessResult access) =>
+        access.Kind switch
+        {
+            RepositoryContentAccessResultKind.NotFound => NotFound(),
+            RepositoryContentAccessResultKind.Forbidden => Forbid(),
+            RepositoryContentAccessResultKind.Unavailable => StatusCode(
+                StatusCodes.Status503ServiceUnavailable
+            ),
+            _ => NotFound(),
+        };
 }

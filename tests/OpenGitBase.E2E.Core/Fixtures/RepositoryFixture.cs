@@ -38,7 +38,7 @@ public sealed class RepositoryFixture
         return new RepositorySeed(slug, repositoryId, isPrivate, owner.Username);
     }
 
-    public async Task AddMemberAsync(
+    public Task AddMemberAsync(
         AuthenticatedClient owner,
         string repositoryId,
         string userId,
@@ -46,7 +46,7 @@ public sealed class RepositoryFixture
         CancellationToken cancellationToken = default)
     {
         _transcript.Describe("Add repository member");
-        await owner.Client.PostAsync(
+        return owner.Client.PostAsync(
             "/repository-member",
             new
             {
@@ -57,6 +57,6 @@ public sealed class RepositoryFixture
                     role,
                 },
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 }
