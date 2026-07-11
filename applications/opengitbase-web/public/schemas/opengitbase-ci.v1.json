@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opengitbase.local/schemas/opengitbase-ci.v1.json",
+  "title": "OpenGitBase CI pipeline v1",
+  "description": "Schema for .opengitbase-ci.yml at the repository root.",
+  "type": "object",
+  "properties": {
+    "stages": {
+      "type": "array",
+      "description": "Ordered stage names. If omitted, order follows first job appearance.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "image": {
+      "type": "string",
+      "description": "Pipeline default base image catalog slug.",
+      "minLength": 1
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Ordered pipeline default dependency recipes.",
+      "items": {
+        "$ref": "#/$defs/dependencyRecipe"
+      }
+    },
+    "variables": {
+      "type": "object",
+      "description": "Pipeline default variables. Cannot override reserved CI_* names.",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      },
+      "propertyNames": {
+        "not": {
+          "pattern": "^CI_"
+        }
+      }
+    }
+  },
+  "patternProperties": {
+    "^(?!stages|image|dependencies|variables$)[A-Za-z][A-Za-z0-9_-]*$": {
+      "$ref": "#/$defs/job"
+    }
+  },
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": ["image"]
+    },
+    {
+      "patternProperties": {
+        "^(?!stages|image|dependencies|variables$)[A-Za-z][A-Za-z0-9_-]*$": {
+          "required": ["image"]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "dependencyRecipe": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": {
+        "type": "array",
+        "contains": {
+          "required": ["installscript"]
+        },
+        "items": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": ["string", "number"],
+              "description": "Author metadata for analytics; not used for layer lookup."
+            },
+            "installscript": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Shell script run in the VM when no promoted layer exists."
+            }
+          },
+          "required": ["installscript"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runs-on": {
+          "type": "string",
+          "enum": ["ogb-hosted", "organization-self-hosted", "community-hosted"]
+        },
+        "only": {
+          "type": "array",
+          "description": "Glob patterns matched against the pushed ref name (e.g. main, release/*).",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "script": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user": {
+          "type": "string",
+          "description": "Unix user for script execution. Default: ogb. installscript always runs as root.",
+          "enum": ["ogb", "root"],
+          "default": "ogb"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependencyRecipe"
+          }
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          },
+          "propertyNames": {
+            "not": {
+              "pattern": "^CI_"
+            }
+          }
+        }
+      },
+      "required": ["stage", "runs-on", "script"],
+      "additionalProperties": false
+    }
+  }
+}

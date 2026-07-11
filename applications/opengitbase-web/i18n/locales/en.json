@@ -6,6 +6,7 @@
   "nav": {
     "home": "Home",
     "explore": "Explore",
+    "docs": "Docs",
     "pitch": "Community",
     "signIn": "Sign in",
     "signUp": "Sign up",
@@ -17,7 +18,17 @@
   },
   "footer": {
     "tagline": "OpenGitBase — self-hosted Git forge",
-    "poweredBy": "Powered by OpenGitBase"
+    "poweredBy": "Powered by OpenGitBase",
+    "docs": "Documentation"
+  },
+  "docs": {
+    "title": "Documentation",
+    "subtitle": "Guides for using OpenGitBase features.",
+    "backToIndex": "← All documentation",
+    "ci": {
+      "sectionLabel": "CI/CD",
+      "intro": "Run pipelines in Firecracker MicroVMs on platform, organization, or community compute."
+    }
   },
   "status": {
     "title": "System status",

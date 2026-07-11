@@ -69,6 +69,16 @@ Reveal.js contributor deck (fullscreen, no app shell). Edit slide copy in `app/d
 
 See [docs/community-pitch.md](../../docs/community-pitch.md) for messaging baseline, editing guide, and test commands.
 
+## User documentation (`/docs`)
+
+CI/CD guides for pipeline authors and org operators live under `/docs/ci/*`. Edit page content in `app/data/ciDocsPages.ts`. The pipeline JSON Schema for editor autocompletion is at `public/schemas/opengitbase-ci.v1.json`.
+
+| Route | Purpose |
+|-------|---------|
+| `/docs` | Documentation index |
+| `/docs/ci/overview` | CI/CD introduction |
+| `/docs/ci/editor-setup` | VS Code YAML schema wiring |
+
 Regenerate the API client from the repo root:
 
 ```bash
