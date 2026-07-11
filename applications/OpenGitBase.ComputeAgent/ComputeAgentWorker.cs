@@ -68,6 +68,48 @@ public sealed class ComputeAgentWorker : BackgroundService
         }
     }
 
+    private static IReadOnlyList<string> BuildExecutionLogLines(SandboxExecutionResult result)
+    {
+        var lines = new List<string>(MaxLogLinesPerUpdate + 2);
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+        {
+            lines.AddRange(SplitLines(result.StdOut));
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.StdErr))
+        {
+            lines.AddRange(SplitLines(result.StdErr).Select(line => $"stderr: {line}"));
+        }
+
+        lines.Add($"exit_code={result.ExitCode}");
+        lines.Add($"duration_ms={result.DurationMs}");
+        return lines.Take(MaxLogLinesPerUpdate).ToList();
+    }
+
+    private static IEnumerable<string> SplitLines(string value) =>
+        value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static Task PostJobStatusAsync(
+        HttpClient client,
+        Guid jobId,
+        PipelineJobStatus status,
+        string message,
+        string logSection,
+        IReadOnlyList<string> logLines,
+        CancellationToken cancellationToken
+    ) =>
+        client.PostAsJsonAsync(
+            $"pipeline/jobs/{jobId}/status",
+            new
+            {
+                status,
+                message,
+                logSection,
+                logLines,
+            },
+            cancellationToken
+        );
+
     private async Task<bool> RegisterAsync(HttpClient client, CancellationToken cancellationToken)
     {
         var response = await client
@@ -316,48 +358,6 @@ public sealed class ComputeAgentWorker : BackgroundService
         return JsonSerializer.Deserialize<Dictionary<string, string>>(environmentJson)
             ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
-
-    private static IReadOnlyList<string> BuildExecutionLogLines(SandboxExecutionResult result)
-    {
-        var lines = new List<string>(MaxLogLinesPerUpdate + 2);
-        if (!string.IsNullOrWhiteSpace(result.StdOut))
-        {
-            lines.AddRange(SplitLines(result.StdOut));
-        }
-
-        if (!string.IsNullOrWhiteSpace(result.StdErr))
-        {
-            lines.AddRange(SplitLines(result.StdErr).Select(line => $"stderr: {line}"));
-        }
-
-        lines.Add($"exit_code={result.ExitCode}");
-        lines.Add($"duration_ms={result.DurationMs}");
-        return lines.Take(MaxLogLinesPerUpdate).ToList();
-    }
-
-    private static IEnumerable<string> SplitLines(string value) =>
-        value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static Task PostJobStatusAsync(
-        HttpClient client,
-        Guid jobId,
-        PipelineJobStatus status,
-        string message,
-        string logSection,
-        IReadOnlyList<string> logLines,
-        CancellationToken cancellationToken
-    ) =>
-        client.PostAsJsonAsync(
-            $"pipeline/jobs/{jobId}/status",
-            new
-            {
-                status,
-                message,
-                logSection,
-                logLines,
-            },
-            cancellationToken
-        );
 
     private async Task WaitForClaimWakeAsync(CancellationToken cancellationToken)
     {

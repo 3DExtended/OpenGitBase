@@ -23,9 +23,6 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
         _logger = logger;
     }
 
-    private static bool IsSuccess(HttpStatusCode status) =>
-        (int)status is >= 200 and < 300;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.FleetSelfRegistrationEnabled)
@@ -52,6 +49,9 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
             }
         }
     }
+
+    private static bool IsSuccess(HttpStatusCode status) =>
+        (int)status is >= 200 and < 300;
 
     private async Task RegisterAsync(
         string instanceId,
