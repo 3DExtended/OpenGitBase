@@ -1,0 +1,19 @@
+namespace OpenGitBase.Features.Pipeline.Tests.QueryHandlers;
+
+public class IngestGitPushQueryHandlerTests;
+
+public class SchedulePipelineRunFromPushQueryHandlerTests;
+
+public class ListPipelineRunsQueryHandlerTests;
+
+public class GetPipelineRunQueryHandlerTests;
+
+public class ClaimPipelineJobQueryHandlerTests;
+
+public class UpdatePipelineJobStatusQueryHandlerTests;
+
+public class CancelPipelineJobQueryHandlerTests;
+
+public class CreateBaseImageCatalogEntryQueryHandlerTests;
+
+public class ListBaseImageCatalogEntriesQueryHandlerTests;

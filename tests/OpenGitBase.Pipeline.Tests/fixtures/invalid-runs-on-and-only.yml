@@ -1,0 +1,5 @@
+image: alpine:latest
+build:
+  script: echo build
+  only:
+    - release/**

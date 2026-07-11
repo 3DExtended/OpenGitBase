@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>OpenGitBase.Common</RootNamespace>
+    <NoWarn>$(NoWarn);SA1412</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

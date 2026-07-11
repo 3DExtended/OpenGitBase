@@ -16,6 +16,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -152,6 +153,7 @@ public class Startup
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
+        services.AddHttpClient<ILayerStoreClient, LayerStoreClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
         var e2eCaptureEmail = string.Equals(Configuration["E2E:CaptureEmail"], "true", StringComparison.OrdinalIgnoreCase)
@@ -188,6 +190,13 @@ public class Startup
         services.AddSingleton(
             Configuration.GetSection("StorageNode").Get<StorageNodeOptions>()
                 ?? new StorageNodeOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("Kafka").Get<KafkaOptions>() ?? new KafkaOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("LayerStore").Get<LayerStoreOptions>()
+                ?? new LayerStoreOptions()
         );
         services.Configure<FleetComponentOptions>(Configuration.GetSection("FleetComponent"));
         services.AddSingleton(
@@ -275,6 +284,8 @@ public class Startup
         services.AddHostedService<AdminUserSeedService>();
         services.AddHostedService<HaStorageBackgroundService>();
         services.AddHostedService<ApiFleetComponentRegistrationService>();
+        services.AddHostedService<GitPushReceivedConsumer>();
+        services.AddHostedService<JobDispatchCoordinator>();
         services.Configure<StatusProbeOptions>(Configuration.GetSection("StatusProbe"));
         services.AddSingleton(
             sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StatusProbeOptions>>().Value
@@ -329,6 +340,13 @@ public class Startup
         services.AddSingleton<IRepositoryKeyRotationService, RepositoryKeyRotationService>();
         services.AddSingleton<IRepositoryKeyService, RepositoryKeyService>();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
+        services.AddSingleton<KafkaPipelineEventPublisher>();
+        services.AddSingleton<IGitPushEventPublisher>(sp =>
+            sp.GetRequiredService<KafkaPipelineEventPublisher>()
+        );
+        services.AddSingleton<IJobAvailableEventPublisher>(sp =>
+            sp.GetRequiredService<KafkaPipelineEventPublisher>()
+        );
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();

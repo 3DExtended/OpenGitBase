@@ -1,0 +1,20 @@
+stages:
+  - build
+  - test
+image: alpine:latest
+dependencies:
+  - dotnet:
+    - version: 10
+    - installscript: |
+        apk add dotnet-sdk
+variables:
+  GIT_DEPTH: "0"
+build:
+  stage: build
+  runs-on: ogb-hosted
+  script: dotnet build
+test:
+  stage: test
+  runs-on: ogb-hosted
+  user: root
+  script: dotnet test

@@ -185,7 +185,9 @@ def _install_replication_hook(physical_path: str) -> None:
     hook_path.write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        f'exec /usr/local/bin/storage-quorum-replicate.sh "{physical_path}"\n',
+        "while read -r old_sha new_sha ref_name; do\n"
+        f'  /usr/local/bin/storage-quorum-replicate.sh "{physical_path}" "$ref_name" "$new_sha"\n'
+        "done\n",
         encoding="utf-8",
     )
     hook_path.chmod(0o755)

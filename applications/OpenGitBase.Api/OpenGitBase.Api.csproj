@@ -6,6 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" Version="2.11.0" />
     <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.5" />
@@ -36,6 +37,10 @@
     <ProjectReference Include="..\..\features\merge-request\OpenGitBase.Features.MergeRequest.Contracts\OpenGitBase.Features.MergeRequest.Contracts.csproj" />
     <ProjectReference Include="..\..\features\status\OpenGitBase.Features.Status\OpenGitBase.Features.Status.csproj" />
     <ProjectReference Include="..\..\features\status\OpenGitBase.Features.Status.Contracts\OpenGitBase.Features.Status.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\pipeline\OpenGitBase.Features.Pipeline\OpenGitBase.Features.Pipeline.csproj" />
+    <ProjectReference Include="..\..\features\pipeline\OpenGitBase.Features.Pipeline.Contracts\OpenGitBase.Features.Pipeline.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\compute-node\OpenGitBase.Features.ComputeNode\OpenGitBase.Features.ComputeNode.csproj" />
+    <ProjectReference Include="..\..\features\compute-node\OpenGitBase.Features.ComputeNode.Contracts\OpenGitBase.Features.ComputeNode.Contracts.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -5,6 +5,8 @@
 set -euo pipefail
 
 PHYSICAL_PATH="${1:-}"
+PUSH_REF="${2:-}"
+AFTER_SHA="${3:-}"
 CONFIG_DIR="${STORAGE_CONFIG_DIR:-/var/lib/opengitbase}"
 API_URL="${STORAGE_API_URL:-$(cat "${CONFIG_DIR}/api-url" 2>/dev/null || echo http://api-lb:8080)}"
 TOKEN_FILE="${STORAGE_TOKEN_FILE:-${CONFIG_DIR}/api-token}"
@@ -152,6 +154,14 @@ if [ "${SUCCESS}" != "True" ]; then
   printf '%s' "${CURRENT}" > "${WATERMARK_FILE}"
   echo "storage-quorum-replicate: quorum replication failed" >&2
   exit 1
+fi
+
+if [ -n "${PUSH_REF}" ] && [ -n "${AFTER_SHA}" ]; then
+  curl -sS -m 10 -X POST \
+    "${API_URL}/api/v1/internal/pipelines/git-push-ingest" \
+    -H "Content-Type: application/json" \
+    -H "X-Storage-Node-Id: ${NODE_ID}" \
+    -d "{\"repositoryId\":\"${REPO_ID}\",\"ref\":\"${PUSH_REF}\",\"afterSha\":\"${AFTER_SHA}\"}" >/dev/null || true
 fi
 
 exit 0
