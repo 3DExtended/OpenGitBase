@@ -59,17 +59,23 @@ stages:
   - build
   - test
 
-jobs:
-  build:
-    stage: build
-    runs-on: ogb-hosted
-    script: |
-      echo "build stage"
-  test:
-    stage: test
-    runs-on: ogb-hosted
-    script: |
-      echo "test stage"
+image: alpine:3.20
+
+build:
+  stage: build
+  runs-on: ogb-hosted
+  only:
+    - main
+  script: |
+    echo "build stage"
+
+test:
+  stage: test
+  runs-on: ogb-hosted
+  only:
+    - main
+  script: |
+    echo "test stage"
 YAML
 
 git -C "${TMP_DIR}" init -q
