@@ -15,5 +15,7 @@ public sealed class PipelineRunEntity : IIdentifiableEntity<Guid>
 
     public PipelineRunStatus Status { get; set; } = PipelineRunStatus.Queued;
 
+    public string StageOrderJson { get; set; } = "[]";
+
     public DateTimeOffset CreatedAt { get; set; }
 }

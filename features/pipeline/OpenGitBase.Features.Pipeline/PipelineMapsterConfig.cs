@@ -30,5 +30,12 @@ public class PipelineMapsterConfig : IRegister
         config
             .NewConfig<BaseImageCatalogEntity, BaseImageCatalogEntryDto>()
             .Map(dest => dest.Id, src => BaseImageCatalogEntryId.From(src.Id));
+        config
+            .NewConfig<DependencyPromotionRequestEntity, DependencyPromotionRequestDto>()
+            .Map(dest => dest.Id, src => DependencyPromotionRequestId.From(src.Id))
+            .Map(dest => dest.PromotionJobScheduled, _ => true);
+        config
+            .NewConfig<DomainAllowanceRequestEntity, DomainAllowanceRequestDto>()
+            .Map(dest => dest.Id, src => DomainAllowanceRequestId.From(src.Id));
     }
 }

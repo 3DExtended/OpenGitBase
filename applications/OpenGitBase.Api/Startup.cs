@@ -286,6 +286,7 @@ public class Startup
         services.AddHostedService<ApiFleetComponentRegistrationService>();
         services.AddHostedService<GitPushReceivedConsumer>();
         services.AddHostedService<JobDispatchCoordinator>();
+        services.AddHostedService<JobTimeoutEnforcerService>();
         services.Configure<StatusProbeOptions>(Configuration.GetSection("StatusProbe"));
         services.AddSingleton(
             sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StatusProbeOptions>>().Value

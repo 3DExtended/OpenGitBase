@@ -13,4 +13,11 @@ public sealed class ComputeAgentOptions
     public int ClaimPollSeconds { get; set; } = 5;
 
     public bool PreferProcessSandbox { get; set; } = true;
+
+    public IReadOnlyList<string> HostingProfiles { get; set; } =
+    [
+        "ogb-hosted",
+        "organization-self-hosted",
+        "community-hosted",
+    ];
 }

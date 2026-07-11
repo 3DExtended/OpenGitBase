@@ -2,5 +2,10 @@ namespace OpenGitBase.ComputeAgent;
 
 public interface ISandboxExecutor
 {
-    Task<bool> ExecuteAsync(string script, CancellationToken cancellationToken);
+    Task<SandboxExecutionResult> ExecuteAsync(
+        string script,
+        string workingDirectory,
+        IReadOnlyDictionary<string, string> environment,
+        CancellationToken cancellationToken
+    );
 }

@@ -16,4 +16,5 @@ public enum PipelineJobStatus
     Passed = 2,
     Failed = 3,
     Cancelled = 4,
+    Blocked = 5,
 }

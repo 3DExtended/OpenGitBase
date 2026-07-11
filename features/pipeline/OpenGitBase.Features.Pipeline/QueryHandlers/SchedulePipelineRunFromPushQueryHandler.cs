@@ -82,9 +82,12 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             Ref = query.Ref,
             AfterSha = query.AfterSha,
             Status = PipelineRunStatus.Queued,
+            StageOrderJson = JsonSerializer.Serialize(parseResult.Definition.Stages),
             CreatedAt = DateTimeOffset.UtcNow,
         };
         context.Set<PipelineRunEntity>().Add(run);
+
+        var firstStage = parseResult.Definition.Stages.FirstOrDefault();
 
         foreach (var job in parseResult.Definition.Jobs)
         {
@@ -96,6 +99,27 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 continue;
             }
 
+            var reservedVariables = BuildCiVariables(run, repository, job);
+            if (job.Variables.Keys.Any(key => reservedVariables.ContainsKey(key)))
+            {
+                return Option<PipelineRunId>.None;
+            }
+
+            var effectiveVariables = new Dictionary<string, string>(
+                reservedVariables,
+                StringComparer.Ordinal
+            );
+            foreach (var pair in job.Variables)
+            {
+                effectiveVariables[pair.Key] = pair.Value;
+            }
+
+            var gitDepth = ResolveGitDepth(effectiveVariables);
+            var isOgbHosted = string.Equals(
+                job.RunsOn,
+                "ogb-hosted",
+                StringComparison.OrdinalIgnoreCase
+            );
             var jobEntity = new PipelineJobEntity
             {
                 Id = Guid.NewGuid(),
@@ -103,9 +127,17 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 Name = job.Name,
                 Stage = job.Stage,
                 RunsOn = job.RunsOn,
-                Status = PipelineJobStatus.Queued,
+                Status = string.Equals(job.Stage, firstStage, StringComparison.Ordinal)
+                    ? PipelineJobStatus.Queued
+                    : PipelineJobStatus.Blocked,
                 Script = job.Script,
                 ResolvedSpecJson = JsonSerializer.Serialize(job),
+                EnvironmentJson = JsonSerializer.Serialize(effectiveVariables),
+                GitDepth = gitDepth,
+                CpuLimit = isOgbHosted ? 1 : 0,
+                MemoryMiB = isOgbHosted ? 2048 : 0,
+                DiskGiB = isOgbHosted ? 20 : 0,
+                TimeoutSeconds = isOgbHosted ? 30 * 60 : 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
             context.Set<PipelineJobEntity>().Add(jobEntity);
@@ -115,20 +147,57 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                     {
                         Id = Guid.NewGuid(),
                         JobId = jobEntity.Id,
-                        FromStatus = PipelineJobStatus.Queued,
-                        ToStatus = PipelineJobStatus.Queued,
-                        Message = "Job queued by scheduler.",
+                        FromStatus = jobEntity.Status,
+                        ToStatus = jobEntity.Status,
+                        Message = jobEntity.Status == PipelineJobStatus.Queued
+                            ? "Job queued by scheduler."
+                            : "Job blocked until prior stages complete.",
                         CreatedAt = DateTimeOffset.UtcNow,
                     }
                 );
-            await _jobAvailableEventPublisher
-                .PublishAsync(jobEntity.Id, cancellationToken)
-                .ConfigureAwait(false);
+            if (jobEntity.Status == PipelineJobStatus.Queued)
+            {
+                await _jobAvailableEventPublisher
+                    .PublishAsync(jobEntity.Id, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         var runDto = _mapper.Map<PipelineRunDto>(run);
         return Option.From(runDto.Id);
+    }
+
+    private static Dictionary<string, string> BuildCiVariables(
+        PipelineRunEntity run,
+        RepositoryEntity repository,
+        ResolvedJob job
+    ) =>
+        new(StringComparer.Ordinal)
+        {
+            ["CI"] = "true",
+            ["CI_PIPELINE_ID"] = run.Id.ToString("D"),
+            ["CI_JOB_NAME"] = job.Name,
+            ["CI_COMMIT_REF_NAME"] = run.Ref,
+            ["CI_COMMIT_SHA"] = run.AfterSha,
+            ["CI_RUNS_ON"] = job.RunsOn,
+            ["CI_PROJECT_NAME"] = repository.Name,
+            ["CI_PROJECT_DIR"] = "/workspace/repo",
+            ["CI_REPOSITORY_GIT_DIR"] = repository.PhysicalPath,
+        };
+
+    private static int ResolveGitDepth(IReadOnlyDictionary<string, string> variables)
+    {
+        if (
+            variables.TryGetValue("GIT_DEPTH", out var value)
+            && int.TryParse(value, out var parsed)
+            && parsed >= 0
+        )
+        {
+            return parsed;
+        }
+
+        return 0;
     }
 
     private static async Task<string?> TryReadCiFileAsync(

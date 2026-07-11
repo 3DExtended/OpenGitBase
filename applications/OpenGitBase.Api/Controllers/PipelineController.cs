@@ -93,6 +93,108 @@ public sealed class PipelineController : ControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("pipeline/jobs/{jobId:guid}/dependency-install-outcomes")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RecordDependencyInstallOutcome(
+        Guid jobId,
+        [FromBody] RecordDependencyInstallOutcomeRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new RecordDependencyInstallOutcomeQuery
+            {
+                JobId = PipelineJobId.From(jobId),
+                RecipeKey = request.RecipeKey,
+                Success = request.Success,
+                ExitCode = request.ExitCode,
+                DurationMs = request.DurationMs,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Accepted() : BadRequest();
+    }
+
+    [HttpPost("admin/pipeline/dependency-promotions")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> RequestDependencyPromotion(
+        [FromBody] RequestDependencyPromotionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new RequestDependencyLayerPromotionQuery
+            {
+                RecipeKey = request.RecipeKey,
+                RequestedByUserId = ResolveCurrentUserId(),
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return ToActionResult(result);
+    }
+
+    [HttpPost("pipeline/egress/domain-requests")]
+    public async Task<IActionResult> SubmitDomainRequest(
+        [FromBody] SubmitDomainAllowanceRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new SubmitDomainAllowanceRequestQuery
+            {
+                Domain = request.Domain,
+                Justification = request.Justification,
+                Scope = request.Scope,
+                OrganizationId = request.OrganizationId,
+                RequestedByUserId = ResolveCurrentUserId(),
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return ToActionResult(result);
+    }
+
+    [HttpPost("admin/pipeline/egress/domain-requests/{requestId:guid}/approve")]
+    [Authorize(Roles = "admin")]
+    public Task<IActionResult> ApprovePlatformDomainRequest(Guid requestId, CancellationToken cancellationToken) =>
+        ReviewDomainRequestAsync(requestId, true, cancellationToken);
+
+    [HttpPost("admin/pipeline/egress/domain-requests/{requestId:guid}/deny")]
+    [Authorize(Roles = "admin")]
+    public Task<IActionResult> DenyPlatformDomainRequest(Guid requestId, CancellationToken cancellationToken) =>
+        ReviewDomainRequestAsync(requestId, false, cancellationToken);
+
+    [HttpPost("organizations/{organizationId:guid}/pipeline/egress/domain-requests/{requestId:guid}/approve")]
+    public Task<IActionResult> ApproveOrganizationDomainRequest(
+        Guid organizationId,
+        Guid requestId,
+        CancellationToken cancellationToken
+    ) => ReviewDomainRequestAsync(requestId, true, cancellationToken);
+
+    [HttpPost("organizations/{organizationId:guid}/pipeline/egress/domain-requests/{requestId:guid}/deny")]
+    public Task<IActionResult> DenyOrganizationDomainRequest(
+        Guid organizationId,
+        Guid requestId,
+        CancellationToken cancellationToken
+    ) => ReviewDomainRequestAsync(requestId, false, cancellationToken);
+
+    [HttpGet("pipeline/egress/effective")]
+    public async Task<IActionResult> GetEffectiveEgressAllowlist(
+        [FromQuery(Name = "runs-on")] string runsOn,
+        [FromQuery] Guid? organizationId,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ResolveEffectiveEgressAllowlistQuery
+            {
+                RunsOn = runsOn,
+                OrganizationId = organizationId,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return Ok(result.IsSome ? result.Get() : Array.Empty<string>());
+    }
+
     [HttpPost("admin/pipeline/base-images")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreateBaseImage(
@@ -133,5 +235,36 @@ public sealed class PipelineController : ControllerBase
         }
 
         return Ok(result.Get());
+    }
+
+    private async Task<IActionResult> ReviewDomainRequestAsync(
+        Guid requestId,
+        bool approve,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ReviewDomainAllowanceRequestQuery
+            {
+                RequestId = DomainAllowanceRequestId.From(requestId),
+                Approve = approve,
+                ReviewedByUserId = ResolveCurrentUserId(),
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return ToActionResult(result);
+    }
+
+    private Guid ResolveCurrentUserId()
+    {
+        if (
+            Guid.TryParse(User.FindFirst("identityproviderid")?.Value, out var userId)
+            && userId != Guid.Empty
+        )
+        {
+            return userId;
+        }
+
+        return Guid.Empty;
     }
 }

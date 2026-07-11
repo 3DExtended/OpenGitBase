@@ -18,5 +18,17 @@ public sealed class PipelineJobDto
 
     public string ResolvedSpecJson { get; set; } = "{}";
 
+    public string EnvironmentJson { get; set; } = "{}";
+
+    public int GitDepth { get; set; }
+
+    public int CpuLimit { get; set; }
+
+    public int MemoryMiB { get; set; }
+
+    public int DiskGiB { get; set; }
+
+    public int TimeoutSeconds { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

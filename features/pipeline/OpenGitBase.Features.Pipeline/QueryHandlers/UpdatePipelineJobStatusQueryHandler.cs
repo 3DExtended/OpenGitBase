@@ -12,14 +12,17 @@ public sealed class UpdatePipelineJobStatusQueryHandler
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IMapper _mapper;
+    private readonly AdvancePipelineRunQueryHandler _advancePipelineRunQueryHandler;
 
     public UpdatePipelineJobStatusQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        IMapper mapper
+        IMapper mapper,
+        AdvancePipelineRunQueryHandler advancePipelineRunQueryHandler
     )
     {
         _contextFactory = contextFactory;
         _mapper = mapper;
+        _advancePipelineRunQueryHandler = advancePipelineRunQueryHandler;
     }
 
     public async Task<Option<PipelineJobDto>> RunQueryAsync(
@@ -67,9 +70,34 @@ public sealed class UpdatePipelineJobStatusQueryHandler
             {
                 identity.RevokedAt = DateTimeOffset.UtcNow;
             }
+
+            if (job.ClaimedByComputeNodeId.HasValue)
+            {
+                var node = await context
+                    .Set<OpenGitBase.Features.ComputeNode.Entities.ComputeNodeEntity>()
+                    .FirstOrDefaultAsync(
+                        entity => entity.Id == job.ClaimedByComputeNodeId.Value,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (node is not null)
+                {
+                    node.RunningJobs = Math.Max(0, node.RunningJobs - 1);
+                }
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (query.Status is PipelineJobStatus.Passed or PipelineJobStatus.Failed or PipelineJobStatus.Cancelled)
+        {
+            await _advancePipelineRunQueryHandler
+                .RunQueryAsync(
+                    new AdvancePipelineRunQuery { RunId = PipelineRunId.From(job.RunId) },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+
         return Option.From(_mapper.Map<PipelineJobDto>(job));
     }
 }
