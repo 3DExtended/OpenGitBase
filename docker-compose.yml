@@ -423,6 +423,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     environment:
+      <<: *api-environment
       FleetComponent__InstanceId: api-1
 
   api-2:
@@ -438,6 +439,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     environment:
+      <<: *api-environment
       FleetComponent__InstanceId: api-2
 
   api-migrate:
