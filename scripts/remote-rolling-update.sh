@@ -72,7 +72,7 @@ REMOTE_LOG="$2"
 REMOTE_PID="$3"
 REMOTE_EXIT="$4"
 GIT_PULL="$5"
-ROLL_ARGS="$6"
+ROLL_ARGS="${6:-}"
 
 if [ -f "${REMOTE_PID}" ]; then
   existing_pid="$(cat "${REMOTE_PID}")"
