@@ -75,13 +75,15 @@ public sealed class RequestDependencyLayerPromotionQueryHandler
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var lastFive = await context
+        var outcomes = await context
             .Set<DependencyInstallOutcomeEntity>()
             .Where(entity => entity.RecipeKey == query.RecipeKey)
-            .Take(5)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        lastFive = lastFive.OrderByDescending(entity => entity.CreatedAt).Take(5).ToList();
+        var lastFive = outcomes
+            .OrderByDescending(entity => entity.CreatedAt)
+            .Take(5)
+            .ToList();
         if (lastFive.Count < 5 || lastFive.Any(entity => !entity.Success))
         {
             return Option<DependencyPromotionRequestDto>.None;

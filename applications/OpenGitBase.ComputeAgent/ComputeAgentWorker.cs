@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Features.ComputeNode.Contracts;
 using OpenGitBase.Features.Pipeline.Contracts;
+using OpenGitBase.Pipeline;
 
 namespace OpenGitBase.ComputeAgent;
 
@@ -368,7 +369,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         var workspacePath = await MaterializeWorkspaceAsync(payload.Job, env, cancellationToken)
             .ConfigureAwait(false);
 
-        await ExecuteDependencyInstallsAsync(
+        var installsSucceeded = await ExecuteDependencyInstallsAsync(
             client,
             payload.Job,
             payload.Job.Id.Value,
@@ -377,6 +378,14 @@ public sealed class ComputeAgentWorker : BackgroundService
             allowlist,
             cancellationToken
         ).ConfigureAwait(false);
+        {
+            if (overlayRoot is not null)
+            {
+                await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
 
         await PostJobStatusAsync(
             client,
@@ -481,7 +490,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task ExecuteDependencyInstallsAsync(
+    private async Task<bool> ExecuteDependencyInstallsAsync(
         HttpClient client,
         PipelineJobDto job,
         Guid jobId,
@@ -493,7 +502,7 @@ public sealed class ComputeAgentWorker : BackgroundService
     {
         if (string.IsNullOrWhiteSpace(job.ResolvedSpecJson))
         {
-            return;
+            return true;
         }
 
         using var document = JsonDocument.Parse(job.ResolvedSpecJson);
@@ -502,7 +511,7 @@ public sealed class ComputeAgentWorker : BackgroundService
             || dependencies.ValueKind != JsonValueKind.Array
         )
         {
-            return;
+            return true;
         }
 
         foreach (var dependency in dependencies.EnumerateArray())
@@ -549,7 +558,7 @@ public sealed class ComputeAgentWorker : BackgroundService
                     [egressViolation],
                     cancellationToken
                 ).ConfigureAwait(false);
-                return;
+                return false;
             }
 
             var result = await _sandboxExecutor
@@ -572,7 +581,7 @@ public sealed class ComputeAgentWorker : BackgroundService
             await PostJobStatusAsync(
                 client,
                 jobId,
-                PipelineJobStatus.Running,
+                result.Success ? PipelineJobStatus.Running : PipelineJobStatus.Failed,
                 result.Success
                     ? $"Dependency install succeeded for {recipeKey}."
                     : $"Dependency install failed for {recipeKey} (exit {result.ExitCode}).",
@@ -580,7 +589,14 @@ public sealed class ComputeAgentWorker : BackgroundService
                 BuildExecutionLogLines(result),
                 cancellationToken
             ).ConfigureAwait(false);
+
+            if (!result.Success)
+            {
+                return false;
+            }
         }
+
+        return true;
     }
 
     private async Task<IReadOnlyList<string>> ResolvePromotedDependencyLayersAsync(
@@ -641,13 +657,29 @@ public sealed class ComputeAgentWorker : BackgroundService
 
     private string BuildRecipeKey(PipelineJobDto job, JsonElement dependency)
     {
-        _ = job;
-        if (dependency.TryGetProperty("Name", out var name) && !string.IsNullOrWhiteSpace(name.GetString()))
+        var installScript = dependency.TryGetProperty("InstallScript", out var scriptElement)
+            ? scriptElement.GetString() ?? string.Empty
+            : string.Empty;
+        return DependencyRecipeKeys.Compute(ResolveBaseSlug(job), installScript);
+    }
+
+    private static string ResolveBaseSlug(PipelineJobDto job)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResolvedSpecJson))
         {
-            return name.GetString()!;
+            return "unknown";
         }
 
-        return "dependency";
+        using var document = JsonDocument.Parse(job.ResolvedSpecJson);
+        if (
+            document.RootElement.TryGetProperty("Image", out var image)
+            && !string.IsNullOrWhiteSpace(image.GetString())
+        )
+        {
+            return image.GetString()!;
+        }
+
+        return "unknown";
     }
 
     private Dictionary<string, string> ParseEnvironment(string environmentJson)
