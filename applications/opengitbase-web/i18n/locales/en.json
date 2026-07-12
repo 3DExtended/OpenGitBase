@@ -262,6 +262,37 @@
       "title": "Organization storage",
       "nav": "Storage"
     },
+    "compute": {
+      "title": "Organization compute",
+      "nav": "Compute",
+      "description": "Enroll self-hosted compute nodes for organization-self-hosted and community-hosted pipelines.",
+      "docsLink": "Read the compute nodes guide",
+      "notFound": "Organization not found.",
+      "ownerOnly": "Only organization owners can manage compute settings.",
+      "loadFailed": "Failed to load organization compute settings.",
+      "createFailed": "Failed to create enrollment.",
+      "nodesTitle": "Registered compute nodes",
+      "nodesEmpty": "No compute nodes registered yet.",
+      "enrollmentsTitle": "Compute enrollments",
+      "nodeIdLabel": "Node ID",
+      "hostingScopeLabel": "Hosting scope",
+      "maxConcurrentJobsLabel": "Max concurrent jobs",
+      "maxCpuLabel": "Max vCPU",
+      "maxMemoryGiBLabel": "Max memory (GiB)",
+      "createEnrollment": "Create enrollment",
+      "tokenTitle": "Enrollment token (shown once)",
+      "consumed": "Consumed",
+      "active": "Active",
+      "healthy": "Healthy",
+      "unhealthy": "Unhealthy",
+      "editCapacity": "Edit capacity",
+      "saveCapacity": "Save capacity",
+      "cancel": "Cancel",
+      "hostingScope": {
+        "ownOrgOnly": "Own org only (organization-self-hosted)",
+        "crossOrgAllowed": "Cross-org allowed (community-hosted)"
+      }
+    },
     "members": {
       "title": "Members",
       "listTitle": "Current members",

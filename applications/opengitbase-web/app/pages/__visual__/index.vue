@@ -293,6 +293,32 @@ function toggleTheme() {
     </section>
 
     <section
+      class="mb-10 max-w-3xl space-y-4"
+      data-testid="visual-org-compute"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Organization compute settings
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Registered compute nodes
+          </h3>
+        </template>
+        <div class="border-b py-3" style="border-color: var(--ogb-border);">
+          <div class="flex items-center gap-2">
+            <span class="font-medium">org-compute-1</span>
+            <UBadge color="success" variant="subtle">Healthy</UBadge>
+            <UBadge color="neutral" variant="subtle">Own org only</UBadge>
+          </div>
+          <p class="mt-1 text-xs text-[var(--ogb-text-muted)]">
+            0/1 jobs · 1 vCPU · 2.00 GiB
+          </p>
+        </div>
+      </UCard>
+    </section>
+
+    <section
       class="mb-10 max-w-5xl space-y-4"
       data-testid="visual-admin-compute"
     >

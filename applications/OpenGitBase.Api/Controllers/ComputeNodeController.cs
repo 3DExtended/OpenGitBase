@@ -72,35 +72,6 @@ public sealed class ComputeNodeController : ControllerBase
         return result.IsSome ? Ok(result.Get()) : BadRequest(new { error = "Could not create enrollment." });
     }
 
-    [HttpPost("organizations/{organizationId:guid}/compute-nodes/enrollments")]
-    [Authorize]
-    public async Task<IActionResult> CreateOrganizationEnrollment(
-        Guid organizationId,
-        [FromBody] CreateComputeNodeEnrollmentRequest request,
-        CancellationToken cancellationToken
-    )
-    {
-        if (string.IsNullOrWhiteSpace(request.NodeId))
-        {
-            return BadRequest(new { error = "NodeId is required." });
-        }
-
-        var result = await _queryProcessor.RunQueryAsync(
-            new CreateComputeNodeEnrollmentQuery
-            {
-                NodeId = request.NodeId,
-                CreatedByUserId = _userContext.User.UserId,
-                OrganizationId = organizationId,
-                HostingScope = request.HostingScope,
-                MaxConcurrentJobs = request.MaxConcurrentJobs,
-                MaxCpu = request.MaxCpu,
-                MaxMemoryBytes = request.MaxMemoryBytes,
-            },
-            cancellationToken
-        ).ConfigureAwait(false);
-        return result.IsSome ? Ok(result.Get()) : BadRequest(new { error = "Could not create enrollment." });
-    }
-
     [HttpPatch("admin/compute-nodes/{computeNodeId:guid}/capacity")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> UpdateCapacity(

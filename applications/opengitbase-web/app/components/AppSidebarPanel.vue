@@ -143,6 +143,12 @@ const orgSettingsNavItems = computed(() => {
       icon: 'i-lucide-hard-drive',
       active: route.path === `/${owner}/storage`,
     })
+    items.push({
+      label: t('org.compute.nav'),
+      to: `/${owner}/compute`,
+      icon: 'i-lucide-cpu',
+      active: route.path === `/${owner}/compute`,
+    })
   }
 
   return items

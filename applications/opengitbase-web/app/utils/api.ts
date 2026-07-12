@@ -1813,6 +1813,36 @@ export function createApi(baseUrl: string) {
             body: JSON.stringify(body),
           }),
       },
+
+      compute: {
+        listNodes: (organizationId: string) =>
+          request<ComputeNodeDto[]>(`/organization/${organizationId}/compute/nodes`),
+
+        listEnrollments: (organizationId: string) =>
+          request<ComputeNodeEnrollmentDto[]>(`/organization/${organizationId}/compute/enrollments`),
+
+        createEnrollment: (organizationId: string, body: {
+          nodeId: string
+          hostingScope?: number
+          maxConcurrentJobs: number
+          maxCpu: number
+          maxMemoryBytes: number
+        }) =>
+          request<CreateComputeNodeEnrollmentResult>(`/organization/${organizationId}/compute/enrollments`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+
+        updateCapacity: (organizationId: string, computeNodeId: string, body: {
+          maxConcurrentJobs: number
+          maxCpu: number
+          maxMemoryBytes: number
+        }) =>
+          request<ComputeNodeDto>(`/organization/${organizationId}/compute/nodes/${computeNodeId}/capacity`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          }),
+      },
     },
 
     sshKeys: {

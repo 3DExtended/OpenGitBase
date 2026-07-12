@@ -27,7 +27,7 @@
 | ID | Title | Status |
 |----|-------|--------|
 | ci-prd-01 | Platform compute bootstrap + admin fleet UI | completed |
-| ci-prd-02 | Org compute settings UI + enrollment API hardening | pending |
+| ci-prd-02 | Org compute settings UI + enrollment API hardening | completed |
 | ci-prd-03 | Org compute enroll → job routing integration test | pending |
 | ci-prd-04 | Base image catalog build + Layer Store artifacts | pending |
 | ci-prd-05 | Firecracker MicroVM executor + operator requirements | pending |
