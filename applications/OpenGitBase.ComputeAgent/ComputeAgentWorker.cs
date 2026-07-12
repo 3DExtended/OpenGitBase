@@ -27,6 +27,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         IOptions<ComputeAgentOptions> options,
         IOptions<KafkaOptions> kafkaOptions,
         IBaseImageArtifactResolver baseImageResolver,
+        ISandboxExecutor sandboxExecutor,
         ILogger<ComputeAgentWorker> logger
     )
     {
@@ -35,7 +36,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         _kafkaOptions = kafkaOptions.Value;
         _logger = logger;
         _baseImageResolver = baseImageResolver;
-        _sandboxExecutor = new ProcessSandboxExecutor();
+        _sandboxExecutor = sandboxExecutor;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
