@@ -10,6 +10,10 @@
 - **Commit:** `c366e8e`
 - **Tests:** `dotnet test tests/OpenGitBase.Features.Pipeline.Tests` (53 passed)
 
-### ci-rt-04 — PRD recipe keys + install fail-fast
-- **Commit:** `f39a354`
-- **Tests:** `dotnet test tests/OpenGitBase.Pipeline.Tests`, `dotnet test tests/OpenGitBase.Features.Pipeline.Tests`
+### ci-rt-05 — Base image build script + vsock guest agent
+- **Commit:** `ae8e34b`
+- **Tests:** `dotnet test tests/OpenGitBase.Features.Pipeline.Tests` (prior slices); operator script verified structurally
+
+## Remaining (12 items)
+
+ci-rt-02, ci-rt-06, ci-rt-07, ci-rt-08, ci-rt-09, ci-rt-10, ci-rt-11, ci-rt-12, ci-rt-13, ci-rt-14, ci-rt-15, ci-rt-16
