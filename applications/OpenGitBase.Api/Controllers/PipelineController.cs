@@ -1,12 +1,15 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
+using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Repository.Contracts;
-using System.Text.Json;
 
 namespace OpenGitBase.Api.Controllers;
 
@@ -317,6 +320,79 @@ public sealed class PipelineController : ControllerBase
 
         await Response.WriteAsync("event: end\ndata: {}\n\n", cancellationToken).ConfigureAwait(false);
         await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    [HttpPost("pipeline/promotions/{requestId:guid}/artifact")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UploadPromotionArtifact(
+        Guid requestId,
+        IFormFile artifact,
+        CancellationToken cancellationToken
+    )
+    {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null || artifact.Length == 0)
+        {
+            return Unauthorized();
+        }
+
+        await using var scope = HttpContext.RequestServices.CreateAsyncScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        var layerStore = scope.ServiceProvider.GetRequiredService<ILayerStoreClient>();
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var promotion = await context
+            .Set<DependencyPromotionRequestEntity>()
+            .FirstOrDefaultAsync(entity => entity.Id == requestId, cancellationToken)
+            .ConfigureAwait(false);
+        if (promotion is null || promotion.Status != DependencyPromotionRequestStatus.Running)
+        {
+            return NotFound();
+        }
+
+        await using var stream = artifact.OpenReadStream();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory, cancellationToken).ConfigureAwait(false);
+        var bytes = memory.ToArray();
+        var contentHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))
+            .ToLowerInvariant();
+        memory.Position = 0;
+        await layerStore.PutBlobAsync(contentHash, memory, cancellationToken).ConfigureAwait(false);
+        promotion.ContentHash = contentHash;
+        promotion.LayerStoreObjectKey = contentHash;
+        promotion.Status = DependencyPromotionRequestStatus.Completed;
+        promotion.CompletedAt = DateTimeOffset.UtcNow;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Accepted(new { contentHash });
+    }
+
+    [HttpGet("pipeline/jobs/{jobId:guid}/execution-state")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetJobExecutionState(Guid jobId, CancellationToken cancellationToken)
+    {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null)
+        {
+            return Unauthorized();
+        }
+
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (
+            jobResult.IsNone
+            || jobResult.Get().ClaimedByComputeNodeId != node.Id
+        )
+        {
+            return Unauthorized();
+        }
+
+        return Ok(new { status = jobResult.Get().Status.ToString() });
     }
 
     [HttpPost("pipeline/jobs/{jobId:guid}/cancel")]
