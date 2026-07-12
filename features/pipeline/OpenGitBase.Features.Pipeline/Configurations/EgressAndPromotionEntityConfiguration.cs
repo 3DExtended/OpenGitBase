@@ -14,6 +14,8 @@ public sealed class DependencyPromotionRequestEntityConfiguration
         builder.ToTable("DependencyPromotionRequest");
         builder.HasKey(entity => entity.Id);
         builder.Property(entity => entity.RecipeKey).HasMaxLength(256).IsRequired();
+        builder.Property(entity => entity.ContentHash).HasMaxLength(128);
+        builder.Property(entity => entity.LayerStoreObjectKey).HasMaxLength(512);
         builder.HasIndex(entity => new { entity.RecipeKey, entity.CreatedAt });
     }
 }

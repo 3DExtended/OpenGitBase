@@ -288,6 +288,7 @@ public class Startup
             services.AddHostedService<ApiFleetComponentRegistrationService>();
             services.AddHostedService<GitPushReceivedConsumer>();
             services.AddHostedService<JobDispatchCoordinator>();
+            services.AddHostedService<DependencyLayerPromotionWorker>();
             services.AddHostedService<JobTimeoutEnforcerService>();
         }
 

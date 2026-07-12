@@ -15,7 +15,13 @@ public sealed class DependencyPromotionRequestEntity : IIdentifiableEntity<Guid>
 
     public Guid RequestedByUserId { get; set; }
 
+    public string? ContentHash { get; set; }
+
+    public string? LayerStoreObjectKey { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
 }
 
 public sealed class DomainAllowanceRequestEntity : IIdentifiableEntity<Guid>
