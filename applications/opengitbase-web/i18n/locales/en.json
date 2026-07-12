@@ -291,6 +291,13 @@
       "hostingScope": {
         "ownOrgOnly": "Own org only (organization-self-hosted)",
         "crossOrgAllowed": "Cross-org allowed (community-hosted)"
+      },
+      "egress": {
+        "pendingTitle": "Pending egress domain requests",
+        "description": "Approve org-scoped domain allowance requests for organization and community-hosted pipelines.",
+        "pendingEmpty": "No pending org egress requests.",
+        "approve": "Approve",
+        "deny": "Deny"
       }
     },
     "members": {

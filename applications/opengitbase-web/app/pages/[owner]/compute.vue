@@ -2,6 +2,7 @@
 import type {
   ComputeNodeDto,
   ComputeNodeEnrollmentDto,
+  DomainAllowanceRequestDto,
 } from '~/utils/api'
 
 definePageMeta({ middleware: 'auth' })
@@ -32,6 +33,9 @@ const editMaxConcurrentJobs = ref(1)
 const editMaxCpu = ref(1)
 const editMaxMemoryGiB = ref(2)
 const editLoading = ref(false)
+
+const egressRequests = ref<DomainAllowanceRequestDto[]>([])
+const egressLoading = ref(false)
 
 const hostingScopeOptions = [
   { label: t('org.compute.hostingScope.ownOrgOnly'), value: 0 },
@@ -89,6 +93,7 @@ async function loadPage() {
     }
     nodes.value = nodesResult.data ?? []
     enrollments.value = enrollmentsResult.data ?? []
+    await loadEgressRequests()
   }
   catch (e) {
     error.value = e instanceof Error ? e.message : t('org.compute.loadFailed')
@@ -144,6 +149,34 @@ async function saveCapacity(nodeId: string) {
   finally {
     editLoading.value = false
   }
+}
+
+async function loadEgressRequests() {
+  if (!organizationId.value) return
+  egressLoading.value = true
+  try {
+    const result = await api.organizations.compute.listEgressRequests(organizationId.value)
+    if (result.status === 403) {
+      forbidden.value = true
+      error.value = t('org.compute.ownerOnly')
+      return
+    }
+    egressRequests.value = result.data ?? []
+  }
+  finally {
+    egressLoading.value = false
+  }
+}
+
+async function reviewEgressRequest(requestId: string, approve: boolean) {
+  if (!organizationId.value) return
+  if (approve) {
+    await api.organizations.compute.approveEgressRequest(organizationId.value, requestId)
+  }
+  else {
+    await api.organizations.compute.denyEgressRequest(organizationId.value, requestId)
+  }
+  await loadEgressRequests()
 }
 
 onMounted(loadPage)
@@ -369,6 +402,63 @@ onMounted(loadPage)
               {{ enrollment.maxConcurrentJobs }} jobs · {{ enrollment.maxCpu }} vCPU
             </div>
           </UCard>
+        </div>
+      </UCard>
+
+      <UCard data-testid="org-compute-egress">
+        <template #header>
+          <h2 class="font-semibold">
+            {{ t('org.compute.egress.pendingTitle') }}
+          </h2>
+        </template>
+        <p class="mb-3 text-sm text-[var(--ogb-text-muted)]">
+          {{ t('org.compute.egress.description') }}
+        </p>
+        <div
+          v-if="egressLoading"
+          class="text-sm text-[var(--ogb-text-muted)]"
+        >
+          {{ t('common.loading') }}
+        </div>
+        <div
+          v-else-if="!egressRequests.length"
+          class="text-sm text-[var(--ogb-text-muted)]"
+        >
+          {{ t('org.compute.egress.pendingEmpty') }}
+        </div>
+        <div
+          v-else
+          class="space-y-3"
+        >
+          <div
+            v-for="request in egressRequests"
+            :key="request.id"
+            class="rounded border p-3"
+            style="border-color: var(--ogb-border);"
+          >
+            <p class="font-medium">
+              {{ request.domain }}
+            </p>
+            <p class="text-sm text-[var(--ogb-text-muted)]">
+              {{ request.justification }}
+            </p>
+            <div class="mt-2 flex gap-2">
+              <UButton
+                size="xs"
+                @click="reviewEgressRequest(request.id, true)"
+              >
+                {{ t('org.compute.egress.approve') }}
+              </UButton>
+              <UButton
+                size="xs"
+                color="error"
+                variant="soft"
+                @click="reviewEgressRequest(request.id, false)"
+              >
+                {{ t('org.compute.egress.deny') }}
+              </UButton>
+            </div>
+          </div>
         </div>
       </UCard>
     </template>

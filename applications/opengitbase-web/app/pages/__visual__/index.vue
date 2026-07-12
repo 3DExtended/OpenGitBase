@@ -316,6 +316,36 @@ function toggleTheme() {
           </p>
         </div>
       </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Pending egress domain requests
+          </h3>
+        </template>
+        <div
+          class="rounded border p-3"
+          style="border-color: var(--ogb-border);"
+        >
+          <p class="font-medium">
+            registry.example.com
+          </p>
+          <p class="text-sm text-[var(--ogb-text-muted)]">
+            Required for private package installs in org pipelines.
+          </p>
+          <div class="mt-2 flex gap-2">
+            <UButton size="xs">
+              Approve
+            </UButton>
+            <UButton
+              size="xs"
+              color="error"
+              variant="soft"
+            >
+              Deny
+            </UButton>
+          </div>
+        </div>
+      </UCard>
     </section>
 
     <section
