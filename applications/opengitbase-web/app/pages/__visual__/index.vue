@@ -293,6 +293,68 @@ function toggleTheme() {
     </section>
 
     <section
+      class="mb-10 max-w-5xl space-y-4"
+      data-testid="visual-admin-compute"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin compute fleet
+      </h2>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="font-semibold">
+              Compute nodes
+            </h3>
+            <UBadge
+              color="neutral"
+              variant="subtle"
+            >
+              1/1 Healthy
+            </UBadge>
+          </div>
+        </template>
+        <UCard class="bg-[var(--ogb-bg)]">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium">compute-agent-1</span>
+            <UBadge
+              color="success"
+              variant="subtle"
+            >
+              Healthy
+            </UBadge>
+          </div>
+          <p class="mt-1 text-xs text-[var(--ogb-text-muted)]">
+            Capacity: 0/2 jobs · 2 vCPU · 2.00 GiB
+          </p>
+        </UCard>
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Compute enrollments
+          </h3>
+        </template>
+        <div class="grid gap-3 md:grid-cols-4">
+          <UFormField label="Node ID">
+            <UInput model-value="compute-agent-1" />
+          </UFormField>
+          <UFormField label="Max concurrent jobs">
+            <UInput model-value="2" />
+          </UFormField>
+          <UFormField label="Max vCPU">
+            <UInput model-value="2" />
+          </UFormField>
+          <UFormField label="Max memory (GiB)">
+            <UInput model-value="2" />
+          </UFormField>
+        </div>
+        <UButton class="mt-3">
+          Create enrollment
+        </UButton>
+      </UCard>
+    </section>
+
+    <section
       class="mt-10 max-w-3xl space-y-4"
       data-testid="visual-merge-request-banner"
     >

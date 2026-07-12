@@ -35,7 +35,7 @@ public sealed class ComputeNodeDto
 }
 
 public sealed class CreateComputeNodeEnrollmentQuery
-    : IQuery<string, CreateComputeNodeEnrollmentQuery>
+    : IQuery<CreateComputeNodeEnrollmentResult, CreateComputeNodeEnrollmentQuery>
 {
     public string NodeId { get; set; } = string.Empty;
 
@@ -79,6 +79,46 @@ public sealed class UpdateComputeNodeCapacityQuery
 }
 
 public sealed class ListComputeNodesQuery : IQuery<IReadOnlyList<ComputeNodeDto>, ListComputeNodesQuery>
+{
+    public Guid? OrganizationId { get; set; }
+}
+
+public sealed class ComputeNodeEnrollmentDto
+{
+    public Guid Id { get; init; }
+
+    public string NodeId { get; init; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; init; }
+
+    public DateTimeOffset ExpiresAt { get; init; }
+
+    public DateTimeOffset? ConsumedAt { get; init; }
+
+    public Guid? OrganizationId { get; init; }
+
+    public ComputeHostingScope HostingScope { get; init; }
+
+    public int MaxConcurrentJobs { get; init; }
+
+    public int MaxCpu { get; init; }
+
+    public long MaxMemoryBytes { get; init; }
+}
+
+public sealed class CreateComputeNodeEnrollmentResult
+{
+    public Guid EnrollmentId { get; init; }
+
+    public string NodeId { get; init; } = string.Empty;
+
+    public string EnrollmentToken { get; init; } = string.Empty;
+
+    public DateTimeOffset ExpiresAt { get; init; }
+}
+
+public sealed class ListComputeNodeEnrollmentsQuery
+    : IQuery<IReadOnlyList<ComputeNodeEnrollmentDto>, ListComputeNodeEnrollmentsQuery>
 {
     public Guid? OrganizationId { get; set; }
 }

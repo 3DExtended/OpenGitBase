@@ -65,11 +65,23 @@ create_enrollment() {
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["enrollmentToken"])'
 }
 
+create_compute_enrollment() {
+  local node_id="$1"
+  curl -fsS -X POST "${API_URL}/api/admin/compute-enrollments" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"nodeId\":\"${node_id}\",\"maxConcurrentJobs\":2,\"maxCpu\":2,\"maxMemoryBytes\":2147483648}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["enrollmentToken"])'
+}
+
 echo "==> Creating storage enrollments"
 STORAGE_1_TOKEN=$(create_enrollment storage-1)
 STORAGE_2_TOKEN=$(create_enrollment storage-2)
 STORAGE_3_TOKEN=$(create_enrollment storage-3)
 STORAGE_4_TOKEN=$(create_enrollment storage-4)
+
+echo "==> Creating platform compute enrollment"
+COMPUTE_AGENT_1_TOKEN=$(create_compute_enrollment compute-agent-1)
 
 if [ ! -f "${OVERRIDE_FILE}" ]; then
   if [ ! -f "${EXAMPLE_FILE}" ]; then
@@ -80,7 +92,7 @@ if [ ! -f "${OVERRIDE_FILE}" ]; then
   echo "Created ${OVERRIDE_FILE} from example — set REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN before starting the tunnel"
 fi
 
-python3 - "${OVERRIDE_FILE}" "${EXAMPLE_FILE}" "${STORAGE_1_TOKEN}" "${STORAGE_2_TOKEN}" "${STORAGE_3_TOKEN}" "${STORAGE_4_TOKEN}" "${FLEET_BOOTSTRAP_TOKEN}" "${DISPATCHER_SSH_PUBLIC_KEY}" <<'PY'
+python3 - "${OVERRIDE_FILE}" "${EXAMPLE_FILE}" "${STORAGE_1_TOKEN}" "${STORAGE_2_TOKEN}" "${STORAGE_3_TOKEN}" "${STORAGE_4_TOKEN}" "${FLEET_BOOTSTRAP_TOKEN}" "${DISPATCHER_SSH_PUBLIC_KEY}" "${COMPUTE_AGENT_1_TOKEN}" <<'PY'
 import json
 import re
 import sys
@@ -94,6 +106,7 @@ storage_3 = sys.argv[5]
 storage_4 = sys.argv[6]
 fleet_token = sys.argv[7]
 dispatcher_key = sys.argv[8]
+compute_agent_1 = sys.argv[9]
 
 
 def q(value: str) -> str:
@@ -182,6 +195,11 @@ content = patch_service_env(
     content,
     "dispatcher-2",
     {"FLEET_BOOTSTRAP_TOKEN": fleet_token},
+)
+content = patch_service_env(
+    content,
+    "compute-agent-1",
+    {"ComputeAgent__EnrollmentToken": compute_agent_1},
 )
 content = patch_cloudflare_token(content, cloudflare_token)
 

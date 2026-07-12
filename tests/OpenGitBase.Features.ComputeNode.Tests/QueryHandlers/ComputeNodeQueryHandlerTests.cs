@@ -54,7 +54,9 @@ public class CreateComputeNodeEnrollmentQueryHandlerTests
         );
 
         Assert.True(result.IsSome);
-        Assert.NotEmpty(result.Get());
+        var enrollment = result.Get();
+        Assert.NotEmpty(enrollment.EnrollmentToken);
+        Assert.Equal("compute-1", enrollment.NodeId);
     }
 }
 

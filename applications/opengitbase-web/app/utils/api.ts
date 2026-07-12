@@ -45,6 +45,39 @@ export interface CreateStorageNodeEnrollmentResult {
   expiresAt: string
 }
 
+export interface ComputeNodeDto {
+  id: string
+  nodeId: string
+  organizationId?: string | null
+  hostingScope: number
+  maxConcurrentJobs: number
+  runningJobs: number
+  maxCpu: number
+  maxMemoryBytes: number
+  isHealthy: boolean
+  lastHeartbeatAt?: string | null
+}
+
+export interface ComputeNodeEnrollmentDto {
+  id: string
+  nodeId: string
+  createdAt: string
+  expiresAt: string
+  consumedAt?: string | null
+  organizationId?: string | null
+  hostingScope: number
+  maxConcurrentJobs: number
+  maxCpu: number
+  maxMemoryBytes: number
+}
+
+export interface CreateComputeNodeEnrollmentResult {
+  enrollmentId: string
+  nodeId: string
+  enrollmentToken: string
+  expiresAt: string
+}
+
 export interface AdminStorageNodeReplicationSummaryDto {
   storageNodeId: string
   nodeId: string
@@ -2567,6 +2600,23 @@ export function createApi(baseUrl: string) {
         list: () => request<StorageNodeEnrollmentDto[]>('/admin/storage-enrollments'),
         create: (body: { nodeId: string, expiresInHours?: number }) =>
           request<CreateStorageNodeEnrollmentResult>('/admin/storage-enrollments', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+      },
+      computeNodes: {
+        list: () => request<ComputeNodeDto[]>('/admin/compute-nodes'),
+      },
+      computeEnrollments: {
+        list: () => request<ComputeNodeEnrollmentDto[]>('/admin/compute-enrollments'),
+        create: (body: {
+          nodeId: string
+          hostingScope?: number
+          maxConcurrentJobs: number
+          maxCpu: number
+          maxMemoryBytes: number
+        }) =>
+          request<CreateComputeNodeEnrollmentResult>('/admin/compute-enrollments', {
             method: 'POST',
             body: JSON.stringify(body),
           }),

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using OpenGitBase.Api.Controllers;
+using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.ComputeNode.Contracts;
 
@@ -27,7 +28,8 @@ public class ComputeNodeControllerTests
                 )
             );
 
-        var controller = new ComputeNodeController(queryProcessor);
+        var userContext = Substitute.For<IUserContext>();
+        var controller = new ComputeNodeController(queryProcessor, userContext);
         var result = await controller.Register(
             new RegisterComputeNodeQuery
             {

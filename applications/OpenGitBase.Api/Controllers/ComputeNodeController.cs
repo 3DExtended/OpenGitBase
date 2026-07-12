@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenGitBase.Api.Models;
+using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.ComputeNode.Contracts;
 
@@ -9,10 +11,15 @@ namespace OpenGitBase.Api.Controllers;
 public sealed class ComputeNodeController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
+    private readonly IUserContext _userContext;
 
-    public ComputeNodeController(IQueryProcessor queryProcessor)
+    public ComputeNodeController(
+        IQueryProcessor queryProcessor,
+        IUserContext userContext
+    )
     {
         _queryProcessor = queryProcessor;
+        _userContext = userContext;
     }
 
     [HttpPost("api/v1/compute-nodes/register")]
@@ -40,26 +47,58 @@ public sealed class ComputeNodeController : ControllerBase
     [HttpPost("admin/compute-nodes/enrollments")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreatePlatformEnrollment(
-        [FromBody] CreateComputeNodeEnrollmentQuery query,
+        [FromBody] CreateComputeNodeEnrollmentRequest request,
         CancellationToken cancellationToken
     )
     {
-        query.OrganizationId = null;
-        var result = await _queryProcessor.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
-        return result.IsSome ? Ok(new { enrollmentToken = result.Get() }) : BadRequest();
+        if (string.IsNullOrWhiteSpace(request.NodeId))
+        {
+            return BadRequest(new { error = "NodeId is required." });
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new CreateComputeNodeEnrollmentQuery
+            {
+                NodeId = request.NodeId,
+                CreatedByUserId = _userContext.User.UserId,
+                OrganizationId = null,
+                HostingScope = request.HostingScope,
+                MaxConcurrentJobs = request.MaxConcurrentJobs,
+                MaxCpu = request.MaxCpu,
+                MaxMemoryBytes = request.MaxMemoryBytes,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Ok(result.Get()) : BadRequest(new { error = "Could not create enrollment." });
     }
 
     [HttpPost("organizations/{organizationId:guid}/compute-nodes/enrollments")]
     [Authorize]
     public async Task<IActionResult> CreateOrganizationEnrollment(
         Guid organizationId,
-        [FromBody] CreateComputeNodeEnrollmentQuery query,
+        [FromBody] CreateComputeNodeEnrollmentRequest request,
         CancellationToken cancellationToken
     )
     {
-        query.OrganizationId = organizationId;
-        var result = await _queryProcessor.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
-        return result.IsSome ? Ok(new { enrollmentToken = result.Get() }) : BadRequest();
+        if (string.IsNullOrWhiteSpace(request.NodeId))
+        {
+            return BadRequest(new { error = "NodeId is required." });
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new CreateComputeNodeEnrollmentQuery
+            {
+                NodeId = request.NodeId,
+                CreatedByUserId = _userContext.User.UserId,
+                OrganizationId = organizationId,
+                HostingScope = request.HostingScope,
+                MaxConcurrentJobs = request.MaxConcurrentJobs,
+                MaxCpu = request.MaxCpu,
+                MaxMemoryBytes = request.MaxMemoryBytes,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Ok(result.Get()) : BadRequest(new { error = "Could not create enrollment." });
     }
 
     [HttpPatch("admin/compute-nodes/{computeNodeId:guid}/capacity")]
