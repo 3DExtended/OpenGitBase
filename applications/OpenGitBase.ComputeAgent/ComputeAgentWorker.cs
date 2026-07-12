@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Confluent.Kafka;
@@ -24,6 +25,8 @@ public sealed class ComputeAgentWorker : BackgroundService
     private readonly SemaphoreSlim _claimWakeSignal = new(0, 1);
     private bool _registered;
     private ComputeNodeDto? _node;
+    private string? _nodeIdentityToken;
+    private int _runningJobs;
 
     public ComputeAgentWorker(
         IHttpClientFactory httpClientFactory,
@@ -68,6 +71,8 @@ public sealed class ComputeAgentWorker : BackgroundService
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
                     continue;
                 }
+
+                ApplyNodeIdentity(client);
             }
 
             await SendHeartbeatAsync(client, stoppingToken).ConfigureAwait(false);
@@ -188,16 +193,36 @@ public sealed class ComputeAgentWorker : BackgroundService
             return false;
         }
 
-        _node = await response.Content
-            .ReadFromJsonAsync<ComputeNodeDto>(cancellationToken)
+        var payload = await response.Content
+            .ReadFromJsonAsync<RegisterComputeNodeResultDto>(cancellationToken)
             .ConfigureAwait(false);
-        return _node is not null;
+        if (payload?.Node is null || string.IsNullOrWhiteSpace(payload.NodeIdentityToken))
+        {
+            return false;
+        }
+
+        _node = payload.Node;
+        _nodeIdentityToken = payload.NodeIdentityToken;
+        return true;
+    }
+
+    private void ApplyNodeIdentity(HttpClient client)
+    {
+        if (string.IsNullOrWhiteSpace(_nodeIdentityToken))
+        {
+            return;
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            _nodeIdentityToken
+        );
     }
 
     private Task SendHeartbeatAsync(HttpClient client, CancellationToken cancellationToken) =>
         client.PostAsJsonAsync(
             "api/v1/compute-nodes/heartbeat",
-            new ComputeNodeHeartbeatQuery { NodeId = _options.NodeId, RunningJobs = 0 },
+            new ComputeNodeHeartbeatQuery { NodeId = _options.NodeId, RunningJobs = _runningJobs },
             cancellationToken
         );
 
@@ -232,6 +257,23 @@ public sealed class ComputeAgentWorker : BackgroundService
             return;
         }
 
+        Interlocked.Increment(ref _runningJobs);
+        try
+        {
+            await ExecuteClaimedJobAsync(client, payload, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _runningJobs);
+        }
+    }
+
+    private async Task ExecuteClaimedJobAsync(
+        HttpClient client,
+        ClaimPipelineJobResultDto payload,
+        CancellationToken cancellationToken
+    )
+    {
         var env = ParseEnvironment(payload.Job.EnvironmentJson);
         var imageSlug = TryGetImageSlug(payload.Job.ResolvedSpecJson);
         string? overlayRoot = null;

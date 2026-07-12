@@ -15,16 +15,19 @@ public sealed class PipelineController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly RepositoryContentAuthorizationService _authorization;
     private readonly IUserContext _userContext;
+    private readonly ComputeNodeIdentityService _computeNodeIdentity;
 
     public PipelineController(
         IQueryProcessor queryProcessor,
         RepositoryContentAuthorizationService authorization,
-        IUserContext userContext
+        IUserContext userContext,
+        ComputeNodeIdentityService computeNodeIdentity
     )
     {
         _queryProcessor = queryProcessor;
         _authorization = authorization;
         _userContext = userContext;
+        _computeNodeIdentity = computeNodeIdentity;
     }
 
     [HttpPost("api/v1/internal/pipelines/git-push-ingest")]
@@ -93,6 +96,13 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null || node.Id != query.ComputeNodeId)
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
         return result.IsSome ? Ok(result.Get()) : NoContent();
     }
@@ -105,6 +115,25 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null)
+        {
+            return Unauthorized();
+        }
+
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (
+            jobResult.IsNone
+            || jobResult.Get().ClaimedByComputeNodeId != node.Id
+        )
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new UpdatePipelineJobStatusQuery
             {
@@ -175,6 +204,25 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null)
+        {
+            return Unauthorized();
+        }
+
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (
+            jobResult.IsNone
+            || jobResult.Get().ClaimedByComputeNodeId != node.Id
+        )
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new RecordDependencyInstallOutcomeQuery
             {
@@ -258,6 +306,15 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        if (
+            await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+                .ConfigureAwait(false)
+            is null
+        )
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new ResolveEffectiveEgressAllowlistQuery
             {
@@ -276,6 +333,15 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        if (
+            await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+                .ConfigureAwait(false)
+            is null
+        )
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new ResolveBaseImageBySlugQuery { Slug = slug },
             cancellationToken
@@ -360,6 +426,15 @@ public sealed class PipelineController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        if (
+            await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+                .ConfigureAwait(false)
+            is null
+        )
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new ResolvePromotedDependencyLayerQuery { RecipeKey = recipeKey },
             cancellationToken

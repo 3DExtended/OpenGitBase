@@ -9,7 +9,7 @@ using OpenGitBase.Features.ComputeNode.Entities;
 namespace OpenGitBase.Features.ComputeNode.QueryHandlers;
 
 public sealed class RegisterComputeNodeQueryHandler
-    : IQueryHandler<RegisterComputeNodeQuery, ComputeNodeDto>
+    : IQueryHandler<RegisterComputeNodeQuery, RegisterComputeNodeResultDto>
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _passwordHasherService;
@@ -26,7 +26,7 @@ public sealed class RegisterComputeNodeQueryHandler
         _mapper = mapper;
     }
 
-    public async Task<Option<ComputeNodeDto>> RunQueryAsync(
+    public async Task<Option<RegisterComputeNodeResultDto>> RunQueryAsync(
         RegisterComputeNodeQuery query,
         CancellationToken cancellationToken
     )
@@ -46,7 +46,7 @@ public sealed class RegisterComputeNodeQueryHandler
             || !_passwordHasherService.VerifyPassword(enrollment.EnrollmentTokenHash, query.EnrollmentToken)
         )
         {
-            return Option<ComputeNodeDto>.None;
+            return Option<RegisterComputeNodeResultDto>.None;
         }
 
         enrollment.ConsumedAt = DateTimeOffset.UtcNow;
@@ -63,8 +63,16 @@ public sealed class RegisterComputeNodeQueryHandler
             RegisteredAt = DateTimeOffset.UtcNow,
             LastHeartbeatAt = DateTimeOffset.UtcNow,
         };
+        var identityToken = ComputeNodeIdentityTokens.Mint(node.Id);
+        node.IdentityTokenHash = _passwordHasherService.HashPassword(identityToken);
         context.Set<ComputeNodeEntity>().Add(node);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return Option.From(_mapper.Map<ComputeNodeDto>(node));
+        return Option.From(
+            new RegisterComputeNodeResultDto
+            {
+                Node = _mapper.Map<ComputeNodeDto>(node),
+                NodeIdentityToken = identityToken,
+            }
+        );
     }
 }

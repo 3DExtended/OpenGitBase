@@ -52,11 +52,19 @@ public sealed class CreateComputeNodeEnrollmentQuery
     public long MaxMemoryBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 }
 
-public sealed class RegisterComputeNodeQuery : IQuery<ComputeNodeDto, RegisterComputeNodeQuery>
+public sealed class RegisterComputeNodeQuery
+    : IQuery<RegisterComputeNodeResultDto, RegisterComputeNodeQuery>
 {
     public string NodeId { get; set; } = string.Empty;
 
     public string EnrollmentToken { get; set; } = string.Empty;
+}
+
+public sealed class RegisterComputeNodeResultDto
+{
+    public ComputeNodeDto Node { get; set; } = new();
+
+    public string NodeIdentityToken { get; set; } = string.Empty;
 }
 
 public sealed class ComputeNodeHeartbeatQuery : IQuery<ComputeNodeDto, ComputeNodeHeartbeatQuery>

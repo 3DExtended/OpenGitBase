@@ -46,7 +46,7 @@ public class OrgComputeIntegrationTests
             CancellationToken.None
         );
         Assert.True(registerResult.IsSome);
-        var orgNode = registerResult.Get();
+        var orgNode = registerResult.Get().Node;
 
         await using (var context = await scope.ContextFactory.CreateDbContextAsync())
         {

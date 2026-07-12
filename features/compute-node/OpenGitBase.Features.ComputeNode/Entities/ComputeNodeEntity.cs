@@ -26,4 +26,6 @@ public sealed class ComputeNodeEntity : IIdentifiableEntity<Guid>
     public DateTimeOffset RegisteredAt { get; set; }
 
     public DateTimeOffset? LastHeartbeatAt { get; set; }
+
+    public string? IdentityTokenHash { get; set; }
 }

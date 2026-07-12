@@ -30,5 +30,7 @@ public sealed class PipelineJobDto
 
     public int TimeoutSeconds { get; set; }
 
+    public Guid? ClaimedByComputeNodeId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.ComputeNode.Contracts;
@@ -12,14 +13,17 @@ public sealed class ComputeNodeController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
+    private readonly ComputeNodeIdentityService _identityService;
 
     public ComputeNodeController(
         IQueryProcessor queryProcessor,
-        IUserContext userContext
+        IUserContext userContext,
+        ComputeNodeIdentityService identityService
     )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
+        _identityService = identityService;
     }
 
     [HttpPost("api/v1/compute-nodes/register")]
@@ -40,6 +44,13 @@ public sealed class ComputeNodeController : ControllerBase
         CancellationToken cancellationToken
     )
     {
+        var node = await this.AuthenticateComputeNodeAsync(_identityService, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null || !string.Equals(node.NodeId, query.NodeId, StringComparison.Ordinal))
+        {
+            return Unauthorized();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
         return result.IsSome ? Ok(result.Get()) : NotFound();
     }

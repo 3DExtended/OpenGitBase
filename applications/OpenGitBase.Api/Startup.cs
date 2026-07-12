@@ -141,6 +141,7 @@ public class Startup
         }
 
         services.AddScoped<RepositoryContentAuthorizationService>();
+        services.AddScoped<ComputeNodeIdentityService>();
         services.AddScoped<RepositoryResponseMapper>();
         services.AddScoped<DiscussionAuthorizationService>();
         services.AddScoped<MergeRequestAuthorizationService>();

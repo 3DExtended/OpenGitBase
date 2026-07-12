@@ -42,7 +42,7 @@ public class CommunityHostedIntegrationTests
             },
             CancellationToken.None
         );
-        var communityNode = registerResult.Get();
+        var communityNode = registerResult.Get().Node;
 
         await using (var context = await scope.ContextFactory.CreateDbContextAsync())
         {

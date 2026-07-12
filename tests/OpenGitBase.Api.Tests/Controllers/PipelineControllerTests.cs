@@ -23,7 +23,7 @@ public class PipelineControllerTests
             new HttpContextAccessor()
         );
         var userContext = Substitute.For<IUserContext>();
-        var controller = new PipelineController(queryProcessor, authorization, userContext)
+        var controller = new PipelineController(queryProcessor, authorization, userContext, CreateIdentityService())
         {
             ControllerContext = new ControllerContext
             {
@@ -86,7 +86,7 @@ public class PipelineControllerTests
             new HttpContextAccessor()
         );
         var userContext = Substitute.For<IUserContext>();
-        var controller = new PipelineController(queryProcessor, authorization, userContext);
+        var controller = new PipelineController(queryProcessor, authorization, userContext, CreateIdentityService());
         var result = await controller.ListRepositoryRuns(repositoryId, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
@@ -94,4 +94,10 @@ public class PipelineControllerTests
         Assert.Single(runs);
         Assert.Equal(runId, runs[0].Id);
     }
+
+    private static ComputeNodeIdentityService CreateIdentityService() =>
+        new(
+            Substitute.For<Microsoft.EntityFrameworkCore.IDbContextFactory<OpenGitBase.Common.Data.OpenGitBaseDbContext>>(),
+            Substitute.For<OpenGitBase.Common.Services.IPasswordHasherService>()
+        );
 }
