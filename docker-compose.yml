@@ -279,6 +279,27 @@ services:
       ComputeAgent__EnrollmentToken: ""
       ComputeAgent__PreferProcessSandbox: "true"
 
+  compute-agent-firecracker:
+    profiles: ["firecracker"]
+    image: opengitbase-compute-agent
+    container_name: opengitbase_compute_agent_firecracker
+    restart: unless-stopped
+    build: *compute-agent-build
+    privileged: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    environment:
+      ComputeAgent__ApiBaseUrl: "http://api-lb:8080"
+      ComputeAgent__NodeId: "compute-agent-firecracker"
+      ComputeAgent__EnrollmentToken: ""
+      ComputeAgent__PreferProcessSandbox: "false"
+      ComputeAgent__KernelPath: "/var/lib/opengitbase/vmlinux"
+
   postgres:
     image: postgres:16
     container_name: opengitbase_postgres
