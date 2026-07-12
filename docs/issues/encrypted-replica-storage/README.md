@@ -22,6 +22,7 @@ Implement in dependency order; each issue lists explicit blockers.
 | 14 | [Org quota credits and placement settings UI](./14-org-quota-credits-and-placement-settings-ui.md) | AFK | ready | 12 |
 | 15 | [Cross-org encrypted placement algorithm](./15-cross-org-encrypted-placement-algorithm.md) | AFK | ready | 13, 14 |
 | 16 | [Per-repo byte overrides and capacity engine](./16-per-repo-byte-overrides-and-capacity-engine.md) | AFK | ready | 15 |
+| 17 | [Org node capacity shrink via platform rebalance](./17-org-node-capacity-shrink-via-rebalance.md) | discussion | backlog | 14, 09 |
 
 ## Dependency graph
 

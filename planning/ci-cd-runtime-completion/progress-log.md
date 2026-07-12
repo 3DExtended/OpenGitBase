@@ -15,9 +15,13 @@
 - **Tests:** `dotnet test tests/OpenGitBase.Features.Pipeline.Tests` (prior slices); operator script verified structurally
 
 ### ci-rt-06 — Real Firecracker launcher + VM lifecycle
-- **Commit:** (pending)
+- **Commit:** `69ec745`
 - **Tests:** `dotnet test tests/OpenGitBase.Api.Tests --filter FullyQualifiedName~Firecracker` (5 passed)
 
-## Remaining (9 items)
+### ci-rt-12 — SSE log streaming + incremental agent posts
+- **Commit:** (pending)
+- **Tests:** `dotnet test tests/OpenGitBase.Features.Pipeline.Tests --filter AppendPipelineJobLogs`; `pnpm test:visual -- tests/visual/pipelines.spec.ts`
 
-ci-rt-07, ci-rt-08, ci-rt-09, ci-rt-10, ci-rt-11, ci-rt-12, ci-rt-13, ci-rt-15, ci-rt-16
+## Remaining (8 items)
+
+ci-rt-07, ci-rt-08, ci-rt-09, ci-rt-10, ci-rt-11, ci-rt-13, ci-rt-15, ci-rt-16

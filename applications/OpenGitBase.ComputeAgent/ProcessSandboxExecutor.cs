@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace OpenGitBase.ComputeAgent;
 
@@ -8,7 +9,8 @@ public sealed class ProcessSandboxExecutor : ISandboxExecutor
         string script,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Action<string>? onLogLine = null
     )
     {
         var start = Stopwatch.GetTimestamp();
@@ -37,19 +39,45 @@ public sealed class ProcessSandboxExecutor : ISandboxExecutor
             };
         }
 
-        var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var stdout = new StringBuilder();
+        var stderr = new StringBuilder();
+        var stdoutTask = ReadStreamAsync(process.StandardOutput, stdout, onLogLine, cancellationToken);
+        var stderrTask = ReadStreamAsync(
+            process.StandardError,
+            stderr,
+            line => onLogLine?.Invoke($"stderr: {line}"),
+            cancellationToken
+        );
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var stdOut = await stdOutTask.ConfigureAwait(false);
-        var stdErr = await stdErrTask.ConfigureAwait(false);
+        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
         var elapsedMs = (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         return new SandboxExecutionResult
         {
             Success = process.ExitCode == 0,
             ExitCode = process.ExitCode,
             DurationMs = elapsedMs,
-            StdOut = stdOut,
-            StdErr = stdErr,
+            StdOut = stdout.ToString(),
+            StdErr = stderr.ToString(),
         };
+    }
+
+    private static async Task ReadStreamAsync(
+        StreamReader reader,
+        StringBuilder buffer,
+        Action<string>? onLogLine,
+        CancellationToken cancellationToken
+    )
+    {
+        while (true)
+        {
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            if (line is null)
+            {
+                break;
+            }
+
+            buffer.AppendLine(line);
+            onLogLine?.Invoke(line);
+        }
     }
 }

@@ -13,7 +13,8 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
         string script,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Action<string>? onLogLine = null
     )
     {
         var runAsUser = ResolveExecutionUser(environment);
@@ -32,6 +33,7 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
                     RootFsPath = rootFs,
                     WorkspaceSharePath = workspaceShare,
                     ResourceLimits = resourceLimits,
+                    OnOutputLine = onLogLine,
                 },
                 cancellationToken
             )

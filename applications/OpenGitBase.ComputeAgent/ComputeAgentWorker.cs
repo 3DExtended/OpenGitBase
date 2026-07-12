@@ -176,6 +176,23 @@ public sealed class ComputeAgentWorker : BackgroundService
             cancellationToken
         );
 
+    private static Task AppendJobLogsAsync(
+        HttpClient client,
+        Guid jobId,
+        string logSection,
+        IReadOnlyList<string> logLines,
+        CancellationToken cancellationToken
+    ) =>
+        client.PostAsJsonAsync(
+            $"pipeline/jobs/{jobId}/logs/append",
+            new
+            {
+                logSection,
+                logLines,
+            },
+            cancellationToken
+        );
+
     private async Task<bool> RegisterAsync(HttpClient client, CancellationToken cancellationToken)
     {
         var response = await client
@@ -417,7 +434,8 @@ public sealed class ComputeAgentWorker : BackgroundService
                 payload.Job.Script,
                 workspacePath,
                 env,
-                timeoutCts?.Token ?? cancellationToken
+                timeoutCts?.Token ?? cancellationToken,
+                line => _ = AppendJobLogsAsync(client, payload.Job.Id.Value, "script", [line], cancellationToken)
             )
             .ConfigureAwait(false);
         var executorLabel = _options.PreferProcessSandbox ? "ProcessSandboxExecutor" : "FirecrackerSandboxExecutor";
@@ -578,7 +596,13 @@ public sealed class ComputeAgentWorker : BackgroundService
             }
 
             var result = await _sandboxExecutor
-                .ExecuteAsync(installScript.GetString()!, workspacePath, env, cancellationToken)
+                .ExecuteAsync(
+                    installScript.GetString()!,
+                    workspacePath,
+                    env,
+                    cancellationToken,
+                    line => _ = AppendJobLogsAsync(client, jobId, "install", [line], cancellationToken)
+                )
                 .ConfigureAwait(false);
             await client
                 .PostAsJsonAsync(

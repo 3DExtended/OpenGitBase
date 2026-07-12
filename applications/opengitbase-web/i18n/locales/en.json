@@ -506,6 +506,7 @@
       "logs": "Logs",
       "noLogs": "No logs yet.",
       "pollingHint": "Logs auto-refresh while jobs are running.",
+      "streamingHint": "Logs stream live while jobs are running.",
       "jobs": "Jobs"
     },
     "storage": {

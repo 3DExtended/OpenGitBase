@@ -21,11 +21,12 @@ public sealed class SandboxExecutorSelector : ISandboxExecutor
         string script,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Action<string>? onLogLine = null
     )
     {
         var executor = SelectExecutor();
-        return executor.ExecuteAsync(script, workingDirectory, environment, cancellationToken);
+        return executor.ExecuteAsync(script, workingDirectory, environment, cancellationToken, onLogLine);
     }
 
     private ISandboxExecutor SelectExecutor()

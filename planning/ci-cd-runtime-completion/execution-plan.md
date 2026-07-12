@@ -38,7 +38,7 @@
 | ci-rt-09 | Firecracker resource limits from job spec | pending |
 | ci-rt-10 | Host egress nftables + compose allowlist seed | pending |
 | ci-rt-11 | Layer promotion jobs + real overlay deltas | pending |
-| ci-rt-12 | SSE log streaming + incremental agent posts | pending |
+| ci-rt-12 | SSE log streaming + incremental agent posts | completed |
 | ci-rt-13 | Cancel propagation (Kafka + poll + VM teardown) | pending |
 | ci-rt-14 | Org egress approval on compute settings page | pending |
 | ci-rt-15 | Compose Firecracker profile | pending |

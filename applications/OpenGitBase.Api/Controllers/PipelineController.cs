@@ -6,6 +6,7 @@ using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
+using System.Text.Json;
 
 namespace OpenGitBase.Api.Controllers;
 
@@ -183,6 +184,139 @@ public sealed class PipelineController : ControllerBase
             cancellationToken
         ).ConfigureAwait(false);
         return ToActionResult(result);
+    }
+
+    [HttpPost("pipeline/jobs/{jobId:guid}/logs/append")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AppendJobLogs(
+        Guid jobId,
+        [FromBody] AppendPipelineJobLogsRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null)
+        {
+            return Unauthorized();
+        }
+
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (
+            jobResult.IsNone
+            || jobResult.Get().ClaimedByComputeNodeId != node.Id
+        )
+        {
+            return Unauthorized();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new AppendPipelineJobLogsQuery
+            {
+                JobId = PipelineJobId.From(jobId),
+                LogSection = request.LogSection,
+                LogLines = request.LogLines ?? [],
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Accepted() : BadRequest();
+    }
+
+    [HttpGet("pipeline/jobs/{jobId:guid}/logs/stream")]
+    [AllowAnonymous]
+    public async Task StreamJobLogs(
+        Guid jobId,
+        [FromQuery] DateTimeOffset? after,
+        CancellationToken cancellationToken
+    )
+    {
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (jobResult.IsNone)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var runResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineRunQuery { RunId = jobResult.Get().RunId },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (runResult.IsNone)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var access = await _authorization
+            .AuthorizeReadByIdAsync(RepositoryId.From(runResult.Get().RepositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            Response.StatusCode = access.Kind switch
+            {
+                RepositoryContentAccessResultKind.Forbidden => StatusCodes.Status403Forbidden,
+                RepositoryContentAccessResultKind.Unavailable => StatusCodes.Status503ServiceUnavailable,
+                _ => StatusCodes.Status404NotFound,
+            };
+            return;
+        }
+
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+        Response.ContentType = "text/event-stream";
+
+        var cursor = after ?? DateTimeOffset.MinValue;
+        var idlePolls = 0;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var logsResult = await _queryProcessor.RunQueryAsync(
+                new GetPipelineJobLogsQuery { JobId = PipelineJobId.From(jobId) },
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (logsResult.IsSome)
+            {
+                foreach (var entry in logsResult.Get().Where(entry => entry.Timestamp > cursor))
+                {
+                    cursor = entry.Timestamp;
+                    idlePolls = 0;
+                    var payload = JsonSerializer.Serialize(entry);
+                    await Response.WriteAsync($"event: log\ndata: {payload}\n\n", cancellationToken)
+                        .ConfigureAwait(false);
+                    await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            var currentJob = jobResult.Get();
+            if (currentJob.Status is not PipelineJobStatus.Running and not PipelineJobStatus.Queued)
+            {
+                break;
+            }
+
+            idlePolls++;
+            if (idlePolls > 120)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken).ConfigureAwait(false);
+            jobResult = await _queryProcessor.RunQueryAsync(
+                new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (jobResult.IsNone)
+            {
+                break;
+            }
+        }
+
+        await Response.WriteAsync("event: end\ndata: {}\n\n", cancellationToken).ConfigureAwait(false);
+        await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     [HttpPost("pipeline/jobs/{jobId:guid}/cancel")]

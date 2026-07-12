@@ -15,6 +15,8 @@ const error = ref<string | null>(null)
 const selectedJobId = ref<string | null>(null)
 const logsByJob = ref<Record<string, PipelineJobLog[]>>({})
 const pollingHandle = ref<ReturnType<typeof setInterval> | null>(null)
+const logStream = ref<EventSource | null>(null)
+const streamingJobId = ref<string | null>(null)
 
 const selectedJob = computed<PipelineJob | null>(() => {
   if (!run.value || !selectedJobId.value) {
@@ -74,6 +76,65 @@ function jobStatusColor(status: PipelineJob['status']): 'neutral' | 'info' | 'su
   }
 }
 
+function stopLogStream(): void {
+  if (logStream.value) {
+    logStream.value.close()
+    logStream.value = null
+  }
+  streamingJobId.value = null
+}
+
+function appendStreamedLog(entry: PipelineJobLog): void {
+  const jobId = selectedJobId.value
+  if (!jobId) {
+    return
+  }
+  const existing = logsByJob.value[jobId] ?? []
+  if (existing.some(item => item.timestamp === entry.timestamp && item.line === entry.line && item.section === entry.section)) {
+    return
+  }
+  logsByJob.value = {
+    ...logsByJob.value,
+    [jobId]: [...existing, entry],
+  }
+}
+
+function startLogStream(jobId: string): void {
+  if (typeof window === 'undefined' || !import.meta.client) {
+    return
+  }
+  const job = run.value?.jobs.find(item => item.id === jobId)
+  if (!job || job.status !== 'Running') {
+    stopLogStream()
+    return
+  }
+  if (streamingJobId.value === jobId && logStream.value) {
+    return
+  }
+  stopLogStream()
+  streamingJobId.value = jobId
+  const lastTimestamp = (logsByJob.value[jobId] ?? [])
+    .map(entry => entry.timestamp)
+    .sort()
+    .at(-1)
+  const query = lastTimestamp ? `?after=${encodeURIComponent(lastTimestamp)}` : ''
+  const source = new EventSource(`/pipeline/jobs/${encodeURIComponent(jobId)}/logs/stream${query}`)
+  source.addEventListener('log', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineJobLog
+      appendStreamedLog(payload)
+    }
+    catch {
+      // ignore malformed SSE payloads
+    }
+  })
+  source.addEventListener('end', () => {
+    stopLogStream()
+    void loadRun(false)
+  })
+  logStream.value = source
+}
+
 function stopPolling(): void {
   if (pollingHandle.value) {
     clearInterval(pollingHandle.value)
@@ -114,23 +175,31 @@ async function cancelJob(job: PipelineJob): Promise<void> {
 
 watch([owner, repoSlug, runId], () => {
   stopPolling()
+  stopLogStream()
   void loadRun(true)
 })
 
 watch(selectedJobId, (jobId) => {
+  stopLogStream()
   if (!jobId) {
     return
   }
-  void loadLogs(jobId)
+  void loadLogs(jobId).then(() => {
+    startLogStream(jobId)
+  })
 })
 
 watch(hasRunningJobs, (isRunning) => {
   stopPolling()
   if (!isRunning) {
+    stopLogStream()
     return
   }
+  if (selectedJobId.value) {
+    startLogStream(selectedJobId.value)
+  }
   pollingHandle.value = setInterval(() => {
-    void loadRun(Boolean(selectedJobId.value))
+    void loadRun(false)
   }, 4000)
 }, { immediate: true })
 
@@ -140,6 +209,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  stopLogStream()
 })
 </script>
 
@@ -252,7 +322,7 @@ onBeforeUnmount(() => {
                 v-if="hasRunningJobs"
                 class="text-xs text-[var(--ogb-text-muted)]"
               >
-                {{ t('repo.pipelines.pollingHint') }}
+                {{ t('repo.pipelines.streamingHint') }}
               </span>
             </div>
           </template>

@@ -6,6 +6,7 @@ public interface ISandboxExecutor
         string script,
         string workingDirectory,
         IReadOnlyDictionary<string, string> environment,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Action<string>? onLogLine = null
     );
 }
