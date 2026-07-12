@@ -10,11 +10,11 @@ Completes the operator-facing gap in **ers-14** (enrollment UI, capacity PATCH, 
 
 | Order | ID | Title | Type | Status | Blocked by |
 |-------|-----|-------|------|--------|------------|
-| 1 | [oss-01](./items/oss-01.md) | Org storage node capacity API | AFK | ready | — |
-| 2 | [oss-02](./items/oss-02.md) | Org storage bootstrap script | AFK | ready | — |
-| 3 | [oss-03](./items/oss-03.md) | Org storage self-service UI | AFK | ready | oss-01, oss-02 |
-| 4 | [oss-04](./items/oss-04.md) | Storage operator documentation | AFK | ready | oss-02, oss-03 |
-| 5 | [oss-05](./items/oss-05.md) | Org storage visual regression | AFK | ready | oss-03 |
+| 1 | [oss-01](./items/oss-01.md) | Org storage node capacity API | AFK | complete | — |
+| 2 | [oss-02](./items/oss-02.md) | Org storage bootstrap script | AFK | complete | — |
+| 3 | [oss-03](./items/oss-03.md) | Org storage self-service UI | AFK | complete | oss-01, oss-02 |
+| 4 | [oss-04](./items/oss-04.md) | Storage operator documentation | AFK | complete | oss-02, oss-03 |
+| 5 | [oss-05](./items/oss-05.md) | Org storage visual regression | AFK | complete | oss-03 |
 
 ## Dependency graph
 
