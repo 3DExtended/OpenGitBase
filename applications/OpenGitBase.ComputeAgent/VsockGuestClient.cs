@@ -131,6 +131,23 @@ public sealed class VsockGuestClient
             }
 
             buffer.AppendLine(line);
+            if (line.StartsWith('{') && line.Contains("\"line\"", StringComparison.Ordinal))
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(line);
+                    if (document.RootElement.TryGetProperty("line", out var lineElement))
+                    {
+                        onOutputLine?.Invoke(lineElement.GetString() ?? line);
+                        continue;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // fall through to raw line
+                }
+            }
+
             onOutputLine?.Invoke(line);
         }
     }
