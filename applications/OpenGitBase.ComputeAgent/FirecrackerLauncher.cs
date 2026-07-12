@@ -9,11 +9,13 @@ namespace OpenGitBase.ComputeAgent;
 public sealed class FirecrackerLauncher : IFirecrackerLauncher
 {
     private readonly ComputeAgentOptions _options;
+    private readonly IHostEgressEnforcer _egressEnforcer;
     private readonly ProcessSandboxExecutor _fallback = new();
 
-    public FirecrackerLauncher(ComputeAgentOptions options)
+    public FirecrackerLauncher(ComputeAgentOptions options, IHostEgressEnforcer egressEnforcer)
     {
         _options = options;
+        _egressEnforcer = egressEnforcer;
     }
 
     private static string EscapeShell(string script) => "'" + script.Replace("'", "'\\''") + "'";
@@ -33,6 +35,13 @@ public sealed class FirecrackerLauncher : IFirecrackerLauncher
         try
         {
             await vm.BootAsync(request, firecrackerBinary!, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(vm.TapInterface))
+            {
+                await _egressEnforcer
+                    .ApplyTapEgressAsync(vm.TapInterface, request.EgressAllowlist, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             var cwd = request.WorkingDirectory;
             if (string.IsNullOrWhiteSpace(cwd))
             {
@@ -80,9 +89,17 @@ public sealed class FirecrackerLauncher : IFirecrackerLauncher
                 ExecutorLabel = "FirecrackerMicroVM",
             };
         }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(vm.TapInterface))
+            {
+                await _egressEnforcer.RemoveTapEgressAsync(vm.TapInterface, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
-    internal bool CanBootMicroVm(
+    public bool CanBootMicroVm(
         FirecrackerLaunchRequest request,
         out string? firecrackerBinary,
         out string? skipReason

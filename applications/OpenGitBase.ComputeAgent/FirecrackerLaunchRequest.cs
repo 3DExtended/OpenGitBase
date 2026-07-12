@@ -17,5 +17,7 @@ public sealed class FirecrackerLaunchRequest
 
     public FirecrackerResourceLimits ResourceLimits { get; init; } = new();
 
+    public IReadOnlyList<string> EgressAllowlist { get; init; } = [];
+
     public Action<string>? OnOutputLine { get; init; }
 }

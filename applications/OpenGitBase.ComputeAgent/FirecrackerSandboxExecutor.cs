@@ -21,6 +21,9 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
         environment.TryGetValue("OGB_ROOTFS", out var rootFs);
         environment.TryGetValue("OGB_WORKSPACE_SHARE", out var workspaceShare);
         var resourceLimits = FirecrackerResourceLimits.FromEnvironment(environment);
+        var egressAllowlist = environment.TryGetValue("OGB_EGRESS_ALLOWLIST", out var allowlistRaw)
+            ? allowlistRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : Array.Empty<string>();
 
         var result = await _launcher
             .LaunchAsync(
@@ -33,6 +36,7 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
                     RootFsPath = rootFs,
                     WorkspaceSharePath = workspaceShare,
                     ResourceLimits = resourceLimits,
+                    EgressAllowlist = egressAllowlist,
                     OnOutputLine = onLogLine,
                 },
                 cancellationToken

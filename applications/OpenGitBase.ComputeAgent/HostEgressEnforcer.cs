@@ -60,4 +60,23 @@ public sealed class HostEgressEnforcer : IHostEgressEnforcer
             }
         );
     }
+
+    public Task ApplyTapEgressAsync(
+        string tapInterface,
+        IReadOnlyList<string> allowlist,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = tapInterface;
+        _ = allowlist;
+        _ = cancellationToken;
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveTapEgressAsync(string tapInterface, CancellationToken cancellationToken)
+    {
+        _ = tapInterface;
+        _ = cancellationToken;
+        return Task.CompletedTask;
+    }
 }

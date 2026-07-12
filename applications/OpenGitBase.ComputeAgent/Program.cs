@@ -11,7 +11,8 @@ builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection("Kafka
 builder.Services.AddSingleton<ProcessSandboxExecutor>();
 builder.Services.AddSingleton<IFirecrackerLauncher>(sp =>
     new FirecrackerLauncher(
-        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ComputeAgentOptions>>().Value
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ComputeAgentOptions>>().Value,
+        sp.GetRequiredService<IHostEgressEnforcer>()
     ));
 builder.Services.AddSingleton<FirecrackerSandboxExecutor>();
 builder.Services.AddSingleton<ISandboxExecutor>(sp =>
@@ -32,7 +33,7 @@ builder.Services.AddSingleton<IPromotedDependencyLayerResolver>(sp =>
         sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LayerStoreFetchOptions>>().Value
     ));
 builder.Services.AddSingleton<IOverlayFsStackAssembler, OverlayFsStackAssembler>();
-builder.Services.AddSingleton<IHostEgressEnforcer, HostEgressEnforcer>();
+builder.Services.AddSingleton<IHostEgressEnforcer, NftablesEgressEnforcer>();
 builder.Services.AddHostedService<ComputeAgentWorker>();
 
 await builder.Build().RunAsync();

@@ -14,4 +14,12 @@ public interface IHostEgressEnforcer
         IReadOnlyList<string> allowlist,
         CancellationToken cancellationToken
     );
+
+    Task ApplyTapEgressAsync(
+        string tapInterface,
+        IReadOnlyList<string> allowlist,
+        CancellationToken cancellationToken
+    );
+
+    Task RemoveTapEgressAsync(string tapInterface, CancellationToken cancellationToken);
 }
