@@ -11,6 +11,8 @@ using OpenGitBase.Pipeline;
 
 namespace OpenGitBase.ComputeAgent;
 
+#pragma warning disable SA1204
+
 public sealed class ComputeAgentWorker : BackgroundService
 {
     private const int MaxLogLinesPerUpdate = 200;
@@ -293,8 +295,12 @@ public sealed class ComputeAgentWorker : BackgroundService
     )
     {
         var env = ParseEnvironment(payload.Job.EnvironmentJson);
+        env["OGB_CPU_LIMIT"] = payload.Job.CpuLimit.ToString();
+        env["OGB_MEMORY_MIB"] = payload.Job.MemoryMiB.ToString();
+        env["OGB_DISK_GIB"] = payload.Job.DiskGiB.ToString();
         var imageSlug = TryGetImageSlug(payload.Job.ResolvedSpecJson);
         string? overlayRoot = null;
+        string? workspaceRoot = null;
         if (!string.IsNullOrWhiteSpace(imageSlug))
         {
             var fetch = await _baseImageResolver
@@ -347,6 +353,8 @@ public sealed class ComputeAgentWorker : BackgroundService
 
             overlayRoot = stack.MergedRootPath;
             env["OGB_ROOTFS"] = overlayRoot!;
+            var upperPath = Path.Combine(Path.GetDirectoryName(overlayRoot!)!, "upper");
+            env["OGB_OVERLAY_UPPER"] = upperPath;
             await PostJobStatusAsync(
                 client,
                 payload.Job.Id.Value,
@@ -362,6 +370,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         var allowlist = await _egressEnforcer
             .ResolveAllowlistAsync(client, payload.Job.RunsOn, organizationId, cancellationToken)
             .ConfigureAwait(false);
+        env["OGB_EGRESS_ALLOWLIST"] = string.Join(',', allowlist);
         var egressViolation = await ValidateScriptEgressAsync(payload.Job.Script, allowlist, cancellationToken)
             .ConfigureAwait(false);
         if (egressViolation is not null)
@@ -391,6 +400,10 @@ public sealed class ComputeAgentWorker : BackgroundService
             cancellationToken
         )
             .ConfigureAwait(false);
+        if (env.TryGetValue("OGB_WORKSPACE_ROOT", out var workspaceRootValue))
+        {
+            workspaceRoot = workspaceRootValue;
+        }
 
         var installsSucceeded = await ExecuteDependencyInstallsAsync(
             client,
@@ -429,15 +442,26 @@ public sealed class ComputeAgentWorker : BackgroundService
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(payload.Job.TimeoutSeconds));
         }
 
+        using var executionCts = CancellationTokenSource.CreateLinkedTokenSource(
+            timeoutCts?.Token ?? cancellationToken
+        );
+        var cancelPoll = PollJobCancellationAsync(
+            client,
+            payload.Job.Id.Value,
+            executionCts,
+            cancellationToken
+        );
         var execution = await _sandboxExecutor
             .ExecuteAsync(
                 payload.Job.Script,
                 workspacePath,
                 env,
-                timeoutCts?.Token ?? cancellationToken,
+                executionCts.Token,
                 line => _ = AppendJobLogsAsync(client, payload.Job.Id.Value, "script", [line], cancellationToken)
             )
             .ConfigureAwait(false);
+        executionCts.Cancel();
+        await cancelPoll.ConfigureAwait(false);
         var executorLabel = _options.PreferProcessSandbox ? "ProcessSandboxExecutor" : "FirecrackerSandboxExecutor";
         await PostJobStatusAsync(
             client,
@@ -450,9 +474,92 @@ public sealed class ComputeAgentWorker : BackgroundService
             BuildExecutionLogLines(execution),
             cancellationToken
         ).ConfigureAwait(false);
+        if (execution.Success && env.TryGetValue("OGB_LAYER_PROMOTION_REQUEST_ID", out var promotionRequestId))
+        {
+            await TryCompleteLayerPromotionAsync(
+                client,
+                promotionRequestId,
+                env,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
         if (overlayRoot is not null)
         {
             await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (workspaceRoot is not null)
+        {
+            TeardownWorkspaceRoot(workspaceRoot);
+        }
+    }
+
+    private static async Task TryCompleteLayerPromotionAsync(
+        HttpClient client,
+        string promotionRequestId,
+        IReadOnlyDictionary<string, string> env,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!env.TryGetValue("OGB_OVERLAY_UPPER", out var upperPath) || !Directory.Exists(upperPath))
+        {
+            return;
+        }
+
+        var archivePath = Path.Combine(Path.GetTempPath(), $"ogb-promotion-{Guid.NewGuid():N}.tar.gz");
+        try
+        {
+            var tarInfo = new System.Diagnostics.ProcessStartInfo("sh")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            tarInfo.ArgumentList.Add("-c");
+            tarInfo.ArgumentList.Add($"tar -czf \"{archivePath}\" -C \"{upperPath}\" .");
+            using var tar = System.Diagnostics.Process.Start(tarInfo);
+            if (tar is null)
+            {
+                return;
+            }
+
+            await tar.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            if (tar.ExitCode != 0)
+            {
+                return;
+            }
+
+            await using var stream = File.OpenRead(archivePath);
+            using var content = new StreamContent(stream);
+            using var form = new MultipartFormDataContent();
+            form.Add(content, "artifact", "layer-delta.tar.gz");
+            var response = await client
+                .PostAsync($"pipeline/promotions/{promotionRequestId}/artifact", form, cancellationToken)
+                .ConfigureAwait(false);
+            _ = response.IsSuccessStatusCode;
+        }
+        finally
+        {
+            if (File.Exists(archivePath))
+            {
+                File.Delete(archivePath);
+            }
+        }
+    }
+
+    private static void TeardownWorkspaceRoot(string workspaceRoot)
+    {
+        try
+        {
+            if (Directory.Exists(workspaceRoot))
+            {
+                Directory.Delete(workspaceRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // best effort workspace cleanup
         }
     }
 
@@ -498,6 +605,8 @@ public sealed class ComputeAgentWorker : BackgroundService
         await RunGitCommandAsync($"tar -xzf \"{archivePath}\" -C \"{projectDir}\"", workspaceRoot, cancellationToken)
             .ConfigureAwait(false);
         env["CI_PROJECT_DIR"] = projectDir;
+        env["OGB_WORKSPACE_SHARE"] = projectDir;
+        env["OGB_WORKSPACE_ROOT"] = workspaceRoot;
         return projectDir;
     }
 
@@ -733,6 +842,45 @@ public sealed class ComputeAgentWorker : BackgroundService
             ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
+    private async Task PollJobCancellationAsync(
+        HttpClient client,
+        Guid jobId,
+        CancellationTokenSource executionCts,
+        CancellationToken cancellationToken
+    )
+    {
+        while (!executionCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var response = await client
+                    .GetAsync($"pipeline/jobs/{jobId}/execution-state", cancellationToken)
+                    .ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    var payload = await response.Content
+                        .ReadFromJsonAsync<JobExecutionStateDto>(cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
+                    if (string.Equals(payload?.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        executionCts.Cancel();
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Cancel poll failed for job {JobId}", jobId);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private async Task WaitForClaimWakeAsync(CancellationToken cancellationToken)
     {
         using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -765,7 +913,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         };
 
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
-        consumer.Subscribe(_kafkaOptions.JobAvailableTopic);
+        consumer.Subscribe([_kafkaOptions.JobAvailableTopic, _kafkaOptions.JobCancelledTopic]);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
