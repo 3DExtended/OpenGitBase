@@ -28,16 +28,16 @@
 |----|-------|--------|
 | ci-prd-01 | Platform compute bootstrap + admin fleet UI | completed |
 | ci-prd-02 | Org compute settings UI + enrollment API hardening | completed |
-| ci-prd-03 | Org compute enroll → job routing integration test | pending |
+| ci-prd-03 | Org compute enroll → job routing integration test | completed |
 | ci-prd-04 | Base image catalog build + Layer Store artifacts | completed |
-| ci-prd-05 | Firecracker MicroVM executor + operator requirements | pending |
-| ci-prd-06 | OverlayFS stack assembly in compute agent | pending |
-| ci-prd-07 | Firecracker `ogb-hosted` tracer | pending |
-| ci-prd-08 | Layer promotion runtime + promoted layer mount | pending |
-| ci-prd-09 | Host egress enforcement in compute agent | pending |
-| ci-prd-10 | Job Identity security contract tests | pending |
-| ci-prd-11 | Admin CI console: base images + promotion dashboard | pending |
-| ci-prd-12 | Admin + org domain allowance review UI | pending |
-| ci-prd-13 | Pipeline log visibility + live streaming UI | pending |
-| ci-prd-14 | Compose bootstrap E2E gate | pending |
-| ci-prd-15 | Community-hosted hybrid tracer | pending |
+| ci-prd-05 | Firecracker MicroVM executor + operator requirements | completed |
+| ci-prd-06 | OverlayFS stack assembly in compute agent | completed |
+| ci-prd-07 | Firecracker `ogb-hosted` tracer | completed |
+| ci-prd-08 | Layer promotion runtime + promoted layer mount | completed |
+| ci-prd-09 | Host egress enforcement in compute agent | completed |
+| ci-prd-10 | Job Identity security contract tests | completed |
+| ci-prd-11 | Admin CI console: base images + promotion dashboard | completed |
+| ci-prd-12 | Admin + org domain allowance review UI | completed |
+| ci-prd-13 | Pipeline log visibility + live streaming UI | completed |
+| ci-prd-14 | Compose bootstrap E2E gate | completed |
+| ci-prd-15 | Community-hosted hybrid tracer | completed |
