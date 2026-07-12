@@ -20,6 +20,9 @@ public enum DependencyPromotionRequestStatus
 {
     Queued = 0,
     Rejected = 1,
+    Running = 2,
+    Completed = 3,
+    Failed = 4,
 }
 
 public sealed record DomainAllowanceRequestId : Identifier<Guid, DomainAllowanceRequestId>;
@@ -65,7 +68,13 @@ public sealed class DependencyPromotionRequestDto
 
     public bool PromotionJobScheduled { get; set; }
 
+    public string? ContentHash { get; set; }
+
+    public string? LayerStoreObjectKey { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
 }
 
 public sealed class SubmitDomainAllowanceRequestQuery
@@ -122,4 +131,47 @@ public sealed class ResolveEffectiveEgressAllowlistQuery
     public string RunsOn { get; set; } = string.Empty;
 
     public Guid? OrganizationId { get; set; }
+}
+
+public sealed class ListDomainAllowanceRequestsQuery
+    : IQuery<IReadOnlyList<DomainAllowanceRequestDto>, ListDomainAllowanceRequestsQuery>
+{
+    public DomainAllowanceRequestScope? Scope { get; set; }
+
+    public Guid? OrganizationId { get; set; }
+
+    public DomainAllowanceRequestStatus? Status { get; set; }
+}
+
+public sealed class DependencyInstallAnalyticsDto
+{
+    public string RecipeKey { get; set; } = string.Empty;
+
+    public int InstallCount { get; set; }
+
+    public int SuccessCount { get; set; }
+
+    public double SuccessRate { get; set; }
+
+    public long MedianDurationMs { get; set; }
+
+    public bool PromotionEligible { get; set; }
+
+    public string? PromotionBlockedReason { get; set; }
+}
+
+public sealed class ListDependencyInstallAnalyticsQuery
+    : IQuery<IReadOnlyList<DependencyInstallAnalyticsDto>, ListDependencyInstallAnalyticsQuery>
+{
+}
+
+public sealed class ListDependencyPromotionRequestsQuery
+    : IQuery<IReadOnlyList<DependencyPromotionRequestDto>, ListDependencyPromotionRequestsQuery>
+{
+}
+
+public sealed class ResolvePromotedDependencyLayerQuery
+    : IQuery<BaseImageArtifactDto, ResolvePromotedDependencyLayerQuery>
+{
+    public string RecipeKey { get; set; } = string.Empty;
 }

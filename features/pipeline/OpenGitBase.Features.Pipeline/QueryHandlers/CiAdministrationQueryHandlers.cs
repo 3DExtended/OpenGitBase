@@ -97,7 +97,9 @@ public sealed class RequestDependencyLayerPromotionQueryHandler
         };
         context.Set<DependencyPromotionRequestEntity>().Add(request);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return Option.From(_mapper.Map<DependencyPromotionRequestDto>(request));
+        var dto = _mapper.Map<DependencyPromotionRequestDto>(request);
+        dto.PromotionJobScheduled = true;
+        return Option.From(dto);
     }
 }
 
@@ -292,6 +294,176 @@ public sealed class ResolveEffectiveEgressAllowlistQueryHandler
             .OrderBy(domain => domain, StringComparer.OrdinalIgnoreCase)
             .ToList();
         return Option.From((IReadOnlyList<string>)merged);
+    }
+}
+
+public sealed class ListDomainAllowanceRequestsQueryHandler
+    : IQueryHandler<ListDomainAllowanceRequestsQuery, IReadOnlyList<DomainAllowanceRequestDto>>
+{
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly IMapper _mapper;
+
+    public ListDomainAllowanceRequestsQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IMapper mapper
+    )
+    {
+        _contextFactory = contextFactory;
+        _mapper = mapper;
+    }
+
+    public async Task<Option<IReadOnlyList<DomainAllowanceRequestDto>>> RunQueryAsync(
+        ListDomainAllowanceRequestsQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Set<DomainAllowanceRequestEntity>().ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var filtered = entities
+            .Where(entity => !query.Scope.HasValue || entity.Scope == query.Scope.Value)
+            .Where(entity => !query.OrganizationId.HasValue || entity.OrganizationId == query.OrganizationId)
+            .Where(entity => !query.Status.HasValue || entity.Status == query.Status.Value)
+            .OrderByDescending(entity => entity.CreatedAt)
+            .Select(entity => _mapper.Map<DomainAllowanceRequestDto>(entity))
+            .ToList();
+        return Option.From((IReadOnlyList<DomainAllowanceRequestDto>)filtered);
+    }
+}
+
+public sealed class ListDependencyInstallAnalyticsQueryHandler
+    : IQueryHandler<ListDependencyInstallAnalyticsQuery, IReadOnlyList<DependencyInstallAnalyticsDto>>
+{
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+
+    public ListDependencyInstallAnalyticsQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory
+    )
+    {
+        _contextFactory = contextFactory;
+    }
+
+    public async Task<Option<IReadOnlyList<DependencyInstallAnalyticsDto>>> RunQueryAsync(
+        ListDependencyInstallAnalyticsQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = query;
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var outcomes = await context.Set<DependencyInstallOutcomeEntity>().ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var analytics = outcomes
+            .GroupBy(entity => entity.RecipeKey, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var ordered = group.OrderByDescending(entity => entity.CreatedAt).ToList();
+                var successCount = ordered.Count(entity => entity.Success);
+                var lastFive = ordered.Take(5).ToList();
+                var eligible = lastFive.Count == 5 && lastFive.All(entity => entity.Success);
+                var durations = ordered.Select(entity => entity.DurationMs).OrderBy(value => value).ToList();
+                var median = durations.Count == 0
+                    ? 0
+                    : durations[durations.Count / 2];
+                return new DependencyInstallAnalyticsDto
+                {
+                    RecipeKey = group.Key,
+                    InstallCount = ordered.Count,
+                    SuccessCount = successCount,
+                    SuccessRate = ordered.Count == 0 ? 0 : (double)successCount / ordered.Count,
+                    MedianDurationMs = median,
+                    PromotionEligible = eligible,
+                    PromotionBlockedReason = eligible
+                        ? null
+                        : "Promotion blocked until the last five installs succeed.",
+                };
+            })
+            .OrderBy(dto => dto.RecipeKey, StringComparer.Ordinal)
+            .ToList();
+        return Option.From((IReadOnlyList<DependencyInstallAnalyticsDto>)analytics);
+    }
+}
+
+public sealed class ListDependencyPromotionRequestsQueryHandler
+    : IQueryHandler<ListDependencyPromotionRequestsQuery, IReadOnlyList<DependencyPromotionRequestDto>>
+{
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly IMapper _mapper;
+
+    public ListDependencyPromotionRequestsQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IMapper mapper
+    )
+    {
+        _contextFactory = contextFactory;
+        _mapper = mapper;
+    }
+
+    public async Task<Option<IReadOnlyList<DependencyPromotionRequestDto>>> RunQueryAsync(
+        ListDependencyPromotionRequestsQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = query;
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Set<DependencyPromotionRequestEntity>().ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var requests = entities
+            .OrderByDescending(entity => entity.CreatedAt)
+            .Select(entity => _mapper.Map<DependencyPromotionRequestDto>(entity))
+            .ToList();
+        return Option.From((IReadOnlyList<DependencyPromotionRequestDto>)requests);
+    }
+}
+
+public sealed class ResolvePromotedDependencyLayerQueryHandler
+    : IQueryHandler<ResolvePromotedDependencyLayerQuery, BaseImageArtifactDto>
+{
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+
+    public ResolvePromotedDependencyLayerQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory
+    )
+    {
+        _contextFactory = contextFactory;
+    }
+
+    public async Task<Option<BaseImageArtifactDto>> RunQueryAsync(
+        ResolvePromotedDependencyLayerQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(query.RecipeKey))
+        {
+            return Option<BaseImageArtifactDto>.None;
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var promotions = await context
+            .Set<DependencyPromotionRequestEntity>()
+            .Where(entity => entity.RecipeKey == query.RecipeKey)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var completed = promotions
+            .Where(entity => entity.Status == DependencyPromotionRequestStatus.Completed)
+            .OrderByDescending(entity => entity.CompletedAt ?? entity.CreatedAt)
+            .FirstOrDefault();
+        if (
+            completed is null
+            || string.IsNullOrWhiteSpace(completed.ContentHash)
+            || string.IsNullOrWhiteSpace(completed.LayerStoreObjectKey)
+        )
+        {
+            return Option<BaseImageArtifactDto>.None;
+        }
+
+        return Option.From(
+            new BaseImageArtifactDto
+            {
+                Slug = query.RecipeKey,
+                ContentHash = completed.ContentHash,
+                LayerStoreObjectKey = completed.LayerStoreObjectKey,
+            }
+        );
     }
 }
 

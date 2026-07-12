@@ -716,6 +716,32 @@
       "active": "Active",
       "expires": "Expires"
     },
+    "ci": {
+      "title": "CI supply chain",
+      "description": "Manage base image catalog entries and dependency layer promotions.",
+      "baseImagesTitle": "Base image catalog",
+      "baseImagesEmpty": "No catalog entries yet.",
+      "slugLabel": "Slug",
+      "versionLabel": "Version label",
+      "hashLabel": "Content hash / artifact URI",
+      "ociLabel": "OCI provenance",
+      "createBaseImage": "Add catalog entry",
+      "promotionTitle": "Dependency promotion dashboard",
+      "promotionEmpty": "No dependency install analytics yet.",
+      "requestPromotion": "Request promotion"
+    },
+    "egress": {
+      "title": "Domain allowance",
+      "description": "Review platform egress domain requests and submit new allowance requests.",
+      "submitTitle": "Submit request",
+      "domainLabel": "Domain",
+      "justificationLabel": "Justification",
+      "submitRequest": "Submit request",
+      "pendingTitle": "Pending platform requests",
+      "pendingEmpty": "No pending requests.",
+      "approve": "Approve",
+      "deny": "Deny"
+    },
     "status": {
       "title": "Status & incidents",
       "description": "Publish operator incident banners on the public status page.",

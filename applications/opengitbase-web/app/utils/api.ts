@@ -78,6 +78,49 @@ export interface CreateComputeNodeEnrollmentResult {
   expiresAt: string
 }
 
+export interface BaseImageCatalogEntryDto {
+  id: string
+  slug: string
+  versionLabel: string
+  artifactUri: string
+  contentHash: string
+  ociProvenance: string
+}
+
+export interface DependencyInstallAnalyticsDto {
+  recipeKey: string
+  installCount: number
+  successCount: number
+  successRate: number
+  medianDurationMs: number
+  promotionEligible: boolean
+  promotionBlockedReason?: string | null
+}
+
+export interface DependencyPromotionRequestDto {
+  id: string
+  recipeKey: string
+  status: number
+  promotionJobScheduled: boolean
+  contentHash?: string | null
+  layerStoreObjectKey?: string | null
+  createdAt: string
+  completedAt?: string | null
+}
+
+export interface DomainAllowanceRequestDto {
+  id: string
+  domain: string
+  justification: string
+  scope: number
+  organizationId?: string | null
+  status: number
+  requestedByUserId: string
+  reviewedByUserId?: string | null
+  createdAt: string
+  reviewedAt?: string | null
+}
+
 export interface AdminStorageNodeReplicationSummaryDto {
   storageNodeId: string
   nodeId: string
@@ -1842,6 +1885,21 @@ export function createApi(baseUrl: string) {
             method: 'PATCH',
             body: JSON.stringify(body),
           }),
+
+        listEgressRequests: (organizationId: string) =>
+          request<DomainAllowanceRequestDto[]>(`/organization/${organizationId}/pipeline/egress/domain-requests`),
+
+        approveEgressRequest: (organizationId: string, requestId: string) =>
+          request<DomainAllowanceRequestDto>(
+            `/organization/${organizationId}/pipeline/egress/domain-requests/${requestId}/approve`,
+            { method: 'POST' },
+          ),
+
+        denyEgressRequest: (organizationId: string, requestId: string) =>
+          request<DomainAllowanceRequestDto>(
+            `/organization/${organizationId}/pipeline/egress/domain-requests/${requestId}/deny`,
+            { method: 'POST' },
+          ),
       },
     },
 
@@ -2075,6 +2133,17 @@ export function createApi(baseUrl: string) {
           data: result.data ? normalizePipelineJob(result.data) : null,
         }
       },
+
+      submitDomainRequest: (body: {
+        domain: string
+        justification: string
+        scope: number
+        organizationId?: string | null
+      }) =>
+        request<DomainAllowanceRequestDto>('/pipeline/egress/domain-requests', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
     },
 
     discussions: {
@@ -2649,6 +2718,41 @@ export function createApi(baseUrl: string) {
           request<CreateComputeNodeEnrollmentResult>('/admin/compute-enrollments', {
             method: 'POST',
             body: JSON.stringify(body),
+          }),
+      },
+      ci: {
+        listBaseImages: () => request<BaseImageCatalogEntryDto[]>('/admin/pipeline/base-images'),
+        createBaseImage: (body: {
+          slug: string
+          versionLabel: string
+          artifactUri: string
+          contentHash: string
+          ociProvenance: string
+        }) =>
+          request<BaseImageCatalogEntryDto>('/admin/pipeline/base-images', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+        listDependencyAnalytics: () =>
+          request<DependencyInstallAnalyticsDto[]>('/admin/pipeline/dependency-analytics'),
+        listPromotions: () =>
+          request<DependencyPromotionRequestDto[]>('/admin/pipeline/dependency-promotions'),
+        requestPromotion: (body: { recipeKey: string }) =>
+          request<DependencyPromotionRequestDto>('/admin/pipeline/dependency-promotions', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }),
+      },
+      egress: {
+        listPlatformRequests: () =>
+          request<DomainAllowanceRequestDto[]>('/admin/pipeline/egress/domain-requests'),
+        approvePlatformRequest: (requestId: string) =>
+          request<DomainAllowanceRequestDto>(`/admin/pipeline/egress/domain-requests/${requestId}/approve`, {
+            method: 'POST',
+          }),
+        denyPlatformRequest: (requestId: string) =>
+          request<DomainAllowanceRequestDto>(`/admin/pipeline/egress/domain-requests/${requestId}/deny`, {
+            method: 'POST',
           }),
       },
       fleet: {

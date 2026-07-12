@@ -61,6 +61,8 @@ const adminNavItems = computed(() => [
   { label: t('admin.title'), to: '/admin', icon: 'i-lucide-shield', exact: true },
   { label: t('admin.storage.title'), to: '/admin/storage', icon: 'i-lucide-server' },
   { label: t('admin.compute.title'), to: '/admin/compute', icon: 'i-lucide-cpu' },
+  { label: t('admin.ci.title'), to: '/admin/ci', icon: 'i-lucide-layers' },
+  { label: t('admin.egress.title'), to: '/admin/egress', icon: 'i-lucide-shield-check' },
   { label: t('admin.status.title'), to: '/admin/status', icon: 'i-lucide-activity' },
   { label: t('admin.replication.title'), to: '/admin/repositories', icon: 'i-lucide-database-backup' },
 ])

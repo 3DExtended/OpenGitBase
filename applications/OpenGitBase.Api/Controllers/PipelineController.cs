@@ -316,6 +316,57 @@ public sealed class PipelineController : ControllerBase
         return Ok(result.IsSome ? result.Get() : Array.Empty<BaseImageCatalogEntryDto>());
     }
 
+    [HttpGet("admin/pipeline/egress/domain-requests")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> ListPlatformDomainRequests(CancellationToken cancellationToken)
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ListDomainAllowanceRequestsQuery
+            {
+                Scope = DomainAllowanceRequestScope.Platform,
+                Status = DomainAllowanceRequestStatus.Pending,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return Ok(result.IsSome ? result.Get() : Array.Empty<DomainAllowanceRequestDto>());
+    }
+
+    [HttpGet("admin/pipeline/dependency-analytics")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> ListDependencyAnalytics(CancellationToken cancellationToken)
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ListDependencyInstallAnalyticsQuery(),
+            cancellationToken
+        ).ConfigureAwait(false);
+        return Ok(result.IsSome ? result.Get() : Array.Empty<DependencyInstallAnalyticsDto>());
+    }
+
+    [HttpGet("admin/pipeline/dependency-promotions")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> ListDependencyPromotions(CancellationToken cancellationToken)
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ListDependencyPromotionRequestsQuery(),
+            cancellationToken
+        ).ConfigureAwait(false);
+        return Ok(result.IsSome ? result.Get() : Array.Empty<DependencyPromotionRequestDto>());
+    }
+
+    [HttpGet("pipeline/dependency-layers/resolve")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResolvePromotedDependencyLayer(
+        [FromQuery] string recipeKey,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ResolvePromotedDependencyLayerQuery { RecipeKey = recipeKey },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Ok(result.Get()) : NotFound(new { error = $"No promoted layer for '{recipeKey}'." });
+    }
+
     private IActionResult ToActionResult<T>(Option<T> result)
     {
         if (result.IsNone)
