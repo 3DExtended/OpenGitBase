@@ -16,9 +16,7 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
         CancellationToken cancellationToken
     )
     {
-        var runAsUser = environment.TryGetValue("OGB_SANDBOX_USER", out var user) && !string.IsNullOrWhiteSpace(user)
-            ? user
-            : "ogb";
+        var runAsUser = ResolveExecutionUser(environment);
 
         var result = await _launcher
             .LaunchAsync(
@@ -41,5 +39,26 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
             StdOut = result.StdOut,
             StdErr = result.StdErr,
         };
+    }
+
+    private static string ResolveExecutionUser(IReadOnlyDictionary<string, string> environment)
+    {
+        if (
+            environment.TryGetValue("CI_JOB_EXECUTION_USER", out var ciUser)
+            && !string.IsNullOrWhiteSpace(ciUser)
+        )
+        {
+            return ciUser;
+        }
+
+        if (
+            environment.TryGetValue("OGB_SANDBOX_USER", out var legacyUser)
+            && !string.IsNullOrWhiteSpace(legacyUser)
+        )
+        {
+            return legacyUser;
+        }
+
+        return "ogb";
     }
 }
