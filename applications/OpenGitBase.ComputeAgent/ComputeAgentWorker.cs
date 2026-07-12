@@ -16,6 +16,9 @@ public sealed class ComputeAgentWorker : BackgroundService
     private readonly ComputeAgentOptions _options;
     private readonly ISandboxExecutor _sandboxExecutor;
     private readonly IBaseImageArtifactResolver _baseImageResolver;
+    private readonly IOverlayFsStackAssembler _overlayStackAssembler;
+    private readonly IHostEgressEnforcer _egressEnforcer;
+    private readonly IPromotedDependencyLayerResolver _promotedLayerResolver;
     private readonly KafkaOptions _kafkaOptions;
     private readonly ILogger<ComputeAgentWorker> _logger;
     private readonly SemaphoreSlim _claimWakeSignal = new(0, 1);
@@ -27,6 +30,9 @@ public sealed class ComputeAgentWorker : BackgroundService
         IOptions<ComputeAgentOptions> options,
         IOptions<KafkaOptions> kafkaOptions,
         IBaseImageArtifactResolver baseImageResolver,
+        IOverlayFsStackAssembler overlayStackAssembler,
+        IHostEgressEnforcer egressEnforcer,
+        IPromotedDependencyLayerResolver promotedLayerResolver,
         ISandboxExecutor sandboxExecutor,
         ILogger<ComputeAgentWorker> logger
     )
@@ -36,6 +42,9 @@ public sealed class ComputeAgentWorker : BackgroundService
         _kafkaOptions = kafkaOptions.Value;
         _logger = logger;
         _baseImageResolver = baseImageResolver;
+        _overlayStackAssembler = overlayStackAssembler;
+        _egressEnforcer = egressEnforcer;
+        _promotedLayerResolver = promotedLayerResolver;
         _sandboxExecutor = sandboxExecutor;
     }
 
@@ -110,6 +119,34 @@ public sealed class ComputeAgentWorker : BackgroundService
         }
 
         return null;
+    }
+
+    private static Guid? TryGetOrganizationId(IReadOnlyDictionary<string, string> env)
+    {
+        if (
+            env.TryGetValue("CI_ORGANIZATION_ID", out var organizationId)
+            && Guid.TryParse(organizationId, out var parsed)
+        )
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> ExtractNetworkDomains(string script)
+    {
+        foreach (var token in script.Split([' ', '\t', '\r', '\n', '"', '\''], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || token.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Uri.TryCreate(token, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+                {
+                    yield return uri.Host;
+                }
+            }
+        }
     }
 
     private static Task PostJobStatusAsync(
@@ -197,6 +234,7 @@ public sealed class ComputeAgentWorker : BackgroundService
 
         var env = ParseEnvironment(payload.Job.EnvironmentJson);
         var imageSlug = TryGetImageSlug(payload.Job.ResolvedSpecJson);
+        string? overlayRoot = null;
         if (!string.IsNullOrWhiteSpace(imageSlug))
         {
             var fetch = await _baseImageResolver
@@ -216,22 +254,87 @@ public sealed class ComputeAgentWorker : BackgroundService
                 return;
             }
 
+            var dependencyLayers = await ResolvePromotedDependencyLayersAsync(
+                client,
+                payload.Job,
+                cancellationToken
+            ).ConfigureAwait(false);
+            var stack = await _overlayStackAssembler
+                .AssembleAsync(
+                    new OverlayFsStackRequest
+                    {
+                        JobId = payload.Job.Id.Value,
+                        BaseImageArtifactPath = fetch.LocalPath!,
+                        DependencyLayerPaths = dependencyLayers,
+                        WorkRoot = Path.Combine(Path.GetTempPath(), "opengitbase-agent"),
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (!stack.Success)
+            {
+                await PostJobStatusAsync(
+                    client,
+                    payload.Job.Id.Value,
+                    PipelineJobStatus.Failed,
+                    stack.ErrorMessage ?? "OverlayFS stack assembly failed.",
+                    "layer",
+                    stack.LogLines.Concat([stack.ErrorMessage ?? "layer mount failed"]).ToList(),
+                    cancellationToken
+                ).ConfigureAwait(false);
+                return;
+            }
+
+            overlayRoot = stack.MergedRootPath;
+            env["OGB_ROOTFS"] = overlayRoot!;
             await PostJobStatusAsync(
                 client,
                 payload.Job.Id.Value,
                 PipelineJobStatus.Running,
-                "Base image artifact fetched.",
+                "OverlayFS stack assembled.",
                 "layer",
-                [$"Resolved slug '{imageSlug}' to {fetch.Artifact?.ContentHash}."],
+                stack.LogLines,
                 cancellationToken
             ).ConfigureAwait(false);
+        }
+
+        var organizationId = TryGetOrganizationId(env);
+        var allowlist = await _egressEnforcer
+            .ResolveAllowlistAsync(client, payload.Job.RunsOn, organizationId, cancellationToken)
+            .ConfigureAwait(false);
+        var egressViolation = await ValidateScriptEgressAsync(payload.Job.Script, allowlist, cancellationToken)
+            .ConfigureAwait(false);
+        if (egressViolation is not null)
+        {
+            await PostJobStatusAsync(
+                client,
+                payload.Job.Id.Value,
+                PipelineJobStatus.Failed,
+                "Egress policy blocked job script.",
+                "script",
+                [egressViolation],
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (overlayRoot is not null)
+            {
+                await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
         }
 
         var workspacePath = await MaterializeWorkspaceAsync(payload.Job, env, cancellationToken)
             .ConfigureAwait(false);
 
-        await ExecuteDependencyInstallsAsync(client, payload.Job, payload.Job.Id.Value, workspacePath, env, cancellationToken)
-            .ConfigureAwait(false);
+        await ExecuteDependencyInstallsAsync(
+            client,
+            payload.Job,
+            payload.Job.Id.Value,
+            workspacePath,
+            env,
+            allowlist,
+            cancellationToken
+        ).ConfigureAwait(false);
 
         await PostJobStatusAsync(
             client,
@@ -259,17 +362,22 @@ public sealed class ComputeAgentWorker : BackgroundService
                 timeoutCts?.Token ?? cancellationToken
             )
             .ConfigureAwait(false);
+        var executorLabel = _options.PreferProcessSandbox ? "ProcessSandboxExecutor" : "FirecrackerSandboxExecutor";
         await PostJobStatusAsync(
             client,
             payload.Job.Id.Value,
             execution.Success ? PipelineJobStatus.Passed : PipelineJobStatus.Failed,
             execution.Success
-                ? "ProcessSandboxExecutor completed successfully."
-                : $"ProcessSandboxExecutor failed with exit code {execution.ExitCode}.",
+                ? $"{executorLabel} completed successfully."
+                : $"{executorLabel} failed with exit code {execution.ExitCode}.",
             "script",
             BuildExecutionLogLines(execution),
             cancellationToken
         ).ConfigureAwait(false);
+        if (overlayRoot is not null)
+        {
+            await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<string> MaterializeWorkspaceAsync(
@@ -337,6 +445,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         Guid jobId,
         string workspacePath,
         IReadOnlyDictionary<string, string> env,
+        IReadOnlyList<string> allowlist,
         CancellationToken cancellationToken
     )
     {
@@ -365,6 +474,42 @@ public sealed class ComputeAgentWorker : BackgroundService
             }
 
             var recipeKey = BuildRecipeKey(job, dependency);
+            var promoted = await _promotedLayerResolver
+                .FetchAsync(recipeKey, client, cancellationToken)
+                .ConfigureAwait(false);
+            if (promoted.Success)
+            {
+                await PostJobStatusAsync(
+                    client,
+                    jobId,
+                    PipelineJobStatus.Running,
+                    $"Promoted layer cache hit for {recipeKey}.",
+                    "install",
+                    [$"Skipping live installscript; using layer {promoted.Artifact?.ContentHash}."],
+                    cancellationToken
+                ).ConfigureAwait(false);
+                continue;
+            }
+
+            var egressViolation = await ValidateScriptEgressAsync(
+                installScript.GetString()!,
+                allowlist,
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (egressViolation is not null)
+            {
+                await PostJobStatusAsync(
+                    client,
+                    jobId,
+                    PipelineJobStatus.Failed,
+                    "Egress policy blocked dependency install.",
+                    "install",
+                    [egressViolation],
+                    cancellationToken
+                ).ConfigureAwait(false);
+                return;
+            }
+
             var result = await _sandboxExecutor
                 .ExecuteAsync(installScript.GetString()!, workspacePath, env, cancellationToken)
                 .ConfigureAwait(false);
@@ -396,10 +541,71 @@ public sealed class ComputeAgentWorker : BackgroundService
         }
     }
 
+    private async Task<IReadOnlyList<string>> ResolvePromotedDependencyLayersAsync(
+        HttpClient client,
+        PipelineJobDto job,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(job.ResolvedSpecJson))
+        {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(job.ResolvedSpecJson);
+        if (
+            !document.RootElement.TryGetProperty("Dependencies", out var dependencies)
+            || dependencies.ValueKind != JsonValueKind.Array
+        )
+        {
+            return [];
+        }
+
+        var paths = new List<string>();
+        foreach (var dependency in dependencies.EnumerateArray())
+        {
+            var recipeKey = BuildRecipeKey(job, dependency);
+            var promoted = await _promotedLayerResolver
+                .FetchAsync(recipeKey, client, cancellationToken)
+                .ConfigureAwait(false);
+            if (promoted.Success && !string.IsNullOrWhiteSpace(promoted.LocalPath))
+            {
+                paths.Add(promoted.LocalPath);
+            }
+        }
+
+        return paths;
+    }
+
+    private async Task<string?> ValidateScriptEgressAsync(
+        string script,
+        IReadOnlyList<string> allowlist,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var domain in ExtractNetworkDomains(script))
+        {
+            var check = await _egressEnforcer
+                .ValidateDomainAsync(domain, allowlist, cancellationToken)
+                .ConfigureAwait(false);
+            if (!check.Allowed)
+            {
+                return check.DenialLogLine;
+            }
+        }
+
+        return null;
+    }
+
     private string BuildRecipeKey(PipelineJobDto job, JsonElement dependency)
     {
-        var dependencyName = dependency.TryGetProperty("Name", out var name) ? name.GetString() : "dependency";
-        return $"{job.RunsOn}:{dependencyName}:{job.Id.Value:D}";
+        _ = job;
+        if (dependency.TryGetProperty("Name", out var name) && !string.IsNullOrWhiteSpace(name.GetString()))
+        {
+            return name.GetString()!;
+        }
+
+        return "dependency";
     }
 
     private Dictionary<string, string> ParseEnvironment(string environmentJson)

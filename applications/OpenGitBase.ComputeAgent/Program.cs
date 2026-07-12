@@ -24,6 +24,12 @@ builder.Services.AddSingleton<IBaseImageArtifactResolver>(sp =>
     new BaseImageArtifactResolver(
         sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LayerStoreFetchOptions>>().Value
     ));
+builder.Services.AddSingleton<IPromotedDependencyLayerResolver>(sp =>
+    new PromotedDependencyLayerResolver(
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LayerStoreFetchOptions>>().Value
+    ));
+builder.Services.AddSingleton<IOverlayFsStackAssembler, OverlayFsStackAssembler>();
+builder.Services.AddSingleton<IHostEgressEnforcer, HostEgressEnforcer>();
 builder.Services.AddHostedService<ComputeAgentWorker>();
 
 await builder.Build().RunAsync();
