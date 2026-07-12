@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +6,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.ComputeNode.Contracts;
 using OpenGitBase.Features.ComputeNode.Entities;
+using OpenGitBase.Features.Pipeline;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Repository.Entities;
@@ -98,7 +98,7 @@ public sealed class ClaimPipelineJobQueryHandler
         job.StartedAt = DateTimeOffset.UtcNow;
         node.RunningJobs += 1;
 
-        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var token = JobIdentityTokens.Mint(job.Id);
         context.Set<JobIdentityEntity>().Add(
             new JobIdentityEntity
             {

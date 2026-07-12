@@ -222,6 +222,43 @@ public sealed class PipelineController : ControllerBase
         return ToActionResult(result);
     }
 
+    [HttpGet("pipeline/jobs/{jobId:guid}/workspace-archive")]
+    [AllowAnonymous]
+    public async Task<IActionResult> DownloadWorkspaceArchive(
+        Guid jobId,
+        CancellationToken cancellationToken
+    )
+    {
+        var node = await this.AuthenticateComputeNodeAsync(_computeNodeIdentity, cancellationToken)
+            .ConfigureAwait(false);
+        if (node is not null)
+        {
+            return Unauthorized();
+        }
+
+        var token = Request.GetBearerToken();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _queryProcessor.RunQueryAsync(
+            new MaterializeWorkspaceArchiveQuery
+            {
+                JobId = PipelineJobId.From(jobId),
+                JobIdentityToken = token,
+            },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (result.IsNone)
+        {
+            return Unauthorized();
+        }
+
+        var archive = result.Get();
+        return File(archive.ArchiveBytes, "application/gzip", archive.FileName);
+    }
+
     [HttpPost("pipeline/jobs/{jobId:guid}/dependency-install-outcomes")]
     [AllowAnonymous]
     public async Task<IActionResult> RecordDependencyInstallOutcome(

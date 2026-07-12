@@ -44,11 +44,11 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
     private static string ResolveExecutionUser(IReadOnlyDictionary<string, string> environment)
     {
         if (
-            environment.TryGetValue("CI_JOB_EXECUTION_USER", out var ciUser)
-            && !string.IsNullOrWhiteSpace(ciUser)
+            environment.TryGetValue("CI_JOB_EXECUTION_USER", out var executionUser)
+            && !string.IsNullOrWhiteSpace(executionUser)
         )
         {
-            return ciUser;
+            return executionUser;
         }
 
         if (

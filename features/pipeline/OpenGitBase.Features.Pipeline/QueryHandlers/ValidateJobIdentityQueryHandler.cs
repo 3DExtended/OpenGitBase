@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Pipeline;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 
@@ -27,7 +28,11 @@ public sealed class ValidateJobIdentityQueryHandler
         CancellationToken cancellationToken
     )
     {
-        if (string.IsNullOrWhiteSpace(query.Token) || string.IsNullOrWhiteSpace(query.AfterSha))
+        if (
+            string.IsNullOrWhiteSpace(query.Token)
+            || string.IsNullOrWhiteSpace(query.AfterSha)
+            || !JobIdentityTokens.TryParseJobId(query.Token, out var jobId)
+        )
         {
             return Option.From(
                 new JobIdentityValidationResult { IsValid = false, Reason = "Missing token or SHA." }
@@ -35,16 +40,15 @@ public sealed class ValidateJobIdentityQueryHandler
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var identities = await context
+        var identity = await context
             .Set<JobIdentityEntity>()
             .AsNoTracking()
-            .ToListAsync(cancellationToken)
+            .FirstOrDefaultAsync(entity => entity.JobId == jobId, cancellationToken)
             .ConfigureAwait(false);
-
-        var identity = identities.FirstOrDefault(entity =>
-            _passwordHasherService.VerifyPassword(entity.TokenHash, query.Token)
-        );
-        if (identity is null)
+        if (
+            identity is null
+            || !_passwordHasherService.VerifyPassword(identity.TokenHash, query.Token)
+        )
         {
             return Option.From(
                 new JobIdentityValidationResult { IsValid = false, Reason = "Invalid job identity token." }

@@ -198,7 +198,6 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 ownerContext.OwnerSlug,
                 repository.Slug
             ),
-            ["CI_REPOSITORY_GIT_DIR"] = repository.PhysicalPath,
             ["CI_JOB_EXECUTION_USER"] = job.ScriptUser,
         };
 

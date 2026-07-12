@@ -366,7 +366,13 @@ public sealed class ComputeAgentWorker : BackgroundService
             return;
         }
 
-        var workspacePath = await MaterializeWorkspaceAsync(payload.Job, env, cancellationToken)
+        var workspacePath = await MaterializeWorkspaceAsync(
+            client,
+            payload.Job,
+            payload.JobIdentityToken,
+            env,
+            cancellationToken
+        )
             .ConfigureAwait(false);
 
         var installsSucceeded = await ExecuteDependencyInstallsAsync(
@@ -378,6 +384,7 @@ public sealed class ComputeAgentWorker : BackgroundService
             allowlist,
             cancellationToken
         ).ConfigureAwait(false);
+        if (!installsSucceeded)
         {
             if (overlayRoot is not null)
             {
@@ -432,7 +439,9 @@ public sealed class ComputeAgentWorker : BackgroundService
     }
 
     private async Task<string> MaterializeWorkspaceAsync(
+        HttpClient nodeClient,
         PipelineJobDto job,
+        string jobIdentityToken,
         Dictionary<string, string> env,
         CancellationToken cancellationToken
     )
@@ -440,29 +449,36 @@ public sealed class ComputeAgentWorker : BackgroundService
         var workspaceRoot = Path.Combine(Path.GetTempPath(), "opengitbase-agent", job.Id.Value.ToString("N"));
         Directory.CreateDirectory(workspaceRoot);
         var projectDir = Path.Combine(workspaceRoot, "repo");
+        Directory.CreateDirectory(projectDir);
 
-        if (!env.TryGetValue("CI_REPOSITORY_GIT_DIR", out var repositoryPath) || string.IsNullOrWhiteSpace(repositoryPath))
+        if (string.IsNullOrWhiteSpace(jobIdentityToken))
         {
-            Directory.CreateDirectory(projectDir);
             env["CI_PROJECT_DIR"] = projectDir;
             return projectDir;
         }
 
-        await RunGitCommandAsync(
-            $"clone {(job.GitDepth > 0 ? $"--depth {job.GitDepth} " : string.Empty)}\"{repositoryPath}\" \"{projectDir}\"",
-            workspaceRoot,
-            cancellationToken
-        ).ConfigureAwait(false);
-
-        if (env.TryGetValue("CI_COMMIT_SHA", out var commitSha) && !string.IsNullOrWhiteSpace(commitSha))
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"pipeline/jobs/{job.Id.Value}/workspace-archive"
+        );
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jobIdentityToken);
+        var response = await nodeClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
         {
-            await RunGitCommandAsync(
-                $"checkout \"{commitSha}\"",
-                projectDir,
-                cancellationToken
-            ).ConfigureAwait(false);
+            env["CI_PROJECT_DIR"] = projectDir;
+            return projectDir;
         }
 
+        var archivePath = Path.Combine(workspaceRoot, "workspace.tar.gz");
+        await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false))
+        await using (var archiveFile = File.Create(archivePath))
+        {
+            await responseStream.CopyToAsync(archiveFile, cancellationToken).ConfigureAwait(false);
+        }
+
+        await RunGitCommandAsync($"tar -xzf \"{archivePath}\" -C \"{projectDir}\"", workspaceRoot, cancellationToken)
+            .ConfigureAwait(false);
         env["CI_PROJECT_DIR"] = projectDir;
         return projectDir;
     }
@@ -655,15 +671,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         return null;
     }
 
-    private string BuildRecipeKey(PipelineJobDto job, JsonElement dependency)
-    {
-        var installScript = dependency.TryGetProperty("InstallScript", out var scriptElement)
-            ? scriptElement.GetString() ?? string.Empty
-            : string.Empty;
-        return DependencyRecipeKeys.Compute(ResolveBaseSlug(job), installScript);
-    }
-
-    private static string ResolveBaseSlug(PipelineJobDto job)
+    private string ResolveBaseSlug(PipelineJobDto job)
     {
         if (string.IsNullOrWhiteSpace(job.ResolvedSpecJson))
         {
@@ -680,6 +688,14 @@ public sealed class ComputeAgentWorker : BackgroundService
         }
 
         return "unknown";
+    }
+
+    private string BuildRecipeKey(PipelineJobDto job, JsonElement dependency)
+    {
+        var installScript = dependency.TryGetProperty("InstallScript", out var scriptElement)
+            ? scriptElement.GetString() ?? string.Empty
+            : string.Empty;
+        return DependencyRecipeKeys.Compute(ResolveBaseSlug(job), installScript);
     }
 
     private Dictionary<string, string> ParseEnvironment(string environmentJson)
