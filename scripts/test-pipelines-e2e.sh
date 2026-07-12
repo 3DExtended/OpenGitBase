@@ -130,6 +130,7 @@ fi
 
 echo "==> Verifying logs for each job"
 JOB_IDS="$(printf '%s' "${RUN_JSON}" | python3 -c "import json,sys; print('\n'.join(j['id'] for j in json.load(sys.stdin).get('jobs', [])))")"
+SECTIONS_FOUND=0
 while IFS= read -r JOB_ID; do
   [ -n "${JOB_ID}" ] || continue
   LOGS_JSON="$(curl -fsS "${API_URL}/api/pipeline/jobs/${JOB_ID}/logs" -H "Authorization: Bearer ${TOKEN}")"
@@ -138,6 +139,11 @@ while IFS= read -r JOB_ID; do
     echo "Job ${JOB_ID} has no logs." >&2
     exit 1
   fi
+  SECTIONS_FOUND="$(printf '%s' "${LOGS_JSON}" | python3 -c "import json,sys; sections=set(e.get('section','') for e in json.load(sys.stdin)); print(len([s for s in sections if s]))")"
+  if [ "${SECTIONS_FOUND}" -lt 1 ]; then
+    echo "Job ${JOB_ID} logs missing structured sections." >&2
+    exit 1
+  fi
 done <<< "${JOB_IDS}"
 
-echo "Pipeline E2E passed: run=${RUN_ID} status=${RUN_STATUS} jobs=${JOB_COUNT}"
+echo "Pipeline E2E passed: run=${RUN_ID} status=${RUN_STATUS} jobs=${JOB_COUNT} (Firecracker/OverlayFS path when KVM available; process sandbox fallback otherwise)"
