@@ -28,6 +28,8 @@ public class GetPipelineRunQueryHandlerTests;
 
 public class GetPipelineJobQueryHandlerTests;
 
+public class MaterializeWorkspaceArchiveQueryHandlerTests;
+
 public class GetPipelineJobLogsQueryHandlerTests;
 
 public class ClaimPipelineJobQueryHandlerTests
