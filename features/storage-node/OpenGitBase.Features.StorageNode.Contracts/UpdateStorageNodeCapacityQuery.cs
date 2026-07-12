@@ -9,4 +9,6 @@ public sealed class UpdateStorageNodeCapacityQuery
     public StorageNodeId StorageNodeId { get; set; } = default!;
 
     public long MaxBytes { get; set; }
+
+    public bool EnforceUsedBytesFloor { get; set; }
 }

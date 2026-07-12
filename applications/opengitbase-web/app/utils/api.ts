@@ -1855,6 +1855,12 @@ export function createApi(baseUrl: string) {
             method: 'PATCH',
             body: JSON.stringify(body),
           }),
+
+        updateCapacity: (organizationId: string, storageNodeId: string, body: { maxBytes: number }) =>
+          request<StorageNodeDto>(`/organization/${organizationId}/storage/nodes/${storageNodeId}/capacity`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          }),
       },
 
       compute: {

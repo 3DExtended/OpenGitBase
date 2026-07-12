@@ -230,6 +230,61 @@ public sealed class OrganizationStorageController : ControllerBase
         return result.IsSome ? Ok(result.Get()) : NotFound();
     }
 
+    [HttpPatch("nodes/{storageNodeId:guid}/capacity")]
+    public async Task<ActionResult<StorageNodeDto>> UpdateCapacity(
+        Guid organizationId,
+        Guid storageNodeId,
+        [FromBody] UpdateStorageNodeCapacityRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await AuthorizeOwnerAsync(organizationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (access is not null)
+        {
+            return access;
+        }
+
+        var nodes = await _queryProcessor
+            .RunQueryAsync(
+                new ListOrganizationStorageNodesQuery { OrganizationId = organizationId },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (
+            nodes.IsNone
+            || !nodes.Get().Any(node => node.Id.Value == storageNodeId)
+        )
+        {
+            return NotFound();
+        }
+
+        if (request.MaxBytes < 0)
+        {
+            return BadRequest(new { error = "MaxBytes must be non-negative." });
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new UpdateStorageNodeCapacityQuery
+                {
+                    StorageNodeId = StorageNodeId.From(storageNodeId),
+                    MaxBytes = request.MaxBytes,
+                    EnforceUsedBytesFloor = true,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (result.IsNone)
+        {
+            return BadRequest(new { error = "MaxBytes cannot be less than current used bytes on this node." });
+        }
+
+        return Ok(result.Get());
+    }
+
     private async Task<ActionResult?> AuthorizeOwnerAsync(
         Guid organizationId,
         CancellationToken cancellationToken

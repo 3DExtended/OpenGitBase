@@ -43,6 +43,11 @@ public sealed class UpdateStorageNodeCapacityQueryHandler
             return Option<StorageNodeDto>.None;
         }
 
+        if (query.EnforceUsedBytesFloor && query.MaxBytes < node.UsedBytes)
+        {
+            return Option<StorageNodeDto>.None;
+        }
+
         node.MaxBytes = query.MaxBytes;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Option.From(_mapper.Map<StorageNodeDto>(node));
