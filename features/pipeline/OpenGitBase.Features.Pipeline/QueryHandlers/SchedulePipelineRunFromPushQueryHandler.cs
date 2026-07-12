@@ -4,10 +4,12 @@ using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Entities;
+using OpenGitBase.Features.Users.Entities;
 using OpenGitBase.Pipeline;
 
 namespace OpenGitBase.Features.Pipeline.QueryHandlers;
@@ -75,6 +77,9 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             return Option<PipelineRunId>.None;
         }
 
+        var ownerContext = await ResolveOwnerContextAsync(context, repository, cancellationToken)
+            .ConfigureAwait(false);
+
         var run = new PipelineRunEntity
         {
             Id = Guid.NewGuid(),
@@ -99,7 +104,8 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 continue;
             }
 
-            var reservedVariables = BuildCiVariables(run, repository, job);
+            var jobId = Guid.NewGuid();
+            var reservedVariables = BuildCiVariables(run, repository, job, jobId, ownerContext);
             if (job.Variables.Keys.Any(key => reservedVariables.ContainsKey(key)))
             {
                 return Option<PipelineRunId>.None;
@@ -122,7 +128,7 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             );
             var jobEntity = new PipelineJobEntity
             {
-                Id = Guid.NewGuid(),
+                Id = jobId,
                 RunId = run.Id,
                 Name = job.Name,
                 Stage = job.Stage,
@@ -171,20 +177,62 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
     private static Dictionary<string, string> BuildCiVariables(
         PipelineRunEntity run,
         RepositoryEntity repository,
-        ResolvedJob job
-    ) =>
-        new(StringComparer.Ordinal)
+        ResolvedJob job,
+        Guid jobId,
+        RepositoryOwnerContext ownerContext
+    )
+    {
+        var variables = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["CI"] = "true",
             ["CI_PIPELINE_ID"] = run.Id.ToString("D"),
+            ["CI_JOB_ID"] = jobId.ToString("D"),
             ["CI_JOB_NAME"] = job.Name,
             ["CI_COMMIT_REF_NAME"] = run.Ref,
             ["CI_COMMIT_SHA"] = run.AfterSha,
             ["CI_RUNS_ON"] = job.RunsOn,
             ["CI_PROJECT_NAME"] = repository.Name,
             ["CI_PROJECT_DIR"] = "/workspace/repo",
+            ["CI_PROJECT_PATH"] = CiVariableComposer.BuildProjectPath(ownerContext.OwnerSlug, repository.Slug),
+            ["CI_PROJECT_PATH_SLUG"] = CiVariableComposer.BuildProjectPathSlug(
+                ownerContext.OwnerSlug,
+                repository.Slug
+            ),
             ["CI_REPOSITORY_GIT_DIR"] = repository.PhysicalPath,
+            ["CI_JOB_EXECUTION_USER"] = job.ScriptUser,
         };
+
+        if (ownerContext.IsOrganization)
+        {
+            variables["CI_ORGANIZATION_ID"] = repository.OwnerUserId.ToString("D");
+        }
+
+        return variables;
+    }
+
+    private static async Task<RepositoryOwnerContext> ResolveOwnerContextAsync(
+        OpenGitBaseDbContext context,
+        RepositoryEntity repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var organization = await context
+            .Set<OrganizationEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.Id == repository.OwnerUserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (organization is not null)
+        {
+            return new RepositoryOwnerContext(organization.Slug, IsOrganization: true);
+        }
+
+        var user = await context
+            .Set<UserEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.Id == repository.OwnerUserId, cancellationToken)
+            .ConfigureAwait(false);
+        return new RepositoryOwnerContext(user?.Username ?? repository.OwnerUserId.ToString("N"), false);
+    }
 
     private static int ResolveGitDepth(IReadOnlyDictionary<string, string> variables)
     {
@@ -226,4 +274,6 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         return process.ExitCode == 0 ? output : null;
     }
+
+    private sealed record RepositoryOwnerContext(string OwnerSlug, bool IsOrganization);
 }

@@ -189,6 +189,32 @@ public sealed class PipelineController : ControllerBase
     [Authorize]
     public async Task<IActionResult> CancelJob(Guid jobId, CancellationToken cancellationToken)
     {
+        var jobResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (jobResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var runResult = await _queryProcessor.RunQueryAsync(
+            new GetPipelineRunQuery { RunId = jobResult.Get().RunId },
+            cancellationToken
+        ).ConfigureAwait(false);
+        if (runResult.IsNone)
+        {
+            return NotFound();
+        }
+
+        var access = await _authorization
+            .AuthorizeWriteByIdAsync(RepositoryId.From(runResult.Get().RepositoryId), cancellationToken)
+            .ConfigureAwait(false);
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed)
+        {
+            return access.Kind == RepositoryContentAccessResultKind.NotFound ? NotFound() : Forbid();
+        }
+
         var result = await _queryProcessor.RunQueryAsync(
             new CancelPipelineJobQuery { JobId = PipelineJobId.From(jobId) },
             cancellationToken

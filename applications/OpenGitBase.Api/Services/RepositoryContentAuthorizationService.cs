@@ -86,6 +86,94 @@ public sealed class RepositoryContentAuthorizationService
         return RepositoryContentAccessResult.Forbidden();
     }
 
+    public async Task<RepositoryContentAccessResult> AuthorizeWriteByIdAsync(
+        RepositoryId repositoryId,
+        CancellationToken cancellationToken
+    )
+    {
+        var repositoryResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryQuery { ModelId = repositoryId },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (repositoryResult.IsNone)
+        {
+            return RepositoryContentAccessResult.NotFound();
+        }
+
+        return await AuthorizeWriteAsync(repositoryResult.Get(), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RepositoryContentAccessResult> AuthorizeWriteAsync(
+        RepositoryDto repository,
+        CancellationToken cancellationToken
+    )
+    {
+        var userId = TryGetAuthenticatedUserId();
+        if (userId is null)
+        {
+            return RepositoryContentAccessResult.Forbidden();
+        }
+
+        if (await HasWriteAccessAsync(repository, userId, cancellationToken).ConfigureAwait(false))
+        {
+            return RepositoryContentAccessResult.Allow(repository);
+        }
+
+        return RepositoryContentAccessResult.Forbidden();
+    }
+
+    private async Task<bool> HasWriteAccessAsync(
+        RepositoryDto repository,
+        UserId userId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (repository.OwnerUserId == userId)
+        {
+            return true;
+        }
+
+        if (
+            string.Equals(repository.OwnerKind, "organization", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            var organizationResult = await _queryProcessor
+                .RunQueryAsync(
+                    new GetOrganizationQuery
+                    {
+                        ModelId = OrganizationId.From(repository.OwnerUserId.Value),
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+            if (organizationResult.IsSome)
+            {
+                var organization = organizationResult.Get();
+                if (organization.OwnerUserId == userId.Value)
+                {
+                    return true;
+                }
+            }
+        }
+
+        var member = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryMemberQuery
+                {
+                    RepositoryId = repository.Id,
+                    UserId = userId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return member.IsSome && member.Get().Role >= RepositoryRole.Writer;
+    }
+
     private UserId? TryGetAuthenticatedUserId()
     {
         var httpContext = _httpContextAccessor.HttpContext;
