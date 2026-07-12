@@ -48,6 +48,9 @@ public sealed class CreateBaseImageCatalogEntryQueryHandler
             Slug = query.Slug,
             VersionLabel = query.VersionLabel,
             ArtifactUri = query.ArtifactUri,
+            ContentHash = string.IsNullOrWhiteSpace(query.ContentHash)
+                ? query.ArtifactUri
+                : query.ContentHash,
             OciProvenance = query.OciProvenance,
             CreatedByUserId = query.CreatedByUserId,
             CreatedAt = DateTimeOffset.UtcNow,

@@ -15,6 +15,7 @@ public sealed class ComputeAgentWorker : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ComputeAgentOptions _options;
     private readonly ISandboxExecutor _sandboxExecutor;
+    private readonly IBaseImageArtifactResolver _baseImageResolver;
     private readonly KafkaOptions _kafkaOptions;
     private readonly ILogger<ComputeAgentWorker> _logger;
     private readonly SemaphoreSlim _claimWakeSignal = new(0, 1);
@@ -25,6 +26,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         IHttpClientFactory httpClientFactory,
         IOptions<ComputeAgentOptions> options,
         IOptions<KafkaOptions> kafkaOptions,
+        IBaseImageArtifactResolver baseImageResolver,
         ILogger<ComputeAgentWorker> logger
     )
     {
@@ -32,6 +34,7 @@ public sealed class ComputeAgentWorker : BackgroundService
         _options = options.Value;
         _kafkaOptions = kafkaOptions.Value;
         _logger = logger;
+        _baseImageResolver = baseImageResolver;
         _sandboxExecutor = new ProcessSandboxExecutor();
     }
 
@@ -88,6 +91,25 @@ public sealed class ComputeAgentWorker : BackgroundService
 
     private static IEnumerable<string> SplitLines(string value) =>
         value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string? TryGetImageSlug(string? resolvedSpecJson)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedSpecJson))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(resolvedSpecJson);
+        if (
+            document.RootElement.TryGetProperty("Image", out var imageElement)
+            && !string.IsNullOrWhiteSpace(imageElement.GetString())
+        )
+        {
+            return imageElement.GetString();
+        }
+
+        return null;
+    }
 
     private static Task PostJobStatusAsync(
         HttpClient client,
@@ -173,6 +195,37 @@ public sealed class ComputeAgentWorker : BackgroundService
         }
 
         var env = ParseEnvironment(payload.Job.EnvironmentJson);
+        var imageSlug = TryGetImageSlug(payload.Job.ResolvedSpecJson);
+        if (!string.IsNullOrWhiteSpace(imageSlug))
+        {
+            var fetch = await _baseImageResolver
+                .FetchAsync(imageSlug, client, cancellationToken)
+                .ConfigureAwait(false);
+            if (!fetch.Success)
+            {
+                await PostJobStatusAsync(
+                    client,
+                    payload.Job.Id.Value,
+                    PipelineJobStatus.Failed,
+                    fetch.ErrorMessage ?? "Base image preparation failed.",
+                    "layer",
+                    [fetch.ErrorMessage ?? "Unknown base image slug."],
+                    cancellationToken
+                ).ConfigureAwait(false);
+                return;
+            }
+
+            await PostJobStatusAsync(
+                client,
+                payload.Job.Id.Value,
+                PipelineJobStatus.Running,
+                "Base image artifact fetched.",
+                "layer",
+                [$"Resolved slug '{imageSlug}' to {fetch.Artifact?.ContentHash}."],
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
         var workspacePath = await MaterializeWorkspaceAsync(payload.Job, env, cancellationToken)
             .ConfigureAwait(false);
 

@@ -10,6 +10,8 @@ public sealed class BaseImageCatalogEntryDto
 
     public string ArtifactUri { get; set; } = string.Empty;
 
+    public string ContentHash { get; set; } = string.Empty;
+
     public string OciProvenance { get; set; } = string.Empty;
 
     public Guid CreatedByUserId { get; set; }

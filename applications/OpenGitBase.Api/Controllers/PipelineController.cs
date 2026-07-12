@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
@@ -13,14 +14,17 @@ public sealed class PipelineController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly RepositoryContentAuthorizationService _authorization;
+    private readonly IUserContext _userContext;
 
     public PipelineController(
         IQueryProcessor queryProcessor,
-        RepositoryContentAuthorizationService authorization
+        RepositoryContentAuthorizationService authorization,
+        IUserContext userContext
     )
     {
         _queryProcessor = queryProcessor;
         _authorization = authorization;
+        _userContext = userContext;
     }
 
     [HttpPost("api/v1/internal/pipelines/git-push-ingest")]
@@ -265,6 +269,20 @@ public sealed class PipelineController : ControllerBase
         return Ok(result.IsSome ? result.Get() : Array.Empty<string>());
     }
 
+    [HttpGet("pipeline/base-images/resolve")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResolveBaseImage(
+        [FromQuery] string slug,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ResolveBaseImageBySlugQuery { Slug = slug },
+            cancellationToken
+        ).ConfigureAwait(false);
+        return result.IsSome ? Ok(result.Get()) : NotFound(new { error = $"Unknown base image slug '{slug}'." });
+    }
+
     [HttpPost("admin/pipeline/base-images")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreateBaseImage(
@@ -278,8 +296,9 @@ public sealed class PipelineController : ControllerBase
                 Slug = request.Slug,
                 VersionLabel = request.VersionLabel,
                 ArtifactUri = request.ArtifactUri,
+                ContentHash = request.ContentHash,
                 OciProvenance = request.OciProvenance,
-                CreatedByUserId = request.CreatedByUserId,
+                CreatedByUserId = _userContext.User.UserId,
             },
             cancellationToken
         ).ConfigureAwait(false);
