@@ -391,6 +391,16 @@ public class ResolveEffectiveEgressAllowlistQueryHandlerTests
     }
 }
 
+public class ListDomainAllowanceRequestsQueryHandlerTests;
+
+public class ListDependencyInstallAnalyticsQueryHandlerTests;
+
+public class ListDependencyPromotionRequestsQueryHandlerTests;
+
+public class ValidateJobIdentityQueryHandlerTests;
+
+public class ResolvePromotedDependencyLayerQueryHandlerTests;
+
 internal sealed class PipelineHandlerTestScope : IAsyncDisposable
 {
     private readonly SqliteConnection _connection;
