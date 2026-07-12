@@ -18,6 +18,62 @@ useHead({ title: 'Visual Gallery' })
 function toggleTheme() {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
+const sampleStorageSettings = {
+  organizationId: 'org-1',
+  defaultPlacementPolicy: 2,
+  defaultSelfHostPreference: 1,
+  platformBytesLimit: 1_073_741_824,
+  contributedBytesCapacity: 2_147_483_648,
+  bytesLimit: 3_221_225_472,
+}
+
+const sampleHealthyNode = {
+  id: 'node-healthy',
+  nodeId: 'org-storage-1',
+  internalHost: 'storage-1.example.com',
+  internalHttpPort: 8081,
+  isHealthy: true,
+  maxBytes: 1_099_511_627_776,
+  usedBytes: 5_368_709_120,
+  hostingScope: 0,
+}
+
+const sampleUnhealthyNode = {
+  id: 'node-unhealthy',
+  nodeId: 'org-storage-2',
+  internalHost: 'storage-2.example.com',
+  internalHttpPort: 8081,
+  isHealthy: false,
+  maxBytes: 549_755_813_888,
+  usedBytes: 12_884_901_888,
+  hostingScope: 1,
+}
+
+const sampleEnrollment = {
+  id: 'enrollment-1',
+  nodeId: 'org-storage-3',
+  createdAt: '2026-07-12T10:00:00Z',
+  expiresAt: '2026-07-19T10:00:00Z',
+  consumedAt: null,
+}
+
+const sampleBootstrapCommand = `curl -fsSL https://raw.githubusercontent.com/3DExtended/OpenGitBase/main/scripts/bootstrap-org-storage-node.sh | bash -s -- \\
+  --token "example-token" \\
+  --node-id "org-storage-3" \\
+  --api-url "https://api.example.com/api" \\
+  --internal-host "storage.example.com"`
+
+const placementOptions = [
+  { label: 'Inherit platform default', value: 0 },
+  { label: 'Platform default', value: 1 },
+  { label: 'Max self-host', value: 2 },
+]
+
+const selfHostOptions = [
+  { label: 'Platform only', value: 0 },
+  { label: 'Prefer self-host', value: 1 },
+  { label: 'Require self-host', value: 2 },
+]
 </script>
 
 <template>
@@ -495,49 +551,66 @@ function toggleTheme() {
 
     <section
       class="mt-10 max-w-3xl space-y-4"
-      data-testid="visual-org-storage-settings"
+      data-testid="visual-org-storage-empty"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
-        Org storage settings
+        Org storage — empty
       </h2>
-      <UCard>
-        <template #header>
-          <h3 class="font-semibold">
-            Quota credits
-          </h3>
-        </template>
-        <dl class="grid gap-3 text-sm sm:grid-cols-3">
-          <div>
-            <dt class="text-[var(--ogb-text-muted)]">
-              Platform limit
-            </dt>
-            <dd>1.00 GB</dd>
-          </div>
-          <div>
-            <dt class="text-[var(--ogb-text-muted)]">
-              Contributed capacity
-            </dt>
-            <dd>2.00 GB</dd>
-          </div>
-          <div>
-            <dt class="text-[var(--ogb-text-muted)]">
-              Effective limit
-            </dt>
-            <dd>3.00 GB</dd>
-          </div>
-        </dl>
-      </UCard>
-      <UCard>
-        <template #header>
-          <h3 class="font-semibold">
-            Placement defaults
-          </h3>
-        </template>
-        <div class="grid gap-3 text-sm">
-          <div>Default placement: Max self-host</div>
-          <div>Self-host preference: Prefer self-host</div>
-        </div>
-      </UCard>
+      <OrgStorageQuotaCard :settings="sampleStorageSettings" />
+      <OrgStorageNodeList :nodes="[]" />
+      <OrgStorageEnrollmentSection
+        :enrollments="[]"
+        create-node-id="org-storage-1"
+        :create-max-gi-b="100"
+        :create-hosting-scope="0"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-org-storage-enrollment"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Org storage — enrollment success
+      </h2>
+      <OrgStorageEnrollmentSection
+        :enrollments="[sampleEnrollment]"
+        create-node-id="org-storage-3"
+        :create-max-gi-b="100"
+        :create-hosting-scope="0"
+        :bootstrap-command="sampleBootstrapCommand"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-org-storage-edit"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Org storage — node edit open
+      </h2>
+      <OrgStorageNodeList
+        :nodes="[sampleHealthyNode]"
+        editing-node-id="node-healthy"
+        :edit-max-gi-b="1024"
+        :edit-hosting-scope="0"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-org-storage-unhealthy"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Org storage — unhealthy node
+      </h2>
+      <OrgStorageNodeList :nodes="[sampleUnhealthyNode]" />
+      <OrgStoragePlacementForm
+        :placement-policy="2"
+        :self-host-preference="1"
+        :placement-options="placementOptions"
+        :self-host-options="selfHostOptions"
+      />
     </section>
 
     <section

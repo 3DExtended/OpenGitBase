@@ -52,13 +52,6 @@ test.describe('Shell components @regression', () => {
     )
   })
 
-  test('org storage settings', async ({ page }) => {
-    await waitForApp(page)
-    await expect(page.getByTestId('visual-org-storage-settings')).toHaveScreenshot(
-      'org-storage-settings.png',
-    )
-  })
-
   test('repository byte override panel', async ({ page }) => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-repo-byte-override')).toHaveScreenshot(
