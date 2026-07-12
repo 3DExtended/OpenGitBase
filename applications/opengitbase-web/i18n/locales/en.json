@@ -28,6 +28,10 @@
     "ci": {
       "sectionLabel": "CI/CD",
       "intro": "Run pipelines in Firecracker MicroVMs on platform, organization, or community compute."
+    },
+    "storage": {
+      "sectionLabel": "Storage",
+      "intro": "Register organization-contributed storage nodes and manage self-host placement."
     }
   },
   "status": {

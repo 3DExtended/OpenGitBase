@@ -305,7 +305,7 @@ Organization **Owners** enroll nodes **without platform admin involvement**:
 
 ## Separate from storage nodes
 
-Compute nodes are a distinct fleet from [storage nodes](/docs/ci/overview). A host may run both agents in the future, but enrollment and identity are separate in v1.`,
+Compute nodes are a distinct fleet from [organization storage nodes](/docs/storage/org-storage-nodes). A host may run both agents in the future, but enrollment and identity are separate in v1.`,
   },
   {
     slug: 'base-images',
