@@ -28,18 +28,20 @@
 | ID | Title | Status |
 |----|-------|--------|
 | ci-rt-01 | Node Identity + agent API authentication | completed (`6fdd512`) |
-| ci-rt-02 | Workspace archive API + Job Identity fetch | pending |
+| ci-rt-02 | Workspace archive API + Job Identity fetch | completed (`4f6b119`) |
 | ci-rt-03 | CI variables, org context, cancel write ACL | completed (`c366e8e`) |
 | ci-rt-04 | PRD recipe keys + install fail-fast | completed (`f39a354`) |
 | ci-rt-05 | Base image build script + vsock guest agent in rootfs | completed (`ae8e34b`) |
-| ci-rt-06 | Real Firecracker launcher + VM lifecycle | completed |
-| ci-rt-07 | Virtio-fs workspace in guest | pending |
-| ci-rt-08 | Vsock in-guest install + script execution | pending |
-| ci-rt-09 | Firecracker resource limits from job spec | pending |
-| ci-rt-10 | Host egress nftables + compose allowlist seed | pending |
-| ci-rt-11 | Layer promotion jobs + real overlay deltas | pending |
-| ci-rt-12 | SSE log streaming + incremental agent posts | completed |
-| ci-rt-13 | Cancel propagation (Kafka + poll + VM teardown) | pending |
-| ci-rt-14 | Org egress approval on compute settings page | pending |
-| ci-rt-15 | Compose Firecracker profile | pending |
-| ci-rt-16 | Bare-metal Firecracker E2E gate | pending |
+| ci-rt-06 | Real Firecracker launcher + VM lifecycle | completed (`69ec745`) |
+| ci-rt-07 | Virtio-fs workspace in guest | completed (`0c51c95`) |
+| ci-rt-08 | Vsock in-guest install + script execution | completed (`3152370`) |
+| ci-rt-09 | Firecracker resource limits from job spec | completed (`6b7452f`) |
+| ci-rt-10 | Host egress nftables + compose allowlist seed | completed (`9fd3074`) |
+| ci-rt-11 | Layer promotion jobs + real overlay deltas | completed (`8ea91ee`) |
+| ci-rt-12 | SSE log streaming + incremental agent posts | completed (`bfec83a`) |
+| ci-rt-13 | Cancel propagation (Kafka + poll + VM teardown) | completed (`fa8b106`) |
+| ci-rt-14 | Org egress approval on compute settings page | completed (`f98526b`) |
+| ci-rt-15 | Compose Firecracker profile | completed (`2529292`) |
+| ci-rt-16 | Bare-metal Firecracker E2E gate | completed (`4fa1236`) |
+
+**Integration commit:** `c3e06b8` wires ComputeAgentWorker orchestration across slices 07–13.
