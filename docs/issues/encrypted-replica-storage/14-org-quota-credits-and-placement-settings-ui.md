@@ -11,6 +11,8 @@
 
 [PRD: Encrypted Replica Storage](../../prd/encrypted-replica-storage.md)
 
+Detailed self-service UI spec: [PRD: Organization Storage Self-Service UI](../../prd/org-storage-self-service-ui.md)
+
 ## What to build
 
 Link contributed storage capacity to organization byte limits and expose placement settings in the web UI.
