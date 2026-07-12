@@ -5,7 +5,7 @@ using OpenGitBase.Features.Pipeline.Services;
 
 namespace OpenGitBase.Api.Services;
 
-public sealed class KafkaPipelineEventPublisher : IGitPushEventPublisher, IJobAvailableEventPublisher
+public sealed class KafkaPipelineEventPublisher : IGitPushEventPublisher, IJobAvailableEventPublisher, IJobCancelledEventPublisher
 {
     private readonly KafkaOptions _options;
     private readonly ILogger<KafkaPipelineEventPublisher> _logger;
@@ -60,5 +60,24 @@ public sealed class KafkaPipelineEventPublisher : IGitPushEventPublisher, IJobAv
             )
             .ConfigureAwait(false);
         _logger.LogDebug("Published ci.job.available for {JobId}", jobId);
+    }
+
+    public async Task PublishCancelledAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.BootstrapServers))
+        {
+            return;
+        }
+
+        var producerConfig = new ProducerConfig { BootstrapServers = _options.BootstrapServers };
+        using var producer = new ProducerBuilder<string, string>(producerConfig).Build();
+        await producer
+            .ProduceAsync(
+                _options.JobCancelledTopic,
+                new Message<string, string> { Key = jobId.ToString(), Value = jobId.ToString() },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        _logger.LogDebug("Published ci.job.cancelled for {JobId}", jobId);
     }
 }

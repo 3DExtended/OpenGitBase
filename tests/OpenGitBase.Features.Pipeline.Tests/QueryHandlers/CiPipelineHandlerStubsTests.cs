@@ -437,6 +437,9 @@ internal sealed class PipelineHandlerTestScope : IAsyncDisposable
         services.AddSingleton<IJobAvailableEventPublisher>(
             Substitute.For<IJobAvailableEventPublisher>()
         );
+        services.AddSingleton<IJobCancelledEventPublisher>(
+            Substitute.For<IJobCancelledEventPublisher>()
+        );
         var config = new TypeAdapterConfig();
         new PipelineMapsterConfig().Register(config);
         services.AddSingleton(config);

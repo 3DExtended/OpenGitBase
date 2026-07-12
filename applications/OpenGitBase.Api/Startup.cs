@@ -354,6 +354,9 @@ public class Startup
         services.AddSingleton<IJobAvailableEventPublisher>(sp =>
             sp.GetRequiredService<KafkaPipelineEventPublisher>()
         );
+        services.AddSingleton<IJobCancelledEventPublisher>(sp =>
+            sp.GetRequiredService<KafkaPipelineEventPublisher>()
+        );
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
