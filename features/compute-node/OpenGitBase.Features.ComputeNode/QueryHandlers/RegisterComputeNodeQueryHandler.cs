@@ -32,12 +32,14 @@ public sealed class RegisterComputeNodeQueryHandler
     )
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var enrollment = await context
+        var enrollments = await context
             .Set<ComputeNodeEnrollmentEntity>()
             .Where(entity => entity.NodeId == query.NodeId && entity.ConsumedAt == null)
-            .OrderByDescending(entity => entity.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var enrollment = enrollments
+            .OrderByDescending(entity => entity.CreatedAt)
+            .FirstOrDefault();
         if (
             enrollment is null
             || enrollment.ExpiresAt < DateTimeOffset.UtcNow
