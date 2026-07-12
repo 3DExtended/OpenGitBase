@@ -30,6 +30,17 @@ const selectedLogs = computed(() => {
   return logsByJob.value[selectedJobId.value] ?? []
 })
 
+const logsBySection = computed(() => {
+  const grouped = new Map<string, string[]>()
+  for (const entry of selectedLogs.value) {
+    const section = entry.section || 'general'
+    const lines = grouped.get(section) ?? []
+    lines.push(entry.line)
+    grouped.set(section, lines)
+  }
+  return [...grouped.entries()]
+})
+
 const hasRunningJobs = computed(() => run.value?.jobs.some(job => job.status === 'Running') ?? false)
 
 function statusColor(status: PipelineRun['status']): 'neutral' | 'info' | 'success' | 'warning' | 'error' {
@@ -257,11 +268,22 @@ onBeforeUnmount(() => {
           >
             {{ t('repo.pipelines.noLogs') }}
           </div>
-          <pre
+          <div
             v-else
-            class="max-h-[36rem] overflow-auto rounded border bg-[var(--ogb-bg)] p-3 font-mono text-xs"
-            style="border-color: var(--ogb-border);"
-          ><code>{{ selectedLogs.map(line => `[${line.section}] ${line.line}`).join('\n') }}</code></pre>
+            class="max-h-[36rem] space-y-3 overflow-auto"
+          >
+            <div
+              v-for="[section, lines] in logsBySection"
+              :key="section"
+              class="rounded border bg-[var(--ogb-bg)] p-3"
+              style="border-color: var(--ogb-border);"
+            >
+              <h3 class="mb-2 font-mono text-xs uppercase tracking-wide text-[var(--ogb-text-muted)]">
+                {{ section }}
+              </h3>
+              <pre class="font-mono text-xs whitespace-pre-wrap"><code>{{ lines.join('\n') }}</code></pre>
+            </div>
+          </div>
         </UCard>
       </div>
     </template>
