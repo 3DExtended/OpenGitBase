@@ -143,6 +143,43 @@ const selfHostOptions = [
 
     <section
       class="mb-10 max-w-md space-y-4"
+      data-testid="visual-cli-auth"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        CLI auth
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Sign in for CLI
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            Authenticating against <span class="font-medium">{{ instanceName }}</span>
+          </p>
+        </template>
+        <UFormField :label="t('auth.fields.username')">
+          <UInput model-value="demo-user" />
+        </UFormField>
+        <UFormField
+          :label="t('auth.fields.password')"
+          class="mt-3"
+        >
+          <UInput
+            model-value="••••••••"
+            type="password"
+          />
+        </UFormField>
+        <UButton
+          block
+          class="mt-4"
+        >
+          {{ t('auth.signIn.submit') }}
+        </UButton>
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
       data-testid="visual-auth-card"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
