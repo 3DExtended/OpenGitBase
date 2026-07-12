@@ -14,6 +14,12 @@ public sealed class ComputeAgentOptions
 
     public bool PreferProcessSandbox { get; set; } = true;
 
+    public string KernelPath { get; set; } = "/var/lib/opengitbase/vmlinux";
+
+    public int GuestAgentVsockPort { get; set; } = 5000;
+
+    public int GuestCid { get; set; } = 3;
+
     public IReadOnlyList<string> HostingProfiles { get; set; } =
     [
         "ogb-hosted",

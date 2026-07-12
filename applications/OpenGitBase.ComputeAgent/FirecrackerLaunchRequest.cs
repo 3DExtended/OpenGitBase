@@ -10,4 +10,12 @@ public sealed class FirecrackerLaunchRequest
         = new Dictionary<string, string>();
 
     public string RunAsUser { get; init; } = "ogb";
+
+    public string? RootFsPath { get; init; }
+
+    public string? WorkspaceSharePath { get; init; }
+
+    public FirecrackerResourceLimits ResourceLimits { get; init; } = new();
+
+    public Action<string>? OnOutputLine { get; init; }
 }

@@ -9,7 +9,10 @@ builder.Services.Configure<ComputeAgentOptions>(builder.Configuration.GetSection
 builder.Services.Configure<LayerStoreFetchOptions>(builder.Configuration.GetSection("LayerStore"));
 builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection("Kafka"));
 builder.Services.AddSingleton<ProcessSandboxExecutor>();
-builder.Services.AddSingleton<IFirecrackerLauncher, ProcessFirecrackerLauncher>();
+builder.Services.AddSingleton<IFirecrackerLauncher>(sp =>
+    new FirecrackerLauncher(
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ComputeAgentOptions>>().Value
+    ));
 builder.Services.AddSingleton<FirecrackerSandboxExecutor>();
 builder.Services.AddSingleton<ISandboxExecutor>(sp =>
 {

@@ -32,7 +32,7 @@
 | ci-rt-03 | CI variables, org context, cancel write ACL | completed (`c366e8e`) |
 | ci-rt-04 | PRD recipe keys + install fail-fast | completed (`f39a354`) |
 | ci-rt-05 | Base image build script + vsock guest agent in rootfs | completed (`ae8e34b`) |
-| ci-rt-06 | Real Firecracker launcher + VM lifecycle | pending |
+| ci-rt-06 | Real Firecracker launcher + VM lifecycle | completed |
 | ci-rt-07 | Virtio-fs workspace in guest | pending |
 | ci-rt-08 | Vsock in-guest install + script execution | pending |
 | ci-rt-09 | Firecracker resource limits from job spec | pending |

@@ -17,6 +17,9 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
     )
     {
         var runAsUser = ResolveExecutionUser(environment);
+        environment.TryGetValue("OGB_ROOTFS", out var rootFs);
+        environment.TryGetValue("OGB_WORKSPACE_SHARE", out var workspaceShare);
+        var resourceLimits = FirecrackerResourceLimits.FromEnvironment(environment);
 
         var result = await _launcher
             .LaunchAsync(
@@ -26,6 +29,9 @@ public sealed class FirecrackerSandboxExecutor : ISandboxExecutor
                     WorkingDirectory = workingDirectory,
                     Environment = environment,
                     RunAsUser = runAsUser,
+                    RootFsPath = rootFs,
+                    WorkspaceSharePath = workspaceShare,
+                    ResourceLimits = resourceLimits,
                 },
                 cancellationToken
             )
