@@ -35,7 +35,7 @@ public class RepositoryMemberSmokeTests : E2eTestBase
     public async Task OutsiderCanListMembersWithoutRepoMembership()
     {
         BeginScenario();
-        var setup = await SeedAsync("list-outsider").ConfigureAwait(false);
+        var setup = await SeedAsync("list-outsider", isPrivate: false).ConfigureAwait(false);
         var list = await setup.Outsider.Client.GetAsync($"/repository-member/{setup.Repository.RepositoryId}").ConfigureAwait(false);
         Assert.Equal(200, list.StatusCode);
         await Baselines.CaptureApiAsync("outsider-list-members", list).ConfigureAwait(false);
@@ -192,7 +192,7 @@ public class RepositoryMemberSmokeTests : E2eTestBase
         await Baselines.CaptureApiAsync("anon-add-denied", add).ConfigureAwait(false);
     }
 
-    private async Task<RepositoryMemberSmokeScenario> SeedAsync(string prefix)
+    private async Task<RepositoryMemberSmokeScenario> SeedAsync(string prefix, bool isPrivate = true)
     {
         var identity = new IdentityFixture(Context, Transcript);
         var repositories = new RepositoryFixture(Transcript, Context.Normalizer);
@@ -200,7 +200,7 @@ public class RepositoryMemberSmokeTests : E2eTestBase
         var reader = await identity.RegisterUserAsync($"rm-smoke-reader-{prefix}-{Context.RunSuffix}").ConfigureAwait(false);
         var outsider = await identity.RegisterUserAsync($"rm-smoke-outsider-{prefix}-{Context.RunSuffix}").ConfigureAwait(false);
         var candidate = await identity.RegisterUserAsync($"rm-smoke-candidate-{prefix}-{Context.RunSuffix}").ConfigureAwait(false);
-        var repository = await repositories.CreateAsync(owner, $"rm-smoke-{prefix}-{Context.RunSuffix}", "Repository Member Smoke", isPrivate: true)
+        var repository = await repositories.CreateAsync(owner, $"rm-smoke-{prefix}-{Context.RunSuffix}", "Repository Member Smoke", isPrivate)
             .ConfigureAwait(false);
         await repositories.AddMemberAsync(owner, repository.RepositoryId, reader.UserId, role: 1).ConfigureAwait(false);
         return new RepositoryMemberSmokeScenario(owner, reader, outsider, candidate, repository);

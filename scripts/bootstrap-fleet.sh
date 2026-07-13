@@ -81,7 +81,12 @@ STORAGE_3_TOKEN=$(create_enrollment storage-3)
 STORAGE_4_TOKEN=$(create_enrollment storage-4)
 
 echo "==> Creating platform compute enrollment"
-COMPUTE_AGENT_1_TOKEN=$(create_compute_enrollment compute-agent-1)
+COMPUTE_AGENT_1_TOKEN=""
+if COMPUTE_AGENT_1_TOKEN=$(create_compute_enrollment compute-agent-1 2>/dev/null); then
+  echo "    compute-agent-1 enrollment created"
+else
+  echo "    compute enrollment skipped (endpoint unavailable or compute stack not deployed)"
+fi
 
 if [ ! -f "${OVERRIDE_FILE}" ]; then
   if [ ! -f "${EXAMPLE_FILE}" ]; then

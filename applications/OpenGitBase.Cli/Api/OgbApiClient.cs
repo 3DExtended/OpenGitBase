@@ -14,7 +14,7 @@ public sealed class OgbApiClient : IOgbApiClient
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter(), new FlexibleGuidJsonConverter() },
     };
 
     private readonly HttpClient _httpClient;
@@ -26,7 +26,10 @@ public sealed class OgbApiClient : IOgbApiClient
         _httpClient = httpClient;
         _credentialStore = credentialStore;
         _host = host;
-        _httpClient.BaseAddress = new Uri(apiBaseUrl.TrimEnd('/') + "/");
+        if (_httpClient.BaseAddress is null)
+        {
+            _httpClient.BaseAddress = new Uri(apiBaseUrl.TrimEnd('/') + "/");
+        }
     }
 
     public Task<DiscussionModel> CreateDiscussionAsync(

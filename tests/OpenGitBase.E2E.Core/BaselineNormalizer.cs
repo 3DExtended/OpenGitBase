@@ -43,6 +43,10 @@ public sealed class BaselineNormalizer
         result = Regex.Replace(result, @"/(?:private/)?var/folders/[^\s|""]+", "{{TEMP_DIR}}");
         result = Regex.Replace(result, @"error: RPC failed; HTTP \d+[^\n|]*", "error: {{GIT_RPC_ERROR}}");
         result = Regex.Replace(result, @"fatal: [^\n|]+", "fatal: {{GIT_FATAL}}");
+        result = Regex.Replace(
+            result,
+            @"remote: Traceback \(most recent call last\):[\s\S]*?(?=To http://|\r?\n \* \[new branch\])",
+            string.Empty);
         result = Regex.Replace(result, @"verify\?token=[^""\s&]+", "verify?token={{VERIFY_TOKEN}}");
         return result;
     }

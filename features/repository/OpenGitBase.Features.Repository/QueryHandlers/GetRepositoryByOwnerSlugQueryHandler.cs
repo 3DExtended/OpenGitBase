@@ -30,12 +30,15 @@ public class GetRepositoryByOwnerSlugQueryHandler
     )
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var ownerSlug = query.OwnerSlug.Trim().ToLowerInvariant();
+        var ownerSlug = query.OwnerSlug.Trim();
+        var normalizedOwnerSlug = ownerSlug.ToLowerInvariant();
 
         var user = await context
             .Set<UserEntity>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.NormalizedUsername == ownerSlug, cancellationToken);
+            .FirstOrDefaultAsync(
+                x => x.NormalizedUsername.ToLower() == normalizedOwnerSlug,
+                cancellationToken);
 
         RepositoryEntity? entity = null;
 
@@ -54,7 +57,7 @@ public class GetRepositoryByOwnerSlugQueryHandler
             var org = await context
                 .Set<OrganizationEntity>()
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Slug.ToLower() == ownerSlug, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Slug.ToLower() == normalizedOwnerSlug, cancellationToken);
 
             if (org != null)
             {

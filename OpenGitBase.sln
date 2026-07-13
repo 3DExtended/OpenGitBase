@@ -143,6 +143,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenGitBase.Cli", "applicat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenGitBase.Cli.Tests", "tests\OpenGitBase.Cli.Tests\OpenGitBase.Cli.Tests.csproj", "{D28DDC43-279B-45B8-8E49-C9176C847979}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenGitBase.Cli.Integration.Tests", "tests\OpenGitBase.Cli.Integration.Tests\OpenGitBase.Cli.Integration.Tests.csproj", "{79801E5C-75D2-4DC8-8178-9158A5D4D776}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -801,6 +803,18 @@ Global
 		{D28DDC43-279B-45B8-8E49-C9176C847979}.Release|x64.Build.0 = Release|Any CPU
 		{D28DDC43-279B-45B8-8E49-C9176C847979}.Release|x86.ActiveCfg = Release|Any CPU
 		{D28DDC43-279B-45B8-8E49-C9176C847979}.Release|x86.Build.0 = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|x64.Build.0 = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Debug|x86.Build.0 = Debug|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|Any CPU.Build.0 = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|x64.ActiveCfg = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|x64.Build.0 = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|x86.ActiveCfg = Release|Any CPU
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -872,5 +886,6 @@ Global
 		{D719739C-5E9B-43C6-81DE-C98C6D8431FC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{94C69C6E-AE4F-4952-AB48-3C4A758C9D77} = {A10A91C2-6485-6656-963B-F6FCBC812542}
 		{D28DDC43-279B-45B8-8E49-C9176C847979} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{79801E5C-75D2-4DC8-8178-9158A5D4D776} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

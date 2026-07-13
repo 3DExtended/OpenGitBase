@@ -9,6 +9,8 @@ public sealed class StubHttpMessageHandler : HttpMessageHandler
 
     public IList<HttpRequestMessage> Requests { get; } = [];
 
+    public IList<string> RequestBodies { get; } = [];
+
     public void EnqueueResponse(HttpStatusCode statusCode, string body, string contentType = "application/json")
     {
         _responses.Enqueue(_ => new HttpResponseMessage(statusCode)
@@ -20,16 +22,21 @@ public sealed class StubHttpMessageHandler : HttpMessageHandler
     public void EnqueueResponse(Func<HttpRequestMessage, HttpResponseMessage> factory) =>
         _responses.Enqueue(factory);
 
-    protected override Task<HttpResponseMessage> SendAsync(
+    protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        if (request.Content is not null)
+        {
+            RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        }
+
         Requests.Add(request);
         if (_responses.Count == 0)
         {
             throw new InvalidOperationException("No stubbed HTTP response configured.");
         }
 
-        return Task.FromResult(_responses.Dequeue()(request));
+        return _responses.Dequeue()(request);
     }
 }

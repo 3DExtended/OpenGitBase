@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022sha\u0022:\u0022{{SHA}}\u0022,\u0022shortSha\u0022:\u0022{{SHA}}\u0022,\u0022message\u0022:\u0022seed git testdata tree\u0022,\u0022authorName\u0022:\u0022browse-commit-{{RUN_SUFFIX}}\u0022,\u0022authoredAt\u0022:\u0022{{TIMESTAMP}}\u0022,\u0022parents\u0022:[],\u0022stats\u0022:{\u0022filesChanged\u0022:5,\u0022insertions\u0022:0,\u0022deletions\u0022:0},\u0022kind\u0022:\u0022root\u0022,\u0022diffFiles\u0022:[],\u0022rootFiles\u0022:[{\u0022path\u0022:\u0022assets/logo.svg\u0022,\u0022changeType\u0022:\u0022added\u0022},{\u0022path\u0022:\u0022data/large.bin\u0022,\u0022changeType\u0022:\u0022added\u0022},{\u0022path\u0022:\u0022docs/anchors.md\u0022,\u0022changeType\u0022:\u0022added\u0022},{\u0022path\u0022:\u0022README.md\u0022,\u0022changeType\u0022:\u0022added\u0022},{\u0022path\u0022:\u0022src/foo/bar.txt\u0022,\u0022changeType\u0022:\u0022added\u0022}],\u0022replicationLag\u0022:{\u0022behind\u0022:false,\u0022message\u0022:null}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/by-slug/browse-commit-{{RUN_SUFFIX}}/gitdata-browse-{{RUN_SUFFIX}}/commits/{{SHA}}"
+}
