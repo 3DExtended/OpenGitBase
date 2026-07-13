@@ -18,4 +18,4 @@ Implemented full `ogb mr` command group on `main`.
 
 ### Commit
 
-Pending commit on `main`.
+`6abb552` on `main`.

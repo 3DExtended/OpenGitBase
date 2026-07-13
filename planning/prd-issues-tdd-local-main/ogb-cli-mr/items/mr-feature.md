@@ -17,4 +17,4 @@ All items on `main` in one implementation pass.
 - Tests: `dotnet test tests/OpenGitBase.Cli.Tests` (74), `dotnet test tests/OpenGitBase.Cli.Integration.Tests` (3)
 - Visual snapshots: none (CLI-only)
 - Compose E2E: test added; not run (Docker daemon down)
-- Commit(s): pending
+- Commit(s): `6abb552`
