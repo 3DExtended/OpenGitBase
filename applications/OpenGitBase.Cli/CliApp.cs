@@ -20,6 +20,7 @@ public static class CliApp
 
         rootCommand.Subcommands.Add(BuildAuthCommand(output, error, overrides));
         rootCommand.Subcommands.Add(BuildIssueCommand(output, error, overrides));
+        rootCommand.Subcommands.Add(BuildMergeRequestCommand(output, error, overrides));
         return rootCommand;
     }
 
@@ -171,6 +172,171 @@ public static class CliApp
         issueCommand.Subcommands.Add(viewCommand);
         issueCommand.Subcommands.Add(statusCommand);
         return issueCommand;
+    }
+
+    private static Command BuildMergeRequestCommand(
+        TextWriter output,
+        TextWriter error,
+        CliServiceOverrides? overrides)
+    {
+        var mergeRequestCommand = new Command("mr", "Manage merge requests")
+        {
+            CliOptions.RepoOption,
+        };
+
+        var listCommand = new Command("list", "List merge requests")
+        {
+            CliOptions.MrStatusOption,
+        };
+        listCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.ListAsync(
+                services,
+                parse.GetValue(CliOptions.MrStatusOption)).ConfigureAwait(false);
+        });
+
+        var viewCommand = new Command("view", "View a merge request")
+        {
+            CliOptions.MergeRequestNumberArgument,
+            CliOptions.CommitsOption,
+        };
+        viewCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.ViewAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument),
+                parse.GetValue(CliOptions.CommitsOption)).ConfigureAwait(false);
+        });
+
+        var statusCommand = new Command("status", "Show merge request status and mergeability")
+        {
+            CliOptions.MergeRequestNumberArgument,
+        };
+        statusCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.StatusAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument)).ConfigureAwait(false);
+        });
+
+        var diffCommand = new Command("diff", "Show merge request diff")
+        {
+            CliOptions.MergeRequestNumberArgument,
+        };
+        diffCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.DiffAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument)).ConfigureAwait(false);
+        });
+
+        var createCommand = new Command("create", "Create a merge request")
+        {
+            CliOptions.TitleOption,
+            CliOptions.BodyOption,
+            CliOptions.BodyFileOption,
+            CliOptions.HeadOption,
+            CliOptions.BaseOption,
+            CliOptions.DraftOption,
+        };
+        createCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.CreateAsync(
+                services,
+                parse.GetValue(CliOptions.TitleOption)!,
+                parse.GetValue(CliOptions.BodyOption),
+                parse.GetValue(CliOptions.BodyFileOption),
+                parse.GetValue(CliOptions.HeadOption),
+                parse.GetValue(CliOptions.BaseOption),
+                parse.GetValue(CliOptions.DraftOption)).ConfigureAwait(false);
+        });
+
+        var closeCommand = new Command("close", "Close a merge request")
+        {
+            CliOptions.MergeRequestNumberArgument,
+        };
+        closeCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.CloseAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument)).ConfigureAwait(false);
+        });
+
+        var readyCommand = new Command("ready", "Publish a draft merge request")
+        {
+            CliOptions.MergeRequestNumberArgument,
+        };
+        readyCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.ReadyAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument)).ConfigureAwait(false);
+        });
+
+        var editCommand = new Command("edit", "Edit merge request metadata")
+        {
+            CliOptions.MergeRequestNumberArgument,
+            CliOptions.MrTitleOption,
+            CliOptions.BodyOption,
+            CliOptions.BodyFileOption,
+        };
+        editCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.EditAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument),
+                parse.GetValue(CliOptions.MrTitleOption),
+                parse.GetValue(CliOptions.BodyOption),
+                parse.GetValue(CliOptions.BodyFileOption)).ConfigureAwait(false);
+        });
+
+        var approveCommand = new Command("approve", "Approve a merge request")
+        {
+            CliOptions.MergeRequestNumberArgument,
+        };
+        approveCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.ApproveAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument)).ConfigureAwait(false);
+        });
+
+        var mergeCommand = new Command("merge", "Merge an approved merge request")
+        {
+            CliOptions.MergeRequestNumberArgument,
+            CliOptions.StrategyOption,
+            CliOptions.DeleteBranchOption,
+        };
+        mergeCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await MergeRequestCommandHandlers.MergeAsync(
+                services,
+                parse.GetValue(CliOptions.MergeRequestNumberArgument),
+                parse.GetValue(CliOptions.StrategyOption),
+                parse.GetValue(CliOptions.DeleteBranchOption)).ConfigureAwait(false);
+        });
+
+        mergeRequestCommand.Subcommands.Add(listCommand);
+        mergeRequestCommand.Subcommands.Add(viewCommand);
+        mergeRequestCommand.Subcommands.Add(statusCommand);
+        mergeRequestCommand.Subcommands.Add(diffCommand);
+        mergeRequestCommand.Subcommands.Add(createCommand);
+        mergeRequestCommand.Subcommands.Add(closeCommand);
+        mergeRequestCommand.Subcommands.Add(readyCommand);
+        mergeRequestCommand.Subcommands.Add(editCommand);
+        mergeRequestCommand.Subcommands.Add(approveCommand);
+        mergeRequestCommand.Subcommands.Add(mergeCommand);
+        return mergeRequestCommand;
     }
 
     private static CliServices CreateServices(

@@ -79,6 +79,118 @@ public sealed class JsonOutputWriter : IOutputWriter
 
     public void WriteIssueStatus(DiscussionStatus status) => WriteObject(new { status });
 
+    public void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url) =>
+        WriteObject(new
+        {
+            number = mergeRequest.Number,
+            title = mergeRequest.Title,
+            status = mergeRequest.Status,
+            isDraft = mergeRequest.IsDraft,
+            url,
+        });
+
+    public void WriteMergeRequestList(IReadOnlyList<MergeRequestModel> mergeRequests) =>
+        WriteObject(new
+        {
+            mergeRequests = mergeRequests.Select(mr => new
+            {
+                number = mr.Number,
+                title = mr.Title,
+                status = mr.Status,
+                isDraft = mr.IsDraft,
+                sourceRef = mr.SourceRef,
+                targetRef = mr.TargetRef,
+                updatedAt = mr.UpdatedAt,
+            }),
+        });
+
+    public void WriteMergeRequestView(
+        MergeRequestModel mergeRequest,
+        string url,
+        IReadOnlyList<MergeRequestCommitModel>? commits) =>
+        WriteObject(new
+        {
+            id = mergeRequest.Id,
+            number = mergeRequest.Number,
+            title = mergeRequest.Title,
+            body = mergeRequest.Body,
+            status = mergeRequest.Status,
+            isDraft = mergeRequest.IsDraft,
+            creator = mergeRequest.CreatorUsername,
+            sourceRef = mergeRequest.SourceRef,
+            targetRef = mergeRequest.TargetRef,
+            sourceHeadSha = mergeRequest.SourceHeadSha,
+            targetBaseSha = mergeRequest.TargetBaseSha,
+            mergeCommitSha = mergeRequest.MergeCommitSha,
+            approvalCountAtHead = mergeRequest.ApprovalCountAtHead,
+            requiredApprovalCount = mergeRequest.RequiredApprovalCount,
+            url,
+            createdAt = mergeRequest.CreatedAt,
+            updatedAt = mergeRequest.UpdatedAt,
+            commits = commits?.Select(commit => new
+            {
+                sha = commit.Sha,
+                shortSha = commit.ShortSha,
+                message = commit.Message,
+                authorName = commit.AuthorName,
+                authoredAt = commit.AuthoredAt,
+            }),
+        });
+
+    public void WriteMergeRequestStatus(
+        MergeRequestModel mergeRequest,
+        MergeRequestMergeabilityModel mergeability) =>
+        WriteObject(new
+        {
+            status = mergeRequest.Status,
+            isDraft = mergeRequest.IsDraft,
+            approvalCountAtHead = mergeRequest.ApprovalCountAtHead,
+            requiredApprovalCount = mergeRequest.RequiredApprovalCount,
+            mergeability = new
+            {
+                status = mergeability.Status,
+                message = mergeability.Message,
+            },
+        });
+
+    public void WriteMergeRequestDiff(MergeRequestChangesModel changes) => WriteObject(changes);
+
+    public void WriteMergeRequestClosed(MergeRequestModel mergeRequest) =>
+        WriteObject(new { number = mergeRequest.Number, status = mergeRequest.Status });
+
+    public void WriteMergeRequestReady(MergeRequestModel mergeRequest) =>
+        WriteObject(new
+        {
+            number = mergeRequest.Number,
+            status = mergeRequest.Status,
+            isDraft = mergeRequest.IsDraft,
+        });
+
+    public void WriteMergeRequestApproved(MergeRequestModel mergeRequest) =>
+        WriteObject(new
+        {
+            number = mergeRequest.Number,
+            status = mergeRequest.Status,
+            approvalCountAtHead = mergeRequest.ApprovalCountAtHead,
+            requiredApprovalCount = mergeRequest.RequiredApprovalCount,
+        });
+
+    public void WriteMergeRequestEdited(MergeRequestModel mergeRequest) =>
+        WriteObject(new
+        {
+            number = mergeRequest.Number,
+            title = mergeRequest.Title,
+            body = mergeRequest.Body,
+        });
+
+    public void WriteMergeRequestMerged(MergeRequestModel mergeRequest) =>
+        WriteObject(new
+        {
+            number = mergeRequest.Number,
+            status = mergeRequest.Status,
+            mergeCommitSha = mergeRequest.MergeCommitSha,
+        });
+
     public void WriteError(CliErrorOutput error) => WriteObject(error);
 
     private void WriteObject(object value)

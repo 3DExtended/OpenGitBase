@@ -95,5 +95,142 @@ public sealed class HumanOutputWriter : IOutputWriter
 
     public void WriteIssueStatus(DiscussionStatus status) => _output.WriteLine(status);
 
+    public void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url)
+    {
+        _output.WriteLine($"Created merge request #{mergeRequest.Number}: {mergeRequest.Title}");
+        _output.WriteLine($"Status: {FormatMergeRequestStatus(mergeRequest)}");
+        _output.WriteLine(url);
+    }
+
+    public void WriteMergeRequestList(IReadOnlyList<MergeRequestModel> mergeRequests)
+    {
+        if (mergeRequests.Count == 0)
+        {
+            _output.WriteLine("No merge requests found.");
+            return;
+        }
+
+        _output.WriteLine($"{"#",-6} {"Status",-10} {"Refs",-24} {"Updated",-20} Title");
+        foreach (var mergeRequest in mergeRequests)
+        {
+            var refs = $"{mergeRequest.SourceRef}→{mergeRequest.TargetRef}";
+            _output.WriteLine(
+                $"{mergeRequest.Number,-6} {FormatMergeRequestStatus(mergeRequest),-10} {refs,-24} {mergeRequest.UpdatedAt:u} {mergeRequest.Title}");
+        }
+    }
+
+    public void WriteMergeRequestView(
+        MergeRequestModel mergeRequest,
+        string url,
+        IReadOnlyList<MergeRequestCommitModel>? commits)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"#{mergeRequest.Number} {mergeRequest.Title}");
+        builder.AppendLine($"Status: {FormatMergeRequestStatus(mergeRequest)}");
+        builder.AppendLine($"Creator: {mergeRequest.CreatorUsername ?? "unknown"}");
+        builder.AppendLine($"Refs: {mergeRequest.SourceRef} → {mergeRequest.TargetRef}");
+        builder.AppendLine($"Approvals: {mergeRequest.ApprovalCountAtHead}/{mergeRequest.RequiredApprovalCount}");
+        builder.AppendLine($"Source SHA: {mergeRequest.SourceHeadSha}");
+        builder.AppendLine($"Target SHA: {mergeRequest.TargetBaseSha}");
+        if (!string.IsNullOrWhiteSpace(mergeRequest.MergeCommitSha))
+        {
+            builder.AppendLine($"Merge commit: {mergeRequest.MergeCommitSha}");
+        }
+
+        builder.AppendLine($"URL: {url}");
+        builder.AppendLine($"Created: {mergeRequest.CreatedAt:u}");
+        builder.AppendLine($"Updated: {mergeRequest.UpdatedAt:u}");
+
+        if (!string.IsNullOrWhiteSpace(mergeRequest.Body))
+        {
+            builder.AppendLine();
+            builder.AppendLine(mergeRequest.Body);
+        }
+
+        if (commits is { Count: > 0 })
+        {
+            builder.AppendLine();
+            builder.AppendLine("Commits:");
+            foreach (var commit in commits)
+            {
+                builder.AppendLine($"{commit.ShortSha} {commit.Message} ({commit.AuthorName})");
+            }
+        }
+
+        _output.Write(builder.ToString());
+    }
+
+    public void WriteMergeRequestStatus(
+        MergeRequestModel mergeRequest,
+        MergeRequestMergeabilityModel mergeability)
+    {
+        var status = FormatMergeRequestStatus(mergeRequest);
+        var mergeHint = string.IsNullOrWhiteSpace(mergeability.Message)
+            ? mergeability.Status
+            : $"{mergeability.Status}: {mergeability.Message}";
+        _output.WriteLine($"{status} — {mergeHint}");
+    }
+
+    public void WriteMergeRequestDiff(MergeRequestChangesModel changes)
+    {
+        if (changes.Files.Count == 0)
+        {
+            _output.WriteLine("No changes.");
+            return;
+        }
+
+        var builder = new StringBuilder();
+        foreach (var file in changes.Files)
+        {
+            builder.AppendLine($"--- {file.OldPath ?? file.FilePath}");
+            builder.AppendLine($"+++ {file.FilePath}");
+            foreach (var hunk in file.Hunks)
+            {
+                builder.AppendLine(hunk.Header);
+                foreach (var line in hunk.Lines)
+                {
+                    var prefix = line.Type switch
+                    {
+                        "add" => "+",
+                        "remove" => "-",
+                        _ => " ",
+                    };
+                    builder.AppendLine($"{prefix}{line.Content}");
+                }
+            }
+
+            builder.AppendLine();
+        }
+
+        _output.Write(builder.ToString());
+    }
+
+    public void WriteMergeRequestClosed(MergeRequestModel mergeRequest) =>
+        _output.WriteLine($"Merge request #{mergeRequest.Number} is now {mergeRequest.Status}.");
+
+    public void WriteMergeRequestReady(MergeRequestModel mergeRequest) =>
+        _output.WriteLine($"Merge request #{mergeRequest.Number} is now {FormatMergeRequestStatus(mergeRequest)}.");
+
+    public void WriteMergeRequestApproved(MergeRequestModel mergeRequest) =>
+        _output.WriteLine(
+            $"Merge request #{mergeRequest.Number} approved ({mergeRequest.ApprovalCountAtHead}/{mergeRequest.RequiredApprovalCount}) — {FormatMergeRequestStatus(mergeRequest)}.");
+
+    public void WriteMergeRequestEdited(MergeRequestModel mergeRequest) =>
+        _output.WriteLine($"Merge request #{mergeRequest.Number} updated.");
+
+    public void WriteMergeRequestMerged(MergeRequestModel mergeRequest)
+    {
+        _output.WriteLine($"Merge request #{mergeRequest.Number} merged.");
+        if (!string.IsNullOrWhiteSpace(mergeRequest.MergeCommitSha))
+        {
+            _output.WriteLine($"Merge commit: {mergeRequest.MergeCommitSha}");
+        }
+    }
+
     public void WriteError(CliErrorOutput error) => _error.WriteLine(error.Error);
+
+    private static string FormatMergeRequestStatus(MergeRequestModel mergeRequest) =>
+        mergeRequest.IsDraft && mergeRequest.Status == MergeRequestStatus.Open
+            ? "Draft"
+            : mergeRequest.Status.ToString();
 }

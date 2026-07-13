@@ -25,8 +25,14 @@ public static class CliOptions
     public static Option<string> TitleOption { get; } =
         new("--title")
         {
-            Description = "Issue title",
+            Description = "Title",
             Required = true,
+        };
+
+    public static Option<string?> MrTitleOption { get; } =
+        new("--title")
+        {
+            Description = "Updated title",
         };
 
     public static Option<string?> BodyOption { get; } =
@@ -44,7 +50,49 @@ public static class CliOptions
     public static Option<string?> StatusOption { get; } =
         new("--status")
         {
-            Description = "Filter by status: open, engaged, resolved, dismissed",
+            Description = "Filter by status: open, engaged, resolved, dismissed (issue) or draft, open, approved, merged, closed (mr)",
+        };
+
+    public static Option<string?> MrStatusOption { get; } =
+        new("--status")
+        {
+            Description = "Filter by status: draft, open, approved, merged, closed",
+        };
+
+    public static Option<string?> HeadOption { get; } =
+        new("--head")
+        {
+            Description = "Source branch name (defaults to current git branch)",
+        };
+
+    public static Option<string?> BaseOption { get; } =
+        new("--base")
+        {
+            Description = "Target branch name (defaults to repository default branch)",
+        };
+
+    public static Option<bool> DraftOption { get; } =
+        new("--draft")
+        {
+            Description = "Create as draft merge request",
+        };
+
+    public static Option<bool> CommitsOption { get; } =
+        new("--commits")
+        {
+            Description = "Include commit list in view output",
+        };
+
+    public static Option<string?> StrategyOption { get; } =
+        new("--strategy")
+        {
+            Description = "Merge strategy: merge-commit, squash, fast-forward",
+        };
+
+    public static Option<bool> DeleteBranchOption { get; } =
+        new("--delete-branch")
+        {
+            Description = "Delete source branch after merge",
         };
 
     public static Option<string?> ReasonOption { get; } =
@@ -57,5 +105,11 @@ public static class CliOptions
         new("NUMBER")
         {
             Description = "Issue number",
+        };
+
+    public static Argument<int> MergeRequestNumberArgument { get; } =
+        new("NUMBER")
+        {
+            Description = "Merge request number",
         };
 }

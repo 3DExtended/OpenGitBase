@@ -18,5 +18,30 @@ public interface IOutputWriter
 
     void WriteIssueStatus(DiscussionStatus status);
 
+    void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url);
+
+    void WriteMergeRequestList(IReadOnlyList<MergeRequestModel> mergeRequests);
+
+    void WriteMergeRequestView(
+        MergeRequestModel mergeRequest,
+        string url,
+        IReadOnlyList<MergeRequestCommitModel>? commits);
+
+    void WriteMergeRequestStatus(
+        MergeRequestModel mergeRequest,
+        MergeRequestMergeabilityModel mergeability);
+
+    void WriteMergeRequestDiff(MergeRequestChangesModel changes);
+
+    void WriteMergeRequestClosed(MergeRequestModel mergeRequest);
+
+    void WriteMergeRequestReady(MergeRequestModel mergeRequest);
+
+    void WriteMergeRequestApproved(MergeRequestModel mergeRequest);
+
+    void WriteMergeRequestEdited(MergeRequestModel mergeRequest);
+
+    void WriteMergeRequestMerged(MergeRequestModel mergeRequest);
+
     void WriteError(CliErrorOutput error);
 }

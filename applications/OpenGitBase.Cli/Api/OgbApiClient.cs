@@ -106,6 +106,136 @@ public sealed class OgbApiClient : IOgbApiClient
         return SendAsync<DiscussionModel>(HttpMethod.Get, path, body: null, cancellationToken);
     }
 
+    public Task<IReadOnlyList<MergeRequestModel>> ListMergeRequestsAsync(
+        RepoSlug repo,
+        MergeRequestStatus? status,
+        CancellationToken cancellationToken = default)
+    {
+        var path = OgbApiClientHelpers.BuildMergeRequestsPath(repo);
+        if (status is not null)
+        {
+            path += $"?status={status.Value.ToString().ToLowerInvariant()}";
+        }
+
+        return SendAsync<IReadOnlyList<MergeRequestModel>>(
+            HttpMethod.Get,
+            path,
+            body: null,
+            cancellationToken);
+    }
+
+    public Task<MergeRequestModel> GetMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestModel> CreateMergeRequestAsync(
+        RepoSlug repo,
+        CreateMergeRequestRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Post,
+            OgbApiClientHelpers.BuildMergeRequestsPath(repo),
+            request,
+            cancellationToken);
+
+    public Task<MergeRequestModel> UpdateMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        UpdateMergeRequestRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Patch,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}",
+            request,
+            cancellationToken);
+
+    public Task<MergeRequestModel> PublishMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Post,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/publish",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestModel> CloseMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Post,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/close",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestModel> ApproveMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Post,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/approve",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestModel> MergeMergeRequestAsync(
+        RepoSlug repo,
+        int number,
+        MergeMergeRequestRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestModel>(
+            HttpMethod.Post,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/merge",
+            request,
+            cancellationToken);
+
+    public Task<MergeRequestChangesModel> GetMergeRequestChangesAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestChangesModel>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/changes",
+            body: null,
+            cancellationToken);
+
+    public Task<IReadOnlyList<MergeRequestCommitModel>> ListMergeRequestCommitsAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<MergeRequestCommitModel>>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/commits",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestMergeabilityModel> GetMergeRequestMergeabilityAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestMergeabilityModel>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/{number}/mergeability",
+            body: null,
+            cancellationToken);
+
+    public Task<MergeRequestBranchAheadSummaryModel> GetBranchAheadSummaryAsync(
+        RepoSlug repo,
+        string refName,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<MergeRequestBranchAheadSummaryModel>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildMergeRequestsPath(repo)}/branch-ahead-summary?refName={Uri.EscapeDataString(refName)}",
+            body: null,
+            cancellationToken);
+
     private async Task<T> SendAsync<T>(
         HttpMethod method,
         string path,

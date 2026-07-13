@@ -16,6 +16,7 @@ public sealed class CliServices
         ILoopbackAuthServer loopbackAuthServer,
         IBrowserLauncher browserLauncher,
         IGitRemoteResolver gitRemoteResolver,
+        IGitBranchResolver gitBranchResolver,
         IOgbApiClient apiClient,
         string host,
         string apiBaseUrl,
@@ -32,6 +33,7 @@ public sealed class CliServices
         LoopbackAuthServer = loopbackAuthServer;
         BrowserLauncher = browserLauncher;
         GitRemoteResolver = gitRemoteResolver;
+        GitBranchResolver = gitBranchResolver;
         ApiClient = apiClient;
         Host = host;
         ApiBaseUrl = apiBaseUrl;
@@ -54,6 +56,8 @@ public sealed class CliServices
     public IBrowserLauncher BrowserLauncher { get; }
 
     public IGitRemoteResolver GitRemoteResolver { get; }
+
+    public IGitBranchResolver GitBranchResolver { get; }
 
     public IOgbApiClient ApiClient { get; }
 
@@ -94,6 +98,7 @@ public sealed class CliServices
         var loopbackAuthServer = overrides.LoopbackAuthServer ?? new LoopbackAuthServer();
         var browserLauncher = overrides.BrowserLauncher ?? new SystemBrowserLauncher();
         var gitRemoteResolver = overrides.GitRemoteResolver ?? new GitRemoteResolver();
+        var gitBranchResolver = overrides.GitBranchResolver ?? new GitBranchResolver();
         var repoOverride = parseResult.GetValue(CliOptions.RepoOption);
 
         return new CliServices(
@@ -103,6 +108,7 @@ public sealed class CliServices
             loopbackAuthServer,
             browserLauncher,
             gitRemoteResolver,
+            gitBranchResolver,
             apiClient,
             host,
             apiBaseUrl,

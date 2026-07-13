@@ -25,4 +25,7 @@ public static class RepoContextResolver
 
     public static string BuildDiscussionUrl(string host, RepoSlug repo, int number) =>
         $"{host.TrimEnd('/')}/{repo.Owner}/{repo.Slug}/discussions/{number}";
+
+    public static string BuildMergeRequestUrl(string host, RepoSlug repo, int number) =>
+        $"{host.TrimEnd('/')}/{repo.Owner}/{repo.Slug}/merge-requests/{number}";
 }

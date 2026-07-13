@@ -8,6 +8,9 @@ internal static class OgbApiClientHelpers
     public static string BuildDiscussionsPath(RepoSlug repo) =>
         $"repository/by-slug/{repo.Owner}/{repo.Slug}/discussions";
 
+    public static string BuildMergeRequestsPath(RepoSlug repo) =>
+        $"repository/by-slug/{repo.Owner}/{repo.Slug}/merge-requests";
+
     public static string? TryReadErrorDetail(string responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))

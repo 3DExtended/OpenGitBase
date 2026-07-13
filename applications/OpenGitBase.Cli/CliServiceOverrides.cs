@@ -14,6 +14,8 @@ public sealed class CliServiceOverrides
 
     public Git.IGitRemoteResolver? GitRemoteResolver { get; init; }
 
+    public Git.IGitBranchResolver? GitBranchResolver { get; init; }
+
     public Api.IOgbApiClient? ApiClient { get; init; }
 
     public HttpClient? HttpClient { get; init; }
