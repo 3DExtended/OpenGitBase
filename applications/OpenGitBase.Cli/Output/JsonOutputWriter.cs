@@ -79,6 +79,43 @@ public sealed class JsonOutputWriter : IOutputWriter
 
     public void WriteIssueStatus(DiscussionStatus status) => WriteObject(new { status });
 
+    public void WriteIssueLinkCreated(int sourceNumber, DiscussionLinkModel link) =>
+        WriteObject(new
+        {
+            sourceNumber,
+            targetNumber = link.TargetDiscussionNumber,
+            relationshipType = link.RelationshipType,
+            title = link.TargetDiscussionTitle,
+            status = link.TargetDiscussionStatus,
+        });
+
+    public void WriteIssueLinks(int sourceNumber, IReadOnlyList<DiscussionLinkModel> links) =>
+        WriteObject(new
+        {
+            sourceNumber,
+            links = links.Select(link => new
+            {
+                targetNumber = link.TargetDiscussionNumber,
+                relationshipType = link.RelationshipType,
+                title = link.TargetDiscussionTitle,
+                status = link.TargetDiscussionStatus,
+            }),
+        });
+
+    public void WriteIssueLinkRemoved(
+        int sourceNumber,
+        int targetNumber,
+        DiscussionRelationshipType relationshipType) =>
+        WriteObject(new
+        {
+            sourceNumber,
+            targetNumber,
+            relationshipType,
+        });
+
+    public void WriteDocsPull(IReadOnlyList<DocsPullFileModel> files) =>
+        WriteObject(new { files });
+
     public void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url) =>
         WriteObject(new
         {

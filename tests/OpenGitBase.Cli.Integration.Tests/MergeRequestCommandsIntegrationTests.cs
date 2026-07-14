@@ -10,6 +10,7 @@ using OpenGitBase.Cli.Api;
 using OpenGitBase.Cli.Auth;
 using OpenGitBase.Cli.Configuration;
 using OpenGitBase.Cli.Tests.TestSupport;
+using OpenGitBase.Cqrs;
 using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;

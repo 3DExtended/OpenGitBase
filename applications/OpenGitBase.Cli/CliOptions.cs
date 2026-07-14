@@ -112,4 +112,41 @@ public static class CliOptions
         {
             Description = "Merge request number",
         };
+
+    public static Option<int?> LinkParentOption { get; } =
+        new("--parent")
+        {
+            Description = "Target issue number for a parent link",
+        };
+
+    public static Option<int?> LinkChildOption { get; } =
+        new("--child")
+        {
+            Description = "Target issue number for a child link",
+        };
+
+    public static Option<int?> LinkRelatedOption { get; } =
+        new("--related")
+        {
+            Description = "Target issue number for a related link",
+        };
+
+    public static Option<int?> LinkBlocksOption { get; } =
+        new("--blocks")
+        {
+            Description = "Target issue number for a blocks link",
+        };
+
+    public static Option<DirectoryInfo?> OutputDirOption { get; } =
+        new("--output-dir")
+        {
+            Description = "Repository root for mirror export (default: current directory)",
+        };
+
+    public static Option<string[]> PrefixOption { get; } =
+        new("--prefix")
+        {
+            Description = "Export only titles with [PREFIX] (PRD, ADR, slice). Repeatable.",
+            Arity = ArgumentArity.ZeroOrMore,
+        };
 }

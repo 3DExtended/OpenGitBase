@@ -23,4 +23,10 @@
     <ProjectReference Include="..\..\applications\OpenGitBase.Cli\OpenGitBase.Cli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Goldens\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

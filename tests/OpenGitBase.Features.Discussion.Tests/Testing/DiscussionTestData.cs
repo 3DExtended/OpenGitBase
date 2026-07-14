@@ -75,8 +75,23 @@ public static class DiscussionTestData
         await context.SaveChangesAsync().ConfigureAwait(false);
     }
 
+    public static Task<DiscussionEntity> SeedDiscussionAsync(
+        OpenGitBaseDbContext context,
+        DiscussionStatus status = DiscussionStatus.Open,
+        bool hasEverBeenEngaged = false) =>
+        SeedDiscussionAsync(
+            context,
+            number: 1,
+            title: "Test discussion",
+            body: "Body",
+            status,
+            hasEverBeenEngaged);
+
     public static async Task<DiscussionEntity> SeedDiscussionAsync(
         OpenGitBaseDbContext context,
+        int number,
+        string title,
+        string? body = "Body",
         DiscussionStatus status = DiscussionStatus.Open,
         bool hasEverBeenEngaged = false
     )
@@ -86,9 +101,9 @@ public static class DiscussionTestData
         {
             Id = Guid.NewGuid(),
             RepositoryId = RepositoryId,
-            Number = 1,
-            Title = "Test discussion",
-            Body = "Body",
+            Number = number,
+            Title = title,
+            Body = body,
             Status = (int)status,
             HasEverBeenEngaged = hasEverBeenEngaged,
             CreatorUserId = CreatorUserId.Value,

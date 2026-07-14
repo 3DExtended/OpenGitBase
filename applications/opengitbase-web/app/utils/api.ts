@@ -579,6 +579,15 @@ export interface MergeRequestDiscussionLink {
   discussionStatus?: string | null
 }
 
+export type DiscussionLinkType = 'parent' | 'child' | 'related' | 'blocks'
+
+export interface DiscussionDiscussionLink {
+  targetDiscussionNumber: number
+  relationshipType: DiscussionLinkType
+  targetDiscussionTitle?: string | null
+  targetDiscussionStatus?: string | null
+}
+
 export interface DiscussionLinkedMergeRequest {
   number: number
   title: string
@@ -1176,6 +1185,15 @@ function normalizeMergeRequestDiscussionLink(raw: Record<string, unknown>): Merg
     relationshipType: String(raw.relationshipType ?? 'related') as MergeRequestLinkType,
     discussionTitle: raw.discussionTitle ? String(raw.discussionTitle) : null,
     discussionStatus: raw.discussionStatus ? String(raw.discussionStatus) : null,
+  }
+}
+
+function normalizeDiscussionDiscussionLink(raw: Record<string, unknown>): DiscussionDiscussionLink {
+  return {
+    targetDiscussionNumber: Number(raw.targetDiscussionNumber ?? 0),
+    relationshipType: String(raw.relationshipType ?? 'related') as DiscussionLinkType,
+    targetDiscussionTitle: raw.targetDiscussionTitle ? String(raw.targetDiscussionTitle) : null,
+    targetDiscussionStatus: raw.targetDiscussionStatus ? String(raw.targetDiscussionStatus) : null,
   }
 }
 
@@ -2314,6 +2332,43 @@ export function createApi(baseUrl: string) {
           data: result.data?.map(normalizeDiscussionLinkedMergeRequest) ?? null,
         }
       },
+
+      listDiscussionLinks: async (owner: string, slug: string, number: number) => {
+        const result = await request<Record<string, unknown>[]>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/links`,
+        )
+        return {
+          ...result,
+          data: result.data?.map(normalizeDiscussionDiscussionLink) ?? null,
+        }
+      },
+
+      createDiscussionLink: async (
+        owner: string,
+        slug: string,
+        number: number,
+        body: { targetDiscussionNumber: number, relationshipType: DiscussionLinkType },
+      ) => {
+        const result = await request<Record<string, unknown>>(
+          `${discussionSlugPath(owner, slug)}/discussions/${number}/links`,
+          { method: 'POST', body: JSON.stringify(body) },
+        )
+        return {
+          ...result,
+          data: result.data ? normalizeDiscussionDiscussionLink(result.data) : null,
+        }
+      },
+
+      deleteDiscussionLink: (
+        owner: string,
+        slug: string,
+        number: number,
+        targetDiscussionNumber: number,
+        relationshipType: DiscussionLinkType,
+      ) => request<void>(
+        `${discussionSlugPath(owner, slug)}/discussions/${number}/links/${targetDiscussionNumber}?relationshipType=${relationshipType}`,
+        { method: 'DELETE' },
+      ),
 
       tags: {
         list: async (owner: string, slug: string) => {

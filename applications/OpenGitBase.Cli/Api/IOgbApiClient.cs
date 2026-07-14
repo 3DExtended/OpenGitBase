@@ -98,4 +98,22 @@ public interface IOgbApiClient
         RepoSlug repo,
         string refName,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DiscussionLinkModel>> ListDiscussionLinksAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default);
+
+    Task<DiscussionLinkModel> CreateDiscussionLinkAsync(
+        RepoSlug repo,
+        int number,
+        CreateDiscussionLinkRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteDiscussionLinkAsync(
+        RepoSlug repo,
+        int number,
+        int targetDiscussionNumber,
+        DiscussionRelationshipType relationshipType,
+        CancellationToken cancellationToken = default);
 }

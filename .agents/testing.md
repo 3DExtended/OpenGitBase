@@ -1,6 +1,6 @@
 # Testing guide — OpenGitBase
 
-See global skill **`cli-goldens`** and **`visual-snapshots`** for CLI and UI patterns. This file is project-specific.
+See skills [`cli-goldens`](skills/cli-goldens/SKILL.md) and [`visual-snapshots`](skills/visual-snapshots/SKILL.md) for CLI and UI patterns. This file is project-specific.
 
 ## Test layers
 
@@ -22,7 +22,7 @@ docker compose up -d --build
 curl -sf http://localhost:8089/health
 ```
 
-See `.agents/` skill references and `compose-verification.md` in the global `prd-issues-tdd-local-main` skill for migration and rebuild notes.
+See [`.agents/skills/`](skills/README.md) and [compose-verification.md](skills/prd-issues-tdd-local-main/compose-verification.md) for migration and rebuild notes.
 
 ## Meta-tests (CI gates)
 
@@ -37,7 +37,9 @@ Enforced at `dotnet test`:
 
 Opt out: `[ExcludeFromCoverageTests]` on types that genuinely need no test class.
 
-**Planned:** docs mirror freshness after `ogb docs pull` ships.
+**Planned:** optional compose job runs `scripts/check-docs-mirror-freshness.sh` after `ogb docs pull`.
+
+**Meta-test:** `DocsMirrorFreshnessTests` validates marker/stale detection used by the freshness script.
 
 ## Change-type checklist
 
@@ -47,12 +49,12 @@ Opt out: `[ExcludeFromCoverageTests]` on types that genuinely need no test class
 | Controller | `{Name}ControllerTests` |
 | CLI handler method | Coverage via `*CommandTests` / `*CommandExtendedTests` |
 | Vue component/page | Gallery fixture + Playwright snapshot |
-| CLI `--json` contract | JSON golden in `Goldens/` (see `cli-goldens` skill) |
+| CLI `--json` contract | JSON golden in `Goldens/` (see [cli-goldens](skills/cli-goldens/SKILL.md)) |
 | API + compose path | Relevant E2E script or tier test |
 
 ## TDD
 
-Tracer-bullet: one test → minimal code → green. With PRD slice: `/tdd` inside `/prd-issues-tdd-local-main`. Regression test before bug fixes.
+Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](skills/tdd/SKILL.md) inside [`/prd-issues-tdd-local-main`](skills/prd-issues-tdd-local-main/SKILL.md). Regression test before bug fixes.
 
 ## Scripts
 
@@ -60,5 +62,7 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: `/tdd` insid
 |--------|---------|
 | `scripts/test-ogb-cli-e2e.sh` | Issue CLI smoke |
 | `scripts/test-ogb-cli-mr-e2e.sh` | MR CLI smoke |
+| `scripts/test-ogb-cli-docs-e2e.sh` | Docs/link CLI smoke |
+| `scripts/check-docs-mirror-freshness.sh` | Compare pull inventory vs git mirror |
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |

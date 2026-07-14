@@ -50,3 +50,10 @@ public sealed class BlockRepositoryUserRequest
     public Guid UserId { get; set; }
     public string? Reason { get; set; }
 }
+
+public sealed class CreateDiscussionLinkRequest
+{
+    public int TargetDiscussionNumber { get; set; }
+
+    public string RelationshipType { get; set; } = "related";
+}

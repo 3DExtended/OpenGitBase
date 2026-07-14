@@ -568,6 +568,135 @@ public sealed class RepositoryDiscussionsController : ControllerBase
         return NoContent();
     }
 
+    [HttpGet("{number:int}/links")]
+    public async Task<IActionResult> ListLinks(
+        string owner,
+        string slug,
+        int number,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeReadAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != RepositoryContentAccessResultKind.Allowed || access.Repository is null)
+        {
+            return ToReadResult(access);
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new ListDiscussionLinksQuery
+                {
+                    RepositoryId = access.Repository.Id.Value,
+                    Number = number,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return Ok(result.Get());
+    }
+
+    [HttpPost("{number:int}/links")]
+    public async Task<IActionResult> CreateLink(
+        string owner,
+        string slug,
+        int number,
+        [FromBody] CreateDiscussionLinkRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeParticipateAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != DiscussionParticipationResultKind.Allowed || access.Repository is null)
+        {
+            return ToParticipationResult(access);
+        }
+
+        if (request.TargetDiscussionNumber <= 0)
+        {
+            return BadRequest(new { error = "targetDiscussionNumber is required." });
+        }
+
+        if (!TryParseRelationshipType(request.RelationshipType, out var relationshipType))
+        {
+            return BadRequest(new { error = "Invalid relationshipType." });
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new CreateDiscussionLinkQuery
+                {
+                    RepositoryId = access.Repository.Id.Value,
+                    Number = number,
+                    TargetDiscussionNumber = request.TargetDiscussionNumber,
+                    RelationshipType = relationshipType,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return result.IsNone ? NotFound() : Ok(result.Get());
+    }
+
+    [HttpDelete("{number:int}/links/{targetDiscussionNumber:int}")]
+    public async Task<IActionResult> DeleteLink(
+        string owner,
+        string slug,
+        int number,
+        int targetDiscussionNumber,
+        [FromQuery] string relationshipType,
+        CancellationToken cancellationToken
+    )
+    {
+        var access = await _authorization
+            .AuthorizeParticipateAsync(owner, slug, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (access.Kind != DiscussionParticipationResultKind.Allowed || access.Repository is null)
+        {
+            return ToParticipationResult(access);
+        }
+
+        if (!TryParseRelationshipType(relationshipType, out var parsedRelationshipType))
+        {
+            return BadRequest(new { error = "relationshipType is required." });
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new DeleteDiscussionLinkQuery
+                {
+                    RepositoryId = access.Repository.Id.Value,
+                    Number = number,
+                    TargetDiscussionNumber = targetDiscussionNumber,
+                    RelationshipType = parsedRelationshipType,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return result.IsNone ? NotFound() : NoContent();
+    }
+
+    private static bool TryParseRelationshipType(
+        string? value,
+        out DiscussionRelationshipType relationshipType
+    )
+    {
+        relationshipType = DiscussionRelationshipType.Related;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return Enum.TryParse(value, ignoreCase: true, out relationshipType);
+    }
+
     private static CommentAnchorInput? ToAnchorInput(CommentAnchorRequest anchor) =>
         new()
         {

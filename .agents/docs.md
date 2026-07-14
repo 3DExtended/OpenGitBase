@@ -2,7 +2,7 @@
 
 **Forge-first:** PRDs, ADRs, and work-item slices are **Discussions** in this repository on the running forge. Git paths under `docs/` are a **mirror**, not the authoring surface.
 
-Read global skills: **`publish-docs`**, **`engineering-contract`**.
+Read skills in [`.agents/skills/`](skills/README.md): **`publish-docs`**, **`engineering-contract`**.
 
 ## Prerequisites
 
@@ -28,21 +28,25 @@ Optional tags on discussions when supported: `prd`, `adr`, `slice`.
 ## Workflow
 
 1. **Create** — `ogb issue create --title "[PRD] …" --body-file draft.md`
-2. **Link slices** — `ogb issue link` (planned) or `#N` references in bodies
+2. **Link slices** — `ogb issue link 43 --parent 42` or `#N` references in bodies
 3. **Update** — `ogb issue comment N --body-file update.md`
 4. **Mirror** — `ogb docs pull` → commit `docs/prd/`, `docs/adr/`, `docs/issues/`
 
-## Bootstrap fallback (until `ogb docs pull` ships)
+## Bootstrap fallback (legacy)
 
-When publishing, also write the mirror file and reference forge id in metadata:
+Before `ogb docs pull`, agents dual-wrote mirror files during publish. Prefer pull now:
+
+```bash
+ogb docs pull
+```
+
+When hand-editing mirror files, keep forge metadata:
 
 ```markdown
 <!-- forge: #42 -->
 ```
 
-Commit: `docs: sync PRD discussion #42 (bootstrap)`.
-
-Remove bootstrap writes once `ogb docs pull` is implemented ([PRD](../docs/prd/ogb-docs-and-discussion-links.md)).
+Commit: `docs: sync PRD discussion #42`.
 
 ## Paths (mirror)
 
@@ -69,6 +73,8 @@ Remove bootstrap writes once `ogb docs pull` is implemented ([PRD](../docs/prd/o
 Implementation: [ogb-docs-and-discussion-links PRD](../docs/prd/ogb-docs-and-discussion-links.md).
 
 ## Skills
+
+See [`.agents/skills/README.md`](skills/README.md):
 
 - `/to-prd-local` — publish PRD discussion
 - `/to-issues-local` — publish linked slices

@@ -148,6 +148,184 @@ public class RepositoryDiscussionsControllerTests
             );
     }
 
+    [Fact]
+    public async Task ListLinks_PublicRepository_ReturnsOk()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var links = new List<DiscussionLinkDto>
+        {
+            new()
+            {
+                TargetDiscussionNumber = 42,
+                RelationshipType = DiscussionRelationshipType.Parent,
+                TargetDiscussionTitle = "[PRD] Spec",
+            },
+        };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListDiscussionLinksQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From<IReadOnlyList<DiscussionLinkDto>>(links));
+
+        var controller = CreateController(queryProcessor, authenticatedUserId: null);
+
+        var result = await controller.ListLinks("owner", "repo", 43, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsAssignableFrom<IReadOnlyList<DiscussionLinkDto>>(ok.Value);
+        Assert.Single(response);
+    }
+
+    [Fact]
+    public async Task CreateLink_WhenAuthenticated_PassesTargetNumber()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        repository.OwnerUserId = userId;
+        var link = new DiscussionLinkDto
+        {
+            TargetDiscussionNumber = 42,
+            RelationshipType = DiscussionRelationshipType.Parent,
+        };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        ConfigureMemberLookup(queryProcessor, repository, userId, RepositoryRole.Writer);
+        ConfigureBlockedLookup(queryProcessor);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<CreateDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(link));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.CreateLink(
+            "owner",
+            "repo",
+            43,
+            new CreateDiscussionLinkRequest
+            {
+                TargetDiscussionNumber = 42,
+                RelationshipType = "parent",
+            },
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<CreateDiscussionLinkQuery>(q =>
+                    q.Number == 43
+                    && q.TargetDiscussionNumber == 42
+                    && q.RelationshipType == DiscussionRelationshipType.Parent
+                ),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateLink_Anonymous_ReturnsUnauthorized()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+
+        var controller = CreateController(queryProcessor, authenticatedUserId: null);
+
+        var result = await controller.CreateLink(
+            "owner",
+            "repo",
+            43,
+            new CreateDiscussionLinkRequest
+            {
+                TargetDiscussionNumber = 42,
+                RelationshipType = "parent",
+            },
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task CreateLink_InvalidRelationship_ReturnsBadRequest()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        repository.OwnerUserId = userId;
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        ConfigureMemberLookup(queryProcessor, repository, userId, RepositoryRole.Writer);
+        ConfigureBlockedLookup(queryProcessor);
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.CreateLink(
+            "owner",
+            "repo",
+            43,
+            new CreateDiscussionLinkRequest
+            {
+                TargetDiscussionNumber = 42,
+                RelationshipType = "invalid",
+            },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteLink_ExistingLink_ReturnsNoContent()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        repository.OwnerUserId = userId;
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        ConfigureMemberLookup(queryProcessor, repository, userId, RepositoryRole.Writer);
+        ConfigureBlockedLookup(queryProcessor);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<DeleteDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(Unit.Value));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.DeleteLink(
+            "owner",
+            "repo",
+            43,
+            42,
+            "parent",
+            CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteLink_MissingLink_ReturnsNotFound()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(isPrivate: false);
+        repository.OwnerUserId = userId;
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        ConfigureMemberLookup(queryProcessor, repository, userId, RepositoryRole.Writer);
+        ConfigureBlockedLookup(queryProcessor);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<DeleteDiscussionLinkQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<Unit>.None);
+
+        var controller = CreateController(queryProcessor, userId);
+
+        var result = await controller.DeleteLink(
+            "owner",
+            "repo",
+            43,
+            42,
+            "parent",
+            CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
     private static RepositoryDiscussionsController CreateController(
         IQueryProcessor queryProcessor,
         UserId? authenticatedUserId
@@ -176,6 +354,34 @@ public class RepositoryDiscussionsControllerTests
         queryProcessor
             .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From(repository));
+    }
+
+    private static void ConfigureMemberLookup(
+        IQueryProcessor queryProcessor,
+        RepositoryDto repository,
+        UserId userId,
+        RepositoryRole role
+    )
+    {
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryMemberDto
+                    {
+                        RepositoryId = repository.Id,
+                        UserId = userId,
+                        Role = role,
+                    }
+                )
+            );
+    }
+
+    private static void ConfigureBlockedLookup(IQueryProcessor queryProcessor)
+    {
+        queryProcessor
+            .RunQueryAsync(Arg.Any<IsRepositoryUserBlockedQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(false));
     }
 
     private static HttpContext CreateHttpContext(UserId? authenticatedUserId)

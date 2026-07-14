@@ -117,3 +117,26 @@ public class UserNotificationEntityConfiguration : IEntityTypeConfiguration<User
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+public class DiscussionLinkEntityConfiguration : IEntityTypeConfiguration<DiscussionLinkEntity>
+{
+    public void Configure(EntityTypeBuilder<DiscussionLinkEntity> builder)
+    {
+        builder.ToTable("discussion_links");
+        builder.HasKey(entity => new
+        {
+            entity.SourceDiscussionId,
+            entity.TargetDiscussionId,
+            entity.RelationshipType,
+        });
+        builder.Property(entity => entity.CreatedAt).IsRequired();
+        builder.HasOne(entity => entity.SourceDiscussion)
+            .WithMany()
+            .HasForeignKey(entity => entity.SourceDiscussionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(entity => entity.TargetDiscussion)
+            .WithMany()
+            .HasForeignKey(entity => entity.TargetDiscussionId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}

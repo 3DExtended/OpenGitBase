@@ -2,6 +2,7 @@
 import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
+import DiscussionLinkedDiscussions from '~/components/discussions/DiscussionLinkedDiscussions.vue'
 import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
 
 defineProps<{
@@ -66,6 +67,16 @@ defineProps<{
           <UCard v-if="ctx.discussion.body">
             <CollaborationRenderedBody :source="ctx.discussion.body" />
           </UCard>
+
+          <DiscussionLinkedDiscussions
+            :owner="ctx.owner"
+            :repo-slug="ctx.repoSlug"
+            :discussion-number="ctx.discussion.number"
+            :linked-discussions="ctx.linkedDiscussions"
+            :can-manage="ctx.isWriterPlus && !ctx.isClosed"
+            :add-link="ctx.addDiscussionLink"
+            :remove-link="ctx.removeDiscussionLink"
+          />
 
           <section class="space-y-4">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-[var(--ogb-text-muted)]">

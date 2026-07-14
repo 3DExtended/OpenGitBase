@@ -2,7 +2,9 @@ import type {
   CommentAnchorInput,
   Discussion,
   DiscussionComment,
+  DiscussionDiscussionLink,
   DiscussionLinkedMergeRequest,
+  DiscussionLinkType,
   DiscussionStatus,
   RepositoryMember,
 } from '~/utils/api'
@@ -56,6 +58,7 @@ export function useDiscussionDetailPage() {
     resolving: false,
     dismissing: false,
     linkedMergeRequests: [] as DiscussionLinkedMergeRequest[],
+    linkedDiscussions: [] as DiscussionDiscussionLink[],
   })
 
   const effectiveRepositoryRole = computed(() =>
@@ -160,7 +163,7 @@ export function useDiscussionDetailPage() {
       ctx.comments = result.comments
       ctx.commentsError = result.commentsError
       ctx.viewerEffectiveRole = parseRepositoryRole(result.discussion?.viewerEffectiveRole)
-      await loadLinkedMergeRequests()
+      await Promise.all([loadLinkedMergeRequests(), loadLinkedDiscussions()])
     }
     finally {
       ctx.pageLoading = false
@@ -176,6 +179,46 @@ export function useDiscussionDetailPage() {
       discussionNumber.value,
     )
     ctx.linkedMergeRequests = result.data ?? []
+  }
+
+  async function loadLinkedDiscussions(): Promise<void> {
+    const result = await api.discussions.listDiscussionLinks(
+      owner.value,
+      repoSlug.value,
+      discussionNumber.value,
+    )
+    ctx.linkedDiscussions = result.data ?? []
+  }
+
+  async function addDiscussionLink(
+    targetDiscussionNumber: number,
+    relationshipType: DiscussionLinkType,
+  ): Promise<boolean> {
+    const result = await api.discussions.createDiscussionLink(
+      owner.value,
+      repoSlug.value,
+      discussionNumber.value,
+      { targetDiscussionNumber, relationshipType },
+    )
+    if (result.status !== 200 || !result.data) {
+      return false
+    }
+
+    await loadLinkedDiscussions()
+    return true
+  }
+
+  async function removeDiscussionLink(link: DiscussionDiscussionLink): Promise<void> {
+    const result = await api.discussions.deleteDiscussionLink(
+      owner.value,
+      repoSlug.value,
+      discussionNumber.value,
+      link.targetDiscussionNumber,
+      link.relationshipType,
+    )
+    if (result.status === 204 || result.status === 200) {
+      await loadLinkedDiscussions()
+    }
   }
 
   function queueCommentHashScroll(): void {
@@ -379,6 +422,8 @@ export function useDiscussionDetailPage() {
     resolveDiscussion,
     dismissDiscussion,
     retryLoadComments,
+    addDiscussionLink,
+    removeDiscussionLink,
   })
 }
 

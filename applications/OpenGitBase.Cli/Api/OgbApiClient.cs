@@ -236,6 +236,39 @@ public sealed class OgbApiClient : IOgbApiClient
             body: null,
             cancellationToken);
 
+    public Task<IReadOnlyList<DiscussionLinkModel>> ListDiscussionLinksAsync(
+        RepoSlug repo,
+        int number,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<IReadOnlyList<DiscussionLinkModel>>(
+            HttpMethod.Get,
+            $"{OgbApiClientHelpers.BuildDiscussionsPath(repo)}/{number}/links",
+            body: null,
+            cancellationToken);
+
+    public Task<DiscussionLinkModel> CreateDiscussionLinkAsync(
+        RepoSlug repo,
+        int number,
+        CreateDiscussionLinkRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<DiscussionLinkModel>(
+            HttpMethod.Post,
+            $"{OgbApiClientHelpers.BuildDiscussionsPath(repo)}/{number}/links",
+            request,
+            cancellationToken);
+
+    public Task DeleteDiscussionLinkAsync(
+        RepoSlug repo,
+        int number,
+        int targetDiscussionNumber,
+        DiscussionRelationshipType relationshipType,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<object>(
+            HttpMethod.Delete,
+            $"{OgbApiClientHelpers.BuildDiscussionsPath(repo)}/{number}/links/{targetDiscussionNumber}?relationshipType={relationshipType.ToString().ToLowerInvariant()}",
+            body: null,
+            cancellationToken);
+
     private async Task<T> SendAsync<T>(
         HttpMethod method,
         string path,

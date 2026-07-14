@@ -18,6 +18,17 @@ public interface IOutputWriter
 
     void WriteIssueStatus(DiscussionStatus status);
 
+    void WriteIssueLinkCreated(int sourceNumber, DiscussionLinkModel link);
+
+    void WriteIssueLinks(int sourceNumber, IReadOnlyList<DiscussionLinkModel> links);
+
+    void WriteIssueLinkRemoved(
+        int sourceNumber,
+        int targetNumber,
+        DiscussionRelationshipType relationshipType);
+
+    void WriteDocsPull(IReadOnlyList<DocsPullFileModel> files);
+
     void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url);
 
     void WriteMergeRequestList(IReadOnlyList<MergeRequestModel> mergeRequests);

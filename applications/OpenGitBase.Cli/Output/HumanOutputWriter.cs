@@ -95,6 +95,48 @@ public sealed class HumanOutputWriter : IOutputWriter
 
     public void WriteIssueStatus(DiscussionStatus status) => _output.WriteLine(status);
 
+    public void WriteIssueLinkCreated(int sourceNumber, DiscussionLinkModel link) =>
+        _output.WriteLine(
+            $"Linked issue #{sourceNumber} → #{link.TargetDiscussionNumber} ({link.RelationshipType}).");
+
+    public void WriteIssueLinks(int sourceNumber, IReadOnlyList<DiscussionLinkModel> links)
+    {
+        if (links.Count == 0)
+        {
+            _output.WriteLine($"Issue #{sourceNumber} has no links.");
+            return;
+        }
+
+        _output.WriteLine($"Links for issue #{sourceNumber}:");
+        foreach (var link in links)
+        {
+            _output.WriteLine(
+                $"  {link.RelationshipType,-8} #{link.TargetDiscussionNumber} {link.TargetDiscussionTitle}");
+        }
+    }
+
+    public void WriteIssueLinkRemoved(
+        int sourceNumber,
+        int targetNumber,
+        DiscussionRelationshipType relationshipType) =>
+        _output.WriteLine(
+            $"Removed {relationshipType} link from issue #{sourceNumber} to #{targetNumber}.");
+
+    public void WriteDocsPull(IReadOnlyList<DocsPullFileModel> files)
+    {
+        if (files.Count == 0)
+        {
+            _output.WriteLine("No matching discussions exported.");
+            return;
+        }
+
+        _output.WriteLine($"Exported {files.Count} file(s):");
+        foreach (var file in files)
+        {
+            _output.WriteLine($"  #{file.Number} {file.Path}");
+        }
+    }
+
     public void WriteMergeRequestCreated(MergeRequestModel mergeRequest, string url)
     {
         _output.WriteLine($"Created merge request #{mergeRequest.Number}: {mergeRequest.Title}");

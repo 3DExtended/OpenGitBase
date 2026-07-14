@@ -21,6 +21,7 @@ public static class CliApp
         rootCommand.Subcommands.Add(BuildAuthCommand(output, error, overrides));
         rootCommand.Subcommands.Add(BuildIssueCommand(output, error, overrides));
         rootCommand.Subcommands.Add(BuildMergeRequestCommand(output, error, overrides));
+        rootCommand.Subcommands.Add(BuildDocsCommand(output, error, overrides));
         return rootCommand;
     }
 
@@ -165,13 +166,94 @@ public static class CliApp
                 parse.GetValue(CliOptions.IssueNumberArgument)).ConfigureAwait(false);
         });
 
+        var linkCommand = new Command("link", "Link this issue to another issue")
+        {
+            CliOptions.IssueNumberArgument,
+            CliOptions.LinkParentOption,
+            CliOptions.LinkChildOption,
+            CliOptions.LinkRelatedOption,
+            CliOptions.LinkBlocksOption,
+        };
+        linkCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            var (relationshipType, targetNumber) = IssueLinkOptionResolver.ResolveTarget(parse);
+            return await IssueLinkCommandHandlers.LinkAsync(
+                services,
+                parse.GetValue(CliOptions.IssueNumberArgument),
+                relationshipType,
+                targetNumber).ConfigureAwait(false);
+        });
+
+        var linksCommand = new Command("links", "List links from an issue")
+        {
+            CliOptions.IssueNumberArgument,
+        };
+        linksCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await IssueLinkCommandHandlers.LinksAsync(
+                services,
+                parse.GetValue(CliOptions.IssueNumberArgument)).ConfigureAwait(false);
+        });
+
+        var unlinkCommand = new Command("unlink", "Remove a link from an issue")
+        {
+            CliOptions.IssueNumberArgument,
+            CliOptions.LinkParentOption,
+            CliOptions.LinkChildOption,
+            CliOptions.LinkRelatedOption,
+            CliOptions.LinkBlocksOption,
+        };
+        unlinkCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            var (relationshipType, targetNumber) = IssueLinkOptionResolver.ResolveTarget(parse);
+            return await IssueLinkCommandHandlers.UnlinkAsync(
+                services,
+                parse.GetValue(CliOptions.IssueNumberArgument),
+                relationshipType,
+                targetNumber).ConfigureAwait(false);
+        });
+
         issueCommand.Subcommands.Add(createCommand);
         issueCommand.Subcommands.Add(commentCommand);
         issueCommand.Subcommands.Add(closeCommand);
         issueCommand.Subcommands.Add(listCommand);
         issueCommand.Subcommands.Add(viewCommand);
         issueCommand.Subcommands.Add(statusCommand);
+        issueCommand.Subcommands.Add(linkCommand);
+        issueCommand.Subcommands.Add(linksCommand);
+        issueCommand.Subcommands.Add(unlinkCommand);
         return issueCommand;
+    }
+
+    private static Command BuildDocsCommand(TextWriter output, TextWriter error, CliServiceOverrides? overrides)
+    {
+        var docsCommand = new Command("docs", "Export forge planning docs to git mirror paths")
+        {
+            CliOptions.RepoOption,
+        };
+
+        var pullCommand = new Command("pull", "Export [PRD], [ADR], and [slice] discussions to docs/")
+        {
+            CliOptions.OutputDirOption,
+            CliOptions.PrefixOption,
+        };
+        pullCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            var outputDir = parse.GetValue(CliOptions.OutputDirOption)
+                ?? new DirectoryInfo(Directory.GetCurrentDirectory());
+            var prefixes = parse.GetValue(CliOptions.PrefixOption);
+            return await DocsCommandHandlers.PullAsync(
+                services,
+                outputDir,
+                prefixes).ConfigureAwait(false);
+        });
+
+        docsCommand.Subcommands.Add(pullCommand);
+        return docsCommand;
     }
 
     private static Command BuildMergeRequestCommand(

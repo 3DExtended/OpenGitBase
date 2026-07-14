@@ -258,6 +258,27 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("discussions", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Discussion.Entities.DiscussionLinkEntity", b =>
+                {
+                    b.Property<Guid>("SourceDiscussionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetDiscussionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RelationshipType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SourceDiscussionId", "TargetDiscussionId", "RelationshipType");
+
+                    b.HasIndex("TargetDiscussionId");
+
+                    b.ToTable("discussion_links", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Discussion.Entities.DiscussionSubscriptionEntity", b =>
                 {
                     b.Property<Guid>("DiscussionId")
@@ -1747,6 +1768,25 @@ namespace OpenGitBase.Common.Migrations
                     b.Navigation("Discussion");
 
                     b.Navigation("ParentComment");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Discussion.Entities.DiscussionLinkEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Discussion.Entities.DiscussionEntity", "SourceDiscussion")
+                        .WithMany()
+                        .HasForeignKey("SourceDiscussionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OpenGitBase.Features.Discussion.Entities.DiscussionEntity", "TargetDiscussion")
+                        .WithMany()
+                        .HasForeignKey("TargetDiscussionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceDiscussion");
+
+                    b.Navigation("TargetDiscussion");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Discussion.Entities.DiscussionSubscriptionEntity", b =>

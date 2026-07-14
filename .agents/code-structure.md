@@ -1,6 +1,6 @@
 # Code structure — OpenGitBase
 
-Extend existing patterns; do not duplicate infrastructure. Global **`engineering-contract`** skill covers TDD and module depth.
+Extend existing patterns; do not duplicate infrastructure. See [engineering-contract](skills/engineering-contract/SKILL.md) for TDD and module depth.
 
 ## Repository layout
 

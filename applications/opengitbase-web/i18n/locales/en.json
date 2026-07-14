@@ -609,6 +609,17 @@
       "updated": "Updated",
       "linkedMergeRequests": "Linked merge requests",
       "noLinkedMergeRequests": "No linked merge requests.",
+      "linkedDiscussions": "Linked discussions",
+      "noLinkedDiscussions": "No linked discussions.",
+      "addDiscussionLink": "Link discussion",
+      "removeDiscussionLink": "Remove discussion link",
+      "searchDiscussions": "Search discussions…",
+      "linkTypes": {
+        "parent": { "label": "Parent" },
+        "child": { "label": "Child" },
+        "blocks": { "label": "Blocks" },
+        "related": { "label": "Related" }
+      },
       "commentsTitle": "Comments",
       "noComments": "No comments yet.",
       "commentsLoadError": "Couldn't load comments.",
