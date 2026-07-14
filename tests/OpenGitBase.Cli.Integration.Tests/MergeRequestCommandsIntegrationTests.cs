@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Api;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Tests.Base;
@@ -10,6 +11,7 @@ using OpenGitBase.Cli.Api;
 using OpenGitBase.Cli.Auth;
 using OpenGitBase.Cli.Configuration;
 using OpenGitBase.Cli.Tests.TestSupport;
+using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
@@ -39,19 +41,24 @@ public sealed class MergeRequestCommandsIntegrationTests : ControllerTestBase
             new CreateRepositoryRequest("CLI MR Integration Repo", false)).ConfigureAwait(false);
         createRepo.EnsureSuccessStatusCode();
 
-        await using var context = await ContextFactory.CreateDbContextAsync().ConfigureAwait(false);
+        using var scope = Factory.Services.CreateScope();
+        var queryProcessor = scope.ServiceProvider.GetRequiredService<IQueryProcessor>();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>>();
+
+        await using var context = await contextFactory.CreateDbContextAsync().ConfigureAwait(false);
         var user = await context
             .Set<OpenGitBase.Features.Users.Entities.UserCredentialsEntity>()
             .SingleAsync(x => x.Username == username)
             .ConfigureAwait(false);
-        var repository = await QueryProcessor
+        var repository = await queryProcessor
             .RunQueryAsync(
                 new GetRepositoryByOwnerSlugQuery { OwnerSlug = username, Slug = slug },
                 CancellationToken.None)
             .ConfigureAwait(false);
         Assert.False(repository.IsNone);
 
-        var seeded = await QueryProcessor
+        var seeded = await queryProcessor
             .RunQueryAsync(
                 new CreateMergeRequestQuery
                 {
@@ -99,7 +106,7 @@ public sealed class MergeRequestCommandsIntegrationTests : ControllerTestBase
             error,
             overrides).ConfigureAwait(false);
         Assert.Equal(0, statusExit);
-        Assert.Contains("Open", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Approved", output.ToString(), StringComparison.Ordinal);
 
         output.GetStringBuilder().Clear();
         var closeExit = await CliApp.RunAsync(
