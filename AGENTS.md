@@ -2,13 +2,34 @@
 
 This project was scaffolded with **agentGenCli** and has since grown into a distributed Git forge. Start here before making changes.
 
-1. Read [`docs/PROJECT-STATE.md`](docs/PROJECT-STATE.md) — current implementation baseline, component interactions, encryption posture
-2. Read [`.agents/state.md`](.agents/state.md) — which stacks and features are enabled in *this* project
-3. Read [`.agents/README.md`](.agents/README.md) — navigation, conventions, safe-change rules
-4. Open stack-specific guides only if they exist (see `state.md`):
-   - [`.agents/backend.md`](.agents/backend.md) — when backend is dotnet
-   - [`.agents/frontend.md`](.agents/frontend.md) — when frontend is flutter
+## Read order
 
-Project manifest (command history): [`.agentGenCli.json`](.agentGenCli.json)
+1. Global skill **`engineering-contract`** — TDD, tests, forge-first docs (portable)
+2. [`docs/PROJECT-STATE.md`](docs/PROJECT-STATE.md) — implementation baseline, components, encryption
+3. [`.agents/state.md`](.agents/state.md) — enabled stacks and features
+4. [`.agents/code-structure.md`](.agents/code-structure.md) — where code lives, how to extend
+5. [`.agents/testing.md`](.agents/testing.md) — test layers, compose, meta-tests
+6. [`.agents/docs.md`](.agents/docs.md) — PRD/ADR/slices on forge via `ogb`
+7. [`.agents/README.md`](.agents/README.md) — safe-change rules
+8. [`.agents/backend.md`](.agents/backend.md) — when touching .NET
+
+## Before spec or forge work
+
+```bash
+ogb auth login
+```
+
+## Common skills
+
+| Invoke | Purpose |
+|--------|---------|
+| `/engineering-contract` | Non-negotiables (read first) |
+| `/to-prd-local` | Publish PRD discussion |
+| `/to-issues-local` | Publish linked slice discussions |
+| `/prd-issues-tdd-local-main` | Implement slices on `main` with TDD |
+| `/tdd` | Tracer-bullet test loop |
+| `/publish-docs` | Forge publish + mirror sync |
 
 Prefer `agentGenCli new …` and `agentGenCli project …` over hand-rolling feature structure.
+
+Project manifest: [`.agentGenCli.json`](.agentGenCli.json)

@@ -49,5 +49,9 @@ Manually maintained snapshot of the running project. The agentGenCli manifest in
 ## Documentation entry points
 
 - [docs/PROJECT-STATE.md](../docs/PROJECT-STATE.md) — what is implemented, component interactions, encryption posture
-- [docs/prd/](../docs/prd/) — feature and architecture PRDs
-- [docs/issues/](../docs/issues/) — implementation slices
+- [.agents/docs.md](docs.md) — forge-first PRD/ADR workflow via `ogb`
+- [.agents/testing.md](testing.md) — test layers and meta-tests
+- [.agents/code-structure.md](code-structure.md) — repo layout
+- [docs/prd/](../docs/prd/) — spec mirror (export from forge)
+- [docs/adr/](../docs/adr/) — ADR mirror
+- [docs/issues/](../docs/issues/) — implementation slices (legacy/mirror)

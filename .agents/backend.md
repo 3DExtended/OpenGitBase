@@ -62,6 +62,7 @@ Every query handler and API controller must have a matching test class. Meta-tes
 | `OpenGitBase.Common` | `OpenGitBase.Common.Tests` | `QueryHandlers/QueryHandlerCoverageTests.cs` | `QueryHandlers/.../{Name}QueryHandlerTests.cs` |
 | `OpenGitBase.Features.{Feature}` | `OpenGitBase.Features.{Feature}.Tests` | `QueryHandlers/QueryHandlerCoverageTests.cs` | `QueryHandlers/{Name}QueryHandlerTests.cs` |
 | `OpenGitBase.Api` | `OpenGitBase.Api.Tests` | `Controllers/ControllerCoverageTests.cs` | `Controllers/{Name}ControllerTests.cs` |
+| `OpenGitBase.Cli` | `OpenGitBase.Cli.Tests` | `CommandHandlerCoverageTests` | `*CommandTests`, `*CommandExtendedTests` |
 
 Opt out with `[ExcludeFromCoverageTests]` from `OpenGitBase.Common` when a type genuinely should not require a test class.
 

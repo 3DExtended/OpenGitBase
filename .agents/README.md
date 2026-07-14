@@ -2,13 +2,17 @@
 
 ## Read order
 
-1. **[docs/PROJECT-STATE.md](../docs/PROJECT-STATE.md)** — what is implemented, how components interact, encryption posture
-2. **[state.md](state.md)** — enabled stacks and features (current snapshot)
-3. **[overview.md](overview.md)** — high-level repo layout
-4. **[cli.md](cli.md)** — agentGenCli commands available in this repo
-4. Stack guides (only if present — check `state.md`):
-   - **[backend.md](backend.md)** — .NET / CQRS / EF / API (when backend=dotnet)
-   - **[frontend.md](frontend.md)** — Flutter app (when frontend=flutter)
+1. Global skill **`engineering-contract`** (portable TDD + forge-first docs)
+2. **[docs/PROJECT-STATE.md](../docs/PROJECT-STATE.md)** — what is implemented, how components interact, encryption posture
+3. **[state.md](state.md)** — enabled stacks and features (current snapshot)
+4. **[code-structure.md](code-structure.md)** — repo layout, features, CLI, web
+5. **[testing.md](testing.md)** — test layers, compose, meta-tests
+6. **[docs.md](docs.md)** — PRD/ADR/slices via `ogb` (forge-first)
+7. **[overview.md](overview.md)** — high-level repo layout
+8. **[cli.md](cli.md)** — agentGenCli commands
+9. Stack guides (check `state.md`):
+   - **[backend.md](backend.md)** — .NET / CQRS / EF / API
+   - **[frontend.md](frontend.md)** — Flutter (not used; web is Nuxt)
 
 ## Safe-change rules
 
