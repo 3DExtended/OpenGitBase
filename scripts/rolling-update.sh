@@ -373,7 +373,7 @@ done
 run_step "Roll web replicas (web-1 and web-2 together)" roll_web_replicas
 
 run_step "Ensure load balancer (ssh-lb) is up" \
-  compose up -d ssh-lb
+  compose up -d --no-deps ssh-lb
 
 run_step "Verify API health via load balancer" \
   verify_lb_api_health
