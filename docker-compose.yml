@@ -23,6 +23,7 @@ x-kafka-broker-env: &kafka-broker-env
   KAFKA_INITIAL_BROKER_REGISTRATION_TIMEOUT_MS: 300000
 
 x-kafka-healthcheck: &kafka-healthcheck
+  test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-1:29092,kafka-2:29092,kafka-3:29092 >/dev/null 2>&1"]
   interval: 10s
   timeout: 15s
   retries: 18
@@ -348,7 +349,6 @@ services:
       - "9092:9092"
     healthcheck:
       <<: *kafka-healthcheck
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-1:29092 >/dev/null 2>&1"]
 
   kafka-2:
     image: apache/kafka:3.9.0
@@ -362,7 +362,6 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
     healthcheck:
       <<: *kafka-healthcheck
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-2:29092 >/dev/null 2>&1"]
 
   kafka-3:
     image: apache/kafka:3.9.0
@@ -376,7 +375,6 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
     healthcheck:
       <<: *kafka-healthcheck
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-3:29092 >/dev/null 2>&1"]
 
   kafka-init:
     image: apache/kafka:3.9.0
