@@ -21,6 +21,7 @@ public sealed class StatusAggregatorService
     private readonly IQueryProcessor _queryProcessor;
     private readonly StatusProbeEngine _probeEngine;
     private readonly StorageGroupStatusBuilder _storageGroupStatusBuilder;
+    private readonly MessageBusGroupStatusBuilder _messageBusGroupStatusBuilder;
     private readonly StatusHistoryService _historyService;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IConfiguration _configuration;
@@ -31,6 +32,7 @@ public sealed class StatusAggregatorService
         IQueryProcessor queryProcessor,
         StatusProbeEngine probeEngine,
         StorageGroupStatusBuilder storageGroupStatusBuilder,
+        MessageBusGroupStatusBuilder messageBusGroupStatusBuilder,
         StatusHistoryService historyService,
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IConfiguration configuration,
@@ -41,6 +43,7 @@ public sealed class StatusAggregatorService
         _queryProcessor = queryProcessor;
         _probeEngine = probeEngine;
         _storageGroupStatusBuilder = storageGroupStatusBuilder;
+        _messageBusGroupStatusBuilder = messageBusGroupStatusBuilder;
         _historyService = historyService;
         _contextFactory = contextFactory;
         _configuration = configuration;
@@ -118,6 +121,7 @@ public sealed class StatusAggregatorService
 
         groups.Add(_storageGroupStatusBuilder.Build(storageNodeList, checkedAt));
         groups.Add(await BuildDataStoresGroupAsync(cancellationToken).ConfigureAwait(false));
+        groups.Add(await BuildMessageBusGroupAsync(cancellationToken).ConfigureAwait(false));
 
         var incident = await LoadActiveIncidentAsync(cancellationToken).ConfigureAwait(false);
         var overall = StatusRollupEngine.RollupOverall(groups.Select(group => group.Status));
@@ -220,6 +224,32 @@ public sealed class StatusAggregatorService
             Status = StatusRollupEngine.RollupGroup(instances.Select(instance => instance.Status)),
             Instances = instances,
         };
+    }
+
+    private async Task<StatusGroupSnapshot> BuildMessageBusGroupAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var targets = KafkaProbeTargetResolver.Resolve(_configuration["Kafka:BootstrapServers"]);
+
+        var instances = new List<StatusInstanceSnapshot>();
+        foreach (var target in targets)
+        {
+            instances.Add(
+                await _probeEngine
+                    .ProbeTcpAsync(
+                        target.InstanceId,
+                        target.Host,
+                        target.Port,
+                        _options.TimeoutMs,
+                        _options.SlowThresholdMs,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+            );
+        }
+
+        return _messageBusGroupStatusBuilder.Build(instances);
     }
 
     private async Task<PublicStatusIncidentDto?> LoadActiveIncidentAsync(

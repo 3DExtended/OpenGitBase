@@ -14,6 +14,7 @@ const enabledGroups = ref<Record<string, boolean>>({
   git: false,
   storage: false,
   dataStores: false,
+  messageBus: false,
 })
 
 const overallSeries = computed(() => props.history?.overall ?? [])

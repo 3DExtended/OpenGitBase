@@ -8,4 +8,5 @@ public enum StatusComponentGroup
     Git = 3,
     Storage = 4,
     DataStores = 5,
+    MessageBus = 6,
 }

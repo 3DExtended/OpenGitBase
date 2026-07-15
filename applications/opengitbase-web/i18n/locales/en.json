@@ -36,7 +36,7 @@
   },
   "status": {
     "title": "System status",
-    "subtitle": "Live health for website, API, Git, storage, and data stores.",
+    "subtitle": "Live health for website, API, Git, storage, data stores, and message bus.",
     "overall": "Overall status",
     "lastUpdated": "Last updated {time}",
     "loadError": "Unable to load status",
@@ -61,7 +61,8 @@
       "api": "API",
       "git": "Git",
       "storage": "Storage",
-      "dataStores": "Data stores"
+      "dataStores": "Data stores",
+      "messageBus": "Message bus"
     },
     "columns": {
       "instance": "Instance",

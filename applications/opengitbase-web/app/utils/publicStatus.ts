@@ -60,6 +60,7 @@ export function componentGroupKey(group: number): string {
     case 3: return 'git'
     case 4: return 'storage'
     case 5: return 'dataStores'
+    case 6: return 'messageBus'
     default: return 'unknown'
   }
 }
