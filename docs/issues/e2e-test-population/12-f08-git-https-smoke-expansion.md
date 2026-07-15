@@ -1,3 +1,5 @@
+<!-- forge: #100 -->
+
 # F08 git HTTPS smoke expansion
 
 ## Metadata

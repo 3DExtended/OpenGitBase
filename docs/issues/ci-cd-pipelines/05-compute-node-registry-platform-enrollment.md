@@ -1,3 +1,5 @@
+<!-- forge: #38 -->
+
 # Compute node registry + platform enrollment
 
 ## Metadata

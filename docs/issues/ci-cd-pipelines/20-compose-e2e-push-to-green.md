@@ -1,3 +1,5 @@
+<!-- forge: #53 -->
+
 # Compose E2E: push → green pipeline
 
 ## Metadata

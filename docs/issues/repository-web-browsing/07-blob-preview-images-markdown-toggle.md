@@ -1,3 +1,5 @@
+<!-- forge: #208 -->
+
 # Blob preview — images, SVG, markdown toggle
 
 ## Metadata

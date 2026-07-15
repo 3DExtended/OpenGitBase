@@ -1,3 +1,5 @@
+<!-- forge: #144 -->
+
 # Storage node registry and heartbeat
 
 **Type:** AFK  

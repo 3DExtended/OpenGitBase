@@ -1,3 +1,5 @@
+<!-- forge: #56 -->
+
 # Repository access checks and DTO field redaction
 
 ## Metadata

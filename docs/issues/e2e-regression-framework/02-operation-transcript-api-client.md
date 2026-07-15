@@ -1,3 +1,5 @@
+<!-- forge: #71 -->
+
 # Operation transcript + auto-logging API client
 
 ## Metadata

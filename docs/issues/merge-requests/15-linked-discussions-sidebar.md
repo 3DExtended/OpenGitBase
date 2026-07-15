@@ -1,3 +1,5 @@
+<!-- forge: #175 -->
+
 # Linked discussions sidebar
 
 ## Metadata

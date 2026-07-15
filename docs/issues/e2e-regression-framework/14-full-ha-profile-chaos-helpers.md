@@ -1,3 +1,5 @@
+<!-- forge: #83 -->
+
 # Full-HA compose profile + chaos helpers
 
 ## Metadata

@@ -1,3 +1,5 @@
+<!-- forge: #96 -->
+
 # Full-HA tier gating
 
 ## Metadata

@@ -1,3 +1,5 @@
+<!-- forge: #32 -->
+
 # Repository replication detail page
 
 ## Metadata

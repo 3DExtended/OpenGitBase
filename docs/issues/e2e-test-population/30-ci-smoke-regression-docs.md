@@ -1,3 +1,5 @@
+<!-- forge: #118 -->
+
 # CI smoke vs regression documentation
 
 ## Metadata

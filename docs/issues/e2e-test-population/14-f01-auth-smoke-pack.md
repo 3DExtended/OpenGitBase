@@ -1,3 +1,5 @@
+<!-- forge: #102 -->
+
 # F01 auth smoke pack
 
 ## Metadata

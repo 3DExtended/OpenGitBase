@@ -1,3 +1,5 @@
+<!-- forge: #27 -->
+
 # ADR 0001: Pipeline triggers via storage hook and event bus
 
 ## Status

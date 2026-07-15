@@ -1,3 +1,5 @@
+<!-- forge: #188 -->
+
 # Discussion detail, assignee, and Writer close actions
 
 ## Metadata

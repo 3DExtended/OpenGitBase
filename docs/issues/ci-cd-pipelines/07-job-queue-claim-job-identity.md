@@ -1,3 +1,5 @@
+<!-- forge: #40 -->
+
 # Job queue, claim API, Job Identity
 
 ## Metadata

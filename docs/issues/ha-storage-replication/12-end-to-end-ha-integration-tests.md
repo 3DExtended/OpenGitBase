@@ -1,3 +1,5 @@
+<!-- forge: #160 -->
+
 # End-to-end HA integration tests
 
 ## Metadata

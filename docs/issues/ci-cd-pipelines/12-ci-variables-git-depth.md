@@ -1,3 +1,5 @@
+<!-- forge: #45 -->
+
 # CI variables + `GIT_DEPTH` materialization
 
 ## Metadata

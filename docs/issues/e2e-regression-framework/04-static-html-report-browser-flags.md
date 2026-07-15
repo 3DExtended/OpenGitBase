@@ -1,3 +1,5 @@
+<!-- forge: #73 -->
+
 # Static HTML report + browser open flags
 
 ## Metadata

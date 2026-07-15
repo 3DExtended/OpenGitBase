@@ -1,3 +1,5 @@
+<!-- forge: #7 -->
+
 # PRD: CI/CD Pipelines (Firecracker + Hybrid Compute)
 
 **Status:** Design complete (full vision). Domain glossary: [CONTEXT.md](../../CONTEXT.md). ADR: [0001-pipeline-trigger-event-bus.md](../adr/0001-pipeline-trigger-event-bus.md). User docs: `/docs/ci/*` in the web application.

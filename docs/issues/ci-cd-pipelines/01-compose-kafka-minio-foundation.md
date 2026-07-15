@@ -1,3 +1,5 @@
+<!-- forge: #34 -->
+
 # Compose foundation: Kafka + MinIO
 
 ## Metadata

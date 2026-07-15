@@ -1,3 +1,5 @@
+<!-- forge: #121 -->
+
 # Storage artifact API and encrypted node isolation
 
 ## Metadata

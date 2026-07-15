@@ -1,3 +1,5 @@
+<!-- forge: #177 -->
+
 # Fleet component registry and API self-registration
 
 ## Metadata

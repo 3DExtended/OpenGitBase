@@ -1,3 +1,5 @@
+<!-- forge: #50 -->
+
 # Platform agent Kafka job wake
 
 ## Metadata

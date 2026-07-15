@@ -1,3 +1,5 @@
+<!-- forge: #52 -->
+
 # Pipeline UI: detail, logs, cancel, commit badge
 
 ## Metadata

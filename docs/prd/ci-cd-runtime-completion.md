@@ -1,3 +1,5 @@
+<!-- forge: #8 -->
+
 # PRD: CI/CD Runtime Completion (Firecracker Execution Substrate)
 
 **Status:** Design complete (grill-me session 2026-07-12).  

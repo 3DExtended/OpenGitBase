@@ -1,3 +1,5 @@
+<!-- forge: #47 -->
+
 # Layer promotion admin + promoted mounts
 
 ## Metadata

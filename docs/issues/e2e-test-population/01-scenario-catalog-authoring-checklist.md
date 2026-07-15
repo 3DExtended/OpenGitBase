@@ -1,3 +1,5 @@
+<!-- forge: #89 -->
+
 # Scenario catalog + authoring checklist
 
 ## Metadata

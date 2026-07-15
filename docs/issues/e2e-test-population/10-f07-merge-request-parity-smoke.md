@@ -1,3 +1,5 @@
+<!-- forge: #98 -->
+
 # F07 merge request parity smoke
 
 ## Metadata

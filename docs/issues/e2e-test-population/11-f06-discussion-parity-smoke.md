@@ -1,3 +1,5 @@
+<!-- forge: #99 -->
+
 # F06 discussion parity smoke
 
 ## Metadata

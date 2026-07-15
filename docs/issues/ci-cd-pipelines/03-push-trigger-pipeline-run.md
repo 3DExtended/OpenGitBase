@@ -1,3 +1,5 @@
+<!-- forge: #36 -->
+
 # Push trigger → Pipeline Run (no execution)
 
 ## Metadata

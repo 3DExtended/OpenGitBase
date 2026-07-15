@@ -1,3 +1,5 @@
+<!-- forge: #125 -->
+
 # Hot promotion and cold recovery
 
 ## Metadata

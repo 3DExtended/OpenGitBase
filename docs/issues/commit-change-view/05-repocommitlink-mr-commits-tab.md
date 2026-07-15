@@ -1,3 +1,5 @@
+<!-- forge: #67 -->
+
 # RepoCommitLink and MR Commits tab
 
 ## Metadata

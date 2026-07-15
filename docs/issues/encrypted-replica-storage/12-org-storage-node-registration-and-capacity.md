@@ -1,3 +1,5 @@
+<!-- forge: #130 -->
+
 # Org storage node registration and capacity
 
 ## Metadata

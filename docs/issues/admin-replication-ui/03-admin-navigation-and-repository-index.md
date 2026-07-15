@@ -1,3 +1,5 @@
+<!-- forge: #31 -->
+
 # Admin navigation and repository index
 
 ## Metadata

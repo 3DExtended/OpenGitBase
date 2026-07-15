@@ -1,3 +1,5 @@
+<!-- forge: #106 -->
+
 # F03 repository settings smoke
 
 ## Metadata

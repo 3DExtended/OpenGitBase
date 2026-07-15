@@ -1,3 +1,5 @@
+<!-- forge: #154 -->
+
 # Primary failover and epoch promotion
 
 ## Metadata

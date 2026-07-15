@@ -1,3 +1,5 @@
+<!-- forge: #69 -->
+
 # Ref picker commit SHA chip
 
 ## Metadata

@@ -1,3 +1,5 @@
+<!-- forge: #22 -->
+
 # PRD: Organization Storage Self-Service UI
 
 **Status:** Design complete (grill-me session, July 2026).  

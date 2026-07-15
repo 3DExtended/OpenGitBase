@@ -1,3 +1,5 @@
+<!-- forge: #42 -->
+
 # Base Image Catalog + Layer Store seed
 
 ## Metadata

@@ -1,3 +1,5 @@
+<!-- forge: #30 -->
+
 # Storage page fleet replication card
 
 ## Metadata

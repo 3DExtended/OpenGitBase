@@ -1,3 +1,5 @@
+<!-- forge: #79 -->
+
 # Playwright invoker + UI tier + report embed
 
 ## Metadata

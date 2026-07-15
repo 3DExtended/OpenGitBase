@@ -1,3 +1,5 @@
+<!-- forge: #49 -->
+
 # Egress allowlists + domain requests
 
 ## Metadata
