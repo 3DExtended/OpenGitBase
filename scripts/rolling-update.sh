@@ -383,7 +383,7 @@ run_step "Verify web UI via load balancer" \
 
 if production_tunnel_profile_enabled; then
   run_step "Ensure Cloudflare tunnel is up" \
-    compose up -d opengitbase_cloudflare_tunnel
+    compose up -d --no-deps opengitbase_cloudflare_tunnel
 fi
 
 if [ "${SKIP_TUNNEL_CHECK}" = false ] && container_running opengitbase_cloudflare_tunnel; then
