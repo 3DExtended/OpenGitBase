@@ -139,7 +139,7 @@ public sealed class MergeRequestCompareService
             ShortSha = string.IsNullOrWhiteSpace(commit.ShortSha)
                 ? commit.Sha[..Math.Min(8, commit.Sha.Length)]
                 : commit.ShortSha,
-            Message = commit.Message,
+            Message = CommitMessagePrivacy.RedactEmails(commit.Message),
             AuthorName = commit.AuthorName,
             AuthoredAt = commit.AuthoredAt,
         };

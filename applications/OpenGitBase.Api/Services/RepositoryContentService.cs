@@ -547,7 +547,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             ShortSha = string.IsNullOrWhiteSpace(payload.ShortSha)
                 ? payload.Sha[..Math.Min(8, payload.Sha.Length)]
                 : payload.ShortSha,
-            Message = payload.Message,
+            Message = CommitMessagePrivacy.RedactEmails(payload.Message),
             AuthorName = payload.AuthorName,
             AuthoredAt = payload.AuthoredAt,
             Parents = payload.Parents

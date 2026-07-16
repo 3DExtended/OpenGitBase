@@ -213,6 +213,60 @@ public class RepositoryCommitsControllerTests
     }
 
     [Fact]
+    public async Task GetCommit_MessageWithSignedOffBy_RedactsEmail()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: false);
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, repo) =>
+            {
+                ConfigureStorageRouting(queryProcessor);
+                storageContentClient
+                    .GetCommitAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        repo.PhysicalPath,
+                        CommitSha,
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(
+                        new StorageContentCommitDetailPayload
+                        {
+                            Sha = CommitSha,
+                            ShortSha = CommitSha[..8],
+                            Message =
+                                "fix bug\n\nSigned-off-by: Peter Esser <me@peter-esser.de>",
+                            AuthorName = "Peter Esser",
+                            AuthoredAt = "2026-06-01T00:00:00+00:00",
+                            Kind = "diff",
+                            Stats = new StorageContentCommitStatsPayload
+                            {
+                                FilesChanged = 1,
+                                Insertions = 1,
+                                Deletions = 0,
+                            },
+                            Files = [],
+                        }
+                    );
+            }
+        );
+
+        var result = await controller.GetCommit(
+            "owner",
+            "repo",
+            CommitSha,
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<RepositoryCommitResponse>(ok.Value);
+        Assert.Equal("fix bug\n\nSigned-off-by: Peter Esser <***@***>", response.Message);
+        Assert.DoesNotContain("me@peter-esser.de", response.Message);
+    }
+
+    [Fact]
     public async Task GetCommit_WhenStorageReturnsNull_ReturnsNotFound()
     {
         var ownerId = UserId.From(Guid.NewGuid());

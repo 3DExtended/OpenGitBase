@@ -150,6 +150,23 @@ public class RepositoryMergeRequestsControllerTests
     }
 
     [Fact]
+    public async Task ListCommits_MessageWithEmail_RedactsEmail()
+    {
+        var repository = CreateRepository(isPrivate: false);
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            commitMessage: "Signed-off-by: Dev <dev@example.com>"
+        );
+
+        var result = await controller.ListCommits("owner", "repo", 1, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var commits = Assert.IsAssignableFrom<IReadOnlyList<MergeRequestCommitResponse>>(ok.Value);
+        Assert.Equal("Signed-off-by: Dev <***@***>", commits[0].Message);
+    }
+
+    [Fact]
     public async Task ListDiscussionLinks_PublicRepository_ReturnsOk()
     {
         var repository = CreateRepository(isPrivate: false);
@@ -345,7 +362,8 @@ public class RepositoryMergeRequestsControllerTests
         RepositoryDto repository,
         UserId? authenticatedUserId,
         RepositoryRole? memberRole = RepositoryRole.Reader,
-        int aheadCount = 3
+        int aheadCount = 3,
+        string commitMessage = "feature commit"
     )
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
@@ -503,7 +521,7 @@ public class RepositoryMergeRequestsControllerTests
                         {
                             Sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                             ShortSha = "aaaaaaaa",
-                            Message = "feature commit",
+                            Message = commitMessage,
                             AuthorName = "owner",
                             AuthoredAt = "2026-07-01T00:00:00+00:00",
                         },
