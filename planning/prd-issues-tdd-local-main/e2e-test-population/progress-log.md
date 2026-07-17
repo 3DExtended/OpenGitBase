@@ -53,10 +53,10 @@ Execution plan marked pop-01…30 “done”, but `docs/e2e/scenario-catalog.md`
 
 ### Still open before closing forge #12
 
-- [ ] Re-run Auth/Org matrices after filler strip on healthy stack
-- [ ] Comment + resolve pop forge discussions #89–#118 when slices match catalog
-- [ ] Resolve #12 only after catalog Done ≥ targets **and** compose filters green (or approved descope)
+- [x] Re-run Auth/Org matrices after filler strip on healthy stack — **104/104** (`2144e30`)
+- [x] Comment + resolve pop forge discussions #89–#118 — **30/30**
+- [x] Resolve #12 with summary linking catalog coverage
 
-### Catalog
+## 2026-07-17 — Closed
 
-`docs/e2e/scenario-catalog.md` rewritten with accurate coverage summary + index rows. Guard: `MatrixCoverageGuardTests`.
+Forge **#12** resolved. Pop slices **#89–#118** resolved. Catalog + compose representative filters green on `main` (`c4e52d4`, `2144e30`).
