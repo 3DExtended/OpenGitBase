@@ -1,0 +1,3 @@
+[Intent] owner list admin repositories paged
+[HttpRequest] GET http://localhost:8089/api/admin/repositories?page=1&pageSize=10 | GET http://localhost:8089/api/admin/repositories?page=1&pageSize=10
+[HttpResponse] 403 Forbidden

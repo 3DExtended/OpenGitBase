@@ -1,0 +1,3 @@
+[Intent] Unknown fingerprint returns 404
+[HttpRequest] GET http://localhost:8089/api/api/v1/ssh-authentication/by-fingerprint?fingerprint=SHA256:test | GET http://localhost:8089/api/api/v1/ssh-authentication/by-fingerprint?fingerprint=SHA256:test
+[HttpResponse] 404 Not Found | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"{{TRACE_ID}}"}

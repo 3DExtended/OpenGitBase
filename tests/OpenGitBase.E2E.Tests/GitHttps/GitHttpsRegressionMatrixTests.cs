@@ -129,22 +129,6 @@ internal static class GitHttpsRegressionMatrix
             }
         }
 
-        for (var i = 0; i < 10; i++)
-        {
-            var caseId = 100 + i;
-            cases.Add(new AuthMatrixCase(
-                $"E2E-POP23-{caseId:D3}",
-                AuthMatrixActor.Owner,
-                HttpMethod.Get,
-                $"/git-over-https/probe/{i}",
-                null,
-                200,
-                $"Git transport probe {i} skipped in API matrix",
-                $"git-transport-probe-{i}",
-                NotApplicable: true,
-                SkipReason: "Transport-level clone/push probe is covered in dedicated git command tests."));
-        }
-
         return cases;
     }
 

@@ -1,0 +1,6 @@
+{
+  "StatusCode": 400,
+  "Body": "{\u0022error\u0022:\u0022Invalid SSH key format. (Parameter \u0027publicSshKey\u0027)\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/public-git-ssh-key"
+}

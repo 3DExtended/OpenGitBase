@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022items\u0022:[],\u0022totalCount\u0022:0,\u0022page\u0022:1,\u0022pageSize\u0022:50}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/admin/repositories?attention=degraded"
+}

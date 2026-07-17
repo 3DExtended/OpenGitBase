@@ -1,0 +1,3 @@
+[Intent] anonymous get fleet key again
+[HttpRequest] GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key | GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key
+[HttpResponse] 401 Unauthorized

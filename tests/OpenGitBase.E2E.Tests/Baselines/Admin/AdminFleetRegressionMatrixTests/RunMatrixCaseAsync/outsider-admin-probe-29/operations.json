@@ -1,0 +1,3 @@
+[Intent] outsider get fleet ssh public key
+[HttpRequest] GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key | GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key
+[HttpResponse] 403 Forbidden

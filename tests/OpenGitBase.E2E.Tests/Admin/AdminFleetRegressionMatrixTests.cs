@@ -3,12 +3,43 @@ using OpenGitBase.E2E.Core.Fixtures;
 
 namespace OpenGitBase.E2E.Tests.Admin;
 
+public sealed class AdminFleetMatrixFixture : IAsyncLifetime
+{
+    public TestIsolation Context { get; } = new();
+
+    public OperationTranscript Transcript { get; } = new();
+
+    public AuthenticatedClient Admin { get; private set; } = null!;
+
+    public AuthenticatedClient Owner { get; private set; } = null!;
+
+    public AuthenticatedClient Outsider { get; private set; } = null!;
+
+    public async Task InitializeAsync()
+    {
+        await Context.ClearCapturedEmailsAsync().ConfigureAwait(false);
+        var identity = new IdentityFixture(Context, Transcript);
+        Admin = await identity.LoginPlatformAdminAsync().ConfigureAwait(false);
+        Owner = await identity.RegisterUserAsync($"admin-fx-owner-{Context.RunSuffix}").ConfigureAwait(false);
+        Outsider = await identity.RegisterUserAsync($"admin-fx-outsider-{Context.RunSuffix}").ConfigureAwait(false);
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
+}
+
 [Collection("Compose")]
 [Trait("Category", "Admin")]
 [Trait("RequiresCompose", "true")]
 [E2eTier(0)]
-public class AdminFleetRegressionMatrixTests : AuthMatrixTheoryBase
+public class AdminFleetRegressionMatrixTests : AuthMatrixTheoryBase, IClassFixture<AdminFleetMatrixFixture>
 {
+    private readonly AdminFleetMatrixFixture _fixture;
+
+    public AdminFleetRegressionMatrixTests(AdminFleetMatrixFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     public static IEnumerable<object[]> AdminMatrixCases() =>
         AdminFleetRegressionMatrix.BuildCases().Select(c => new object[] { c });
 
@@ -17,18 +48,49 @@ public class AdminFleetRegressionMatrixTests : AuthMatrixTheoryBase
     [Trait("Tag", "Regression")]
     public async Task AdminAndFleetEndpointsMatrix(AuthMatrixCase matrixCase)
     {
-        var identity = new IdentityFixture(Context, Transcript);
-        var owner = await identity.RegisterUserAsync($"admin-reg-owner-{Context.RunSuffix}").ConfigureAwait(false);
-        var outsider = await identity.RegisterUserAsync($"admin-reg-outsider-{Context.RunSuffix}").ConfigureAwait(false);
+        var admin = CloneAuth(_fixture.Admin);
+        var owner = CloneAuth(_fixture.Owner);
+        var outsider = CloneAuth(_fixture.Outsider);
+
+        var resolved = matrixCase with
+        {
+            RelativeUrl = matrixCase.RelativeUrl
+                .Replace("{{REPO_ID}}", "00000000-0000-0000-0000-000000000000", StringComparison.Ordinal),
+            Body = ResolveAdminBody(matrixCase.Body, Context.RunSuffix, matrixCase.CatalogId),
+        };
 
         await RunMatrixCaseAsync(
-            matrixCase,
+            resolved,
             new AuthMatrixContext
             {
                 Anonymous = new E2eApiClient(Transcript, Context.Normalizer),
                 Owner = owner,
                 Outsider = outsider,
+                Admin = admin,
             }).ConfigureAwait(false);
+    }
+
+    private AuthenticatedClient CloneAuth(AuthenticatedClient source) =>
+        new()
+        {
+            Username = source.Username,
+            UserId = source.UserId,
+            Token = source.Token,
+            Client = new E2eApiClient(Transcript, Context.Normalizer, source.Token),
+        };
+
+    private static object? ResolveAdminBody(object? body, string runSuffix, string catalogId)
+    {
+        if (body is null)
+        {
+            return null;
+        }
+
+        var caseToken = catalogId.Replace("E2E-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        var json = System.Text.Json.JsonSerializer.Serialize(body)
+            .Replace("{{RUN}}", runSuffix, StringComparison.Ordinal)
+            .Replace("{{CASE}}", $"{runSuffix}-{caseToken}", StringComparison.Ordinal);
+        return System.Text.Json.JsonSerializer.Deserialize<object>(json);
     }
 }
 
@@ -38,39 +100,48 @@ internal static class AdminFleetRegressionMatrix
     {
         var cases = new List<AuthMatrixCase>
         {
-            Row("E2E-POP27-001", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/storage-nodes", null, 403, "Non-admin cannot list storage nodes", "owner-storage-nodes-denied"),
-            Row("E2E-POP27-002", AuthMatrixActor.Anonymous, HttpMethod.Get, "/admin/storage-nodes", null, 401, "Anonymous cannot list storage nodes", "anon-storage-nodes-denied"),
-            Row("E2E-POP27-003", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/storage-enrollments", null, 403, "Non-admin cannot list enrollments", "owner-enrollments-denied"),
-            Row("E2E-POP27-004", AuthMatrixActor.Anonymous, HttpMethod.Get, "/admin/storage-enrollments", null, 401, "Anonymous cannot list enrollments", "anon-enrollments-denied"),
-            Row("E2E-POP27-005", AuthMatrixActor.Owner, HttpMethod.Post, "/admin/storage-enrollments", new { nodeId = "node-a", expiresInHours = 2 }, 403, "Non-admin cannot create enrollment", "owner-create-enrollment-denied"),
-            Row("E2E-POP27-006", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", null, 403, "Non-admin cannot get fleet ssh key", "owner-fleet-key-denied"),
-            Row("E2E-POP27-007", AuthMatrixActor.Anonymous, HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", null, 401, "Anonymous cannot get fleet ssh key", "anon-fleet-key-denied"),
-            Row("E2E-POP27-008", AuthMatrixActor.Owner, HttpMethod.Post, "/admin/fleet/dispatcher-ssh-keys/generate", null, 403, "Non-admin cannot generate fleet keys", "owner-fleet-generate-denied"),
-            Row("E2E-POP27-009", AuthMatrixActor.Anonymous, HttpMethod.Post, "/admin/fleet/dispatcher-ssh-keys/generate", null, 401, "Anonymous cannot generate fleet keys", "anon-fleet-generate-denied"),
+            Row("E2E-POP27-001", AuthMatrixActor.Admin, HttpMethod.Get, "/admin/storage-nodes", null, 200, "Admin lists storage nodes", "admin-storage-nodes"),
+            Row("E2E-POP27-002", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/storage-nodes", null, 403, "Non-admin cannot list storage nodes", "owner-storage-nodes-denied"),
+            Row("E2E-POP27-003", AuthMatrixActor.Anonymous, HttpMethod.Get, "/admin/storage-nodes", null, 401, "Anonymous cannot list storage nodes", "anon-storage-nodes-denied"),
+            Row("E2E-POP27-004", AuthMatrixActor.Admin, HttpMethod.Get, "/admin/storage-enrollments", null, 200, "Admin lists storage enrollments", "admin-enrollments"),
+            Row("E2E-POP27-005", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/storage-enrollments", null, 403, "Non-admin cannot list enrollments", "owner-enrollments-denied"),
+            Row("E2E-POP27-006", AuthMatrixActor.Admin, HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", null, 200, "Admin can get fleet ssh key", "admin-fleet-key"),
+            Row("E2E-POP27-007", AuthMatrixActor.Owner, HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", null, 403, "Non-admin cannot get fleet ssh key", "owner-fleet-key-denied"),
+            Row("E2E-POP27-008", AuthMatrixActor.Admin, HttpMethod.Get, "/admin/storage-nodes/replication-summary", null, 200, "Admin replication summary", "admin-replication-summary"),
+            Row("E2E-POP27-009", AuthMatrixActor.Admin, HttpMethod.Get, "/admin/repositories", null, 200, "Admin lists repositories replication", "admin-repositories"),
             Row("E2E-POP27-010", AuthMatrixActor.Outsider, HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", null, 403, "Outsider cannot read fleet key", "outsider-fleet-key-denied"),
         };
 
-        var probes = new (HttpMethod Method, string Url, int Owner, int Outsider, int Anonymous, object? Body, string Intent)[]
+        var probes = new (HttpMethod Method, string Url, int Admin, int Owner, int Outsider, int Anonymous, object? Body, string Intent)[]
         {
-            (HttpMethod.Get, "/admin/storage-nodes", 403, 403, 401, null, "list storage nodes"),
-            (HttpMethod.Get, "/admin/storage-enrollments", 403, 403, 401, null, "list storage enrollments"),
-            (HttpMethod.Post, "/admin/storage-enrollments", 403, 403, 401, new { nodeId = "node-reg", expiresInHours = 1 }, "create storage enrollment"),
-            (HttpMethod.Post, "/admin/storage-enrollments", 403, 403, 401, new { nodeId = string.Empty, expiresInHours = 1 }, "create invalid storage enrollment"),
-            (HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", 403, 403, 401, null, "get fleet ssh public key"),
-            (HttpMethod.Post, "/admin/fleet/dispatcher-ssh-keys/generate", 403, 403, 401, null, "generate fleet ssh keys"),
+            (HttpMethod.Get, "/admin/storage-nodes", 200, 403, 403, 401, null, "list storage nodes"),
+            (HttpMethod.Get, "/admin/storage-enrollments", 200, 403, 403, 401, null, "list storage enrollments"),
+            (HttpMethod.Post, "/admin/storage-enrollments", 200, 403, 403, 401, new { nodeId = "node-{{CASE}}", expiresInHours = 1 }, "create storage enrollment"),
+            (HttpMethod.Post, "/admin/storage-enrollments", 400, 403, 403, 401, new { nodeId = string.Empty, expiresInHours = 1 }, "create invalid storage enrollment"),
+            (HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", 200, 403, 403, 401, null, "get fleet ssh public key"),
+            (HttpMethod.Get, "/admin/storage-nodes/replication-summary", 200, 403, 403, 401, null, "replication summary"),
+            (HttpMethod.Get, "/admin/repositories", 200, 403, 403, 401, null, "list admin repositories"),
+            (HttpMethod.Get, "/admin/repositories?page=1&pageSize=10", 200, 403, 403, 401, null, "list admin repositories paged"),
+            (HttpMethod.Get, "/admin/repositories?attention=degraded", 200, 403, 403, 401, null, "list repositories attention degraded"),
+            (HttpMethod.Get, "/admin/repositories?search=missing", 200, 403, 403, 401, null, "list repositories search"),
+            (HttpMethod.Get, "/admin/repositories/{{REPO_ID}}/replication", 404, 403, 403, 401, null, "get missing repo replication"),
+            (HttpMethod.Get, "/admin/compute-nodes", 200, 403, 403, 401, null, "list compute nodes"),
+            (HttpMethod.Get, "/admin/compute-enrollments", 200, 403, 403, 401, null, "list compute enrollments"),
+            (HttpMethod.Get, "/admin/fleet/dispatcher-ssh-public-key", 200, 403, 403, 401, null, "get fleet key again"),
         };
 
         var actors = new[]
         {
-            new { Actor = AuthMatrixActor.Owner, Label = "owner", Status = (Func<(int, int, int), int>)(x => x.Item1) },
-            new { Actor = AuthMatrixActor.Outsider, Label = "outsider", Status = (Func<(int, int, int), int>)(x => x.Item2) },
-            new { Actor = AuthMatrixActor.Anonymous, Label = "anonymous", Status = (Func<(int, int, int), int>)(x => x.Item3) },
+            new { Actor = AuthMatrixActor.Admin, Label = "admin", Status = (Func<(int, int, int, int), int>)(x => x.Item1) },
+            new { Actor = AuthMatrixActor.Owner, Label = "owner", Status = (Func<(int, int, int, int), int>)(x => x.Item2) },
+            new { Actor = AuthMatrixActor.Outsider, Label = "outsider", Status = (Func<(int, int, int, int), int>)(x => x.Item3) },
+            new { Actor = AuthMatrixActor.Anonymous, Label = "anonymous", Status = (Func<(int, int, int, int), int>)(x => x.Item4) },
         };
 
         var id = 11;
         foreach (var probe in probes)
         {
-            var statuses = (probe.Owner, probe.Outsider, probe.Anonymous);
+            var statuses = (probe.Admin, probe.Owner, probe.Outsider, probe.Anonymous);
             foreach (var actor in actors)
             {
                 cases.Add(Row(

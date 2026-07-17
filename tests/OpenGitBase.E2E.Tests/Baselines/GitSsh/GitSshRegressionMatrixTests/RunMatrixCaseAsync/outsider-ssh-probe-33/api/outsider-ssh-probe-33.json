@@ -1,0 +1,6 @@
+{
+  "StatusCode": 404,
+  "Body": "{\u0022type\u0022:\u0022https://tools.ietf.org/html/rfc9110#section-15.5.5\u0022,\u0022title\u0022:\u0022Not Found\u0022,\u0022status\u0022:404,\u0022traceId\u0022:\u0022{{TRACE_ID}}\u0022}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/api/v1/ssh-authentication/by-fingerprint?fingerprint=SHA256:missing"
+}

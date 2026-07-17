@@ -31,8 +31,11 @@ public class OrganizationRegressionMatrixTests : AuthMatrixTheoryBase
             RelativeUrl = matrixCase.RelativeUrl
                 .Replace("{{ORG_ID}}", organization.Id, StringComparison.Ordinal)
                 .Replace("{{ORG_SLUG}}", organization.Slug, StringComparison.Ordinal)
+                .Replace("{{OWNER_ID}}", owner.UserId, StringComparison.Ordinal)
+                .Replace("{{READER_ID}}", reader.UserId, StringComparison.Ordinal)
                 .Replace("{{OWNER}}", owner.Username, StringComparison.Ordinal)
                 .Replace("{{READER}}", reader.Username, StringComparison.Ordinal),
+            Body = OrganizationRegressionMatrix.ResolveOrgBody(matrixCase.Body, owner.Username, reader.Username, organization.Slug),
         };
 
         await RunMatrixCaseAsync(
@@ -106,22 +109,77 @@ internal static class OrganizationRegressionMatrix
             }
         }
 
-        while (cases.Count < 56)
-        {
-            var idx = cases.Count + 1;
-            var actor = idx % 2 == 0 ? AuthMatrixActor.Owner : AuthMatrixActor.Outsider;
-            cases.Add(Row(
-                $"E2E-POP17-{idx:D3}",
-                actor,
-                HttpMethod.Get,
-                $"/organization/{{ORG_ID}}/members?probe={idx}",
-                null,
-                actor == AuthMatrixActor.Owner ? 200 : 403,
-                $"{actor} members probe {idx}",
-                $"org-members-probe-{idx}"));
-        }
+        // Distinct invite / member edge cases (no query-param filler)
+        cases.Add(Row(
+            $"E2E-POP17-{id++:D3}",
+            AuthMatrixActor.Owner,
+            HttpMethod.Post,
+            "/organization/{{ORG_ID}}/members",
+            new { identifier = "{{READER}}", role = 0 },
+            409,
+            "Owner cannot re-add existing member",
+            "owner-readd-member"));
+        cases.Add(Row(
+            $"E2E-POP17-{id++:D3}",
+            AuthMatrixActor.Owner,
+            HttpMethod.Delete,
+            "/organization/{{ORG_ID}}/members/00000000-0000-0000-0000-000000000000",
+            null,
+            404,
+            "Owner remove unknown member returns 404",
+            "owner-remove-unknown-member"));
+        cases.Add(Row(
+            $"E2E-POP17-{id++:D3}",
+            AuthMatrixActor.Reader,
+            HttpMethod.Delete,
+            "/organization/{{ORG_ID}}/members/{{OWNER_ID}}",
+            null,
+            403,
+            "Member cannot remove owner",
+            "member-remove-owner-denied"));
+        cases.Add(Row(
+            $"E2E-POP17-{id++:D3}",
+            AuthMatrixActor.Outsider,
+            HttpMethod.Put,
+            "/organization/{{ORG_ID}}/members/{{READER_ID}}",
+            new { role = 1 },
+            403,
+            "Outsider cannot promote member",
+            "outsider-promote-denied"));
+        cases.Add(Row(
+            $"E2E-POP17-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Post,
+            "/organization",
+            new { modelToCreate = new { name = "Anon Org", slug = "anon-org-{{ORG_SLUG}}" } },
+            401,
+            "Anonymous cannot create organization",
+            "anon-create-org"));
+        cases.Add(Row(
+            $"E2E-POP17-{id:D3}",
+            AuthMatrixActor.Owner,
+            HttpMethod.Get,
+            "/organization/{{ORG_ID}}/storage/settings",
+            null,
+            200,
+            "Owner can read org storage settings",
+            "owner-org-storage-settings"));
 
         return cases;
+    }
+
+    public static object? ResolveOrgBody(object? body, string ownerUsername, string readerUsername, string orgSlug)
+    {
+        if (body is null)
+        {
+            return null;
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(body)
+            .Replace("{{OWNER}}", ownerUsername, StringComparison.Ordinal)
+            .Replace("{{READER}}", readerUsername, StringComparison.Ordinal)
+            .Replace("{{ORG_SLUG}}", orgSlug, StringComparison.Ordinal);
+        return System.Text.Json.JsonSerializer.Deserialize<object>(json);
     }
 
     private static AuthMatrixCase Row(

@@ -1,0 +1,3 @@
+[Intent] owner list repositories attention degraded
+[HttpRequest] GET http://localhost:8089/api/admin/repositories?attention=degraded | GET http://localhost:8089/api/admin/repositories?attention=degraded
+[HttpResponse] 403 Forbidden

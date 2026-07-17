@@ -1,0 +1,3 @@
+[Intent] anonymous Delete account invalid body
+[HttpRequest] POST http://localhost:8089/api/account/delete | POST http://localhost:8089/api/account/delete
+[HttpResponse] 401 Unauthorized

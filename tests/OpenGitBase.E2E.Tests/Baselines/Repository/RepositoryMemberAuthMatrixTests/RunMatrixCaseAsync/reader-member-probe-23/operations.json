@@ -1,0 +1,3 @@
+[Intent] reader private refs by role
+[HttpRequest] GET http://localhost:8089/api/repository/by-slug/rm-fx-owner-{{SHA}}/rm-fx-{{SHA}}/content/refs | GET http://localhost:8089/api/repository/by-slug/rm-fx-owner-{{SHA}}/rm-fx-{{SHA}}/content/refs
+[HttpResponse] 200 OK | {"branches":[],"tags":[],"defaultRef":null,"isEmpty":true,"replicationLag":{"behind":false,"message":null}}

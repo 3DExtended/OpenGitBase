@@ -1,0 +1,3 @@
+[Intent] anonymous list compute enrollments
+[HttpRequest] GET http://localhost:8089/api/admin/compute-enrollments | GET http://localhost:8089/api/admin/compute-enrollments
+[HttpResponse] 401 Unauthorized

@@ -1,0 +1,3 @@
+[Intent] outsider create mismatched fingerprint
+[HttpRequest] POST http://localhost:8089/api/public-git-ssh-key | POST http://localhost:8089/api/public-git-ssh-key
+[HttpResponse] 400 Bad Request | {"error":"Provided fingerprint does not match the calculated fingerprint of the SSH key."}

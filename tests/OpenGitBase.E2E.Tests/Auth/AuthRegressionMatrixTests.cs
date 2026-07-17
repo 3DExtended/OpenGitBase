@@ -135,19 +135,70 @@ internal static class AuthRegressionMatrix
             id++;
         }
 
-        while (id <= 60)
-        {
-            cases.Add(Row(
-                $"E2E-POP15-{id:D3}",
-                AuthMatrixActor.Anonymous,
-                HttpMethod.Get,
-                $"/account/me?catalog={id}",
-                null,
-                401,
-                $"Anonymous account/me catalog probe {id}",
-                $"account-me-anon-probe-{id}"));
-            id++;
-        }
+        // Lifecycle / invite edge cases (no query-param filler)
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Get,
+            "/invite/00000000-0000-0000-0000-000000000000",
+            null,
+            404,
+            "Anonymous invite lookup for unknown token returns 404",
+            "invite-unknown-token"));
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Post,
+            "/invite/00000000-0000-0000-0000-000000000000/accept",
+            null,
+            404,
+            "Anonymous cannot accept unknown invite",
+            "invite-accept-unknown"));
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Post,
+            "/invite/00000000-0000-0000-0000-000000000000/decline",
+            null,
+            404,
+            "Anonymous cannot decline unknown invite",
+            "invite-decline-unknown"));
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Owner,
+            HttpMethod.Post,
+            "/signin/requestresetpassword",
+            new { username = "{{OWNER}}" },
+            200,
+            "Owner can request password reset for self",
+            "owner-request-reset"));
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Post,
+            "/signin/requestresetpassword",
+            new { username = "{{OWNER}}" },
+            200,
+            "Anonymous can request password reset by username",
+            "anon-request-reset"));
+        cases.Add(Row(
+            $"E2E-POP15-{id++:D3}",
+            AuthMatrixActor.Anonymous,
+            HttpMethod.Post,
+            "/signin/resetpassword",
+            new { username = "{{OWNER}}", resetCode = "000000", newPassword = "Password123!" },
+            400,
+            "Reset password rejects invalid code",
+            "reset-invalid-code"));
+        cases.Add(Row(
+            $"E2E-POP15-{id:D3}",
+            AuthMatrixActor.Owner,
+            HttpMethod.Get,
+            "/account/me",
+            null,
+            200,
+            "Owner account me after register matrix setup",
+            "owner-me-after-setup"));
 
         return cases;
     }

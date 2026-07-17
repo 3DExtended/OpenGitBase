@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "[{\u0022storageNodeId\u0022:\u0022{{GUID}}\u0022,\u0022nodeId\u0022:\u0022storage-1\u0022,\u0022primaryRepositoryCount\u0022:153,\u0022replicaRepositoryCount\u0022:0,\u0022isSpare\u0022:false},{\u0022storageNodeId\u0022:\u0022{{GUID}}\u0022,\u0022nodeId\u0022:\u0022storage-2\u0022,\u0022primaryRepositoryCount\u0022:0,\u0022replicaRepositoryCount\u0022:0,\u0022isSpare\u0022:false},{\u0022storageNodeId\u0022:\u0022{{GUID}}\u0022,\u0022nodeId\u0022:\u0022storage-3\u0022,\u0022primaryRepositoryCount\u0022:0,\u0022replicaRepositoryCount\u0022:0,\u0022isSpare\u0022:false},{\u0022storageNodeId\u0022:\u0022{{GUID}}\u0022,\u0022nodeId\u0022:\u0022storage-4\u0022,\u0022primaryRepositoryCount\u0022:0,\u0022replicaRepositoryCount\u0022:0,\u0022isSpare\u0022:false}]",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/admin/storage-nodes/replication-summary"
+}

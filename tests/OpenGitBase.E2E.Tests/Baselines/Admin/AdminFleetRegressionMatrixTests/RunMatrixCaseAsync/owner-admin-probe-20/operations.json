@@ -1,0 +1,3 @@
+[Intent] owner create storage enrollment
+[HttpRequest] POST http://localhost:8089/api/admin/storage-enrollments | POST http://localhost:8089/api/admin/storage-enrollments
+[HttpResponse] 403 Forbidden

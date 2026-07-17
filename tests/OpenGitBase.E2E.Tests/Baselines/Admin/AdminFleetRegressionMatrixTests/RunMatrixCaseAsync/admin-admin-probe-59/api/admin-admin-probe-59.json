@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "[]",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/admin/compute-enrollments"
+}

@@ -1,0 +1,3 @@
+[Intent] owner create invalid SSH key
+[HttpRequest] POST http://localhost:8089/api/public-git-ssh-key | POST http://localhost:8089/api/public-git-ssh-key
+[HttpResponse] 400 Bad Request | {"error":"Invalid SSH key format. (Parameter 'publicSshKey')"}

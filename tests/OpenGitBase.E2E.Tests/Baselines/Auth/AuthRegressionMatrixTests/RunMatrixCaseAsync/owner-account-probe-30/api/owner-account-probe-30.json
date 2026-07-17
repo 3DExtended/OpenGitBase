@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "Signed out",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/signin/signout"
+}

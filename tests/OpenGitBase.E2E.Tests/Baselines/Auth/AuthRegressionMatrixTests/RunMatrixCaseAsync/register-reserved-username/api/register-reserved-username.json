@@ -1,0 +1,6 @@
+{
+  "StatusCode": 409,
+  "Body": "Reserved username",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/register/register"
+}

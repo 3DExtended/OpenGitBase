@@ -1,0 +1,3 @@
+[Intent] admin list compute nodes
+[HttpRequest] GET http://localhost:8089/api/admin/compute-nodes | GET http://localhost:8089/api/admin/compute-nodes
+[HttpResponse] 200 OK | []

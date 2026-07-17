@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022bytesUsed\u0022:26571,\u0022bytesLimit\u0022:{{SHA}},\u0022fileSizeLimit\u0022:{{SHA}}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/{{GUID}}/usage"
+}

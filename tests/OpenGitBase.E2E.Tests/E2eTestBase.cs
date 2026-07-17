@@ -105,3 +105,21 @@ public sealed class RequiresFullHaFactAttribute : FactAttribute
         }
     }
 }
+
+public sealed class RequiresFullHaTheoryAttribute : TheoryAttribute
+{
+    public RequiresFullHaTheoryAttribute()
+    {
+        ComposeFullHaGate.Refresh();
+        if (!ComposeFullHaGate.IsFullHaProfile)
+        {
+            Skip = ComposeFullHaGate.SkipReason;
+        }
+
+        ComposeHealthGate.Refresh();
+        if (!ComposeHealthGate.IsHealthy)
+        {
+            Skip = ComposeHealthGate.SkipReason;
+        }
+    }
+}

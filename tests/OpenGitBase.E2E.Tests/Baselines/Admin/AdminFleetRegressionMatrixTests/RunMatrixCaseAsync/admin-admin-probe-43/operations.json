@@ -1,0 +1,3 @@
+[Intent] admin list repositories attention degraded
+[HttpRequest] GET http://localhost:8089/api/admin/repositories?attention=degraded | GET http://localhost:8089/api/admin/repositories?attention=degraded
+[HttpResponse] 200 OK | {"items":[],"totalCount":0,"page":1,"pageSize":50}

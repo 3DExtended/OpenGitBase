@@ -1,0 +1,3 @@
+[Intent] outsider list members
+[HttpRequest] GET http://localhost:8089/api/repository-member/{{GUID}} | GET http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 403 Forbidden

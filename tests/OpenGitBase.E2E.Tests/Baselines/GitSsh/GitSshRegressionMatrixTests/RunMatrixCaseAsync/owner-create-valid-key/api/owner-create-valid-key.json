@@ -1,0 +1,6 @@
+{
+  "StatusCode": 201,
+  "Body": "{\u0022value\u0022:\u0022{{GUID}}\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/public-git-ssh-key"
+}

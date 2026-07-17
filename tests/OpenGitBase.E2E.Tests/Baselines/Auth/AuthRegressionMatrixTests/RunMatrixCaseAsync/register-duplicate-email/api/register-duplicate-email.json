@@ -1,0 +1,6 @@
+{
+  "StatusCode": 409,
+  "Body": "Email taken",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/register/register"
+}

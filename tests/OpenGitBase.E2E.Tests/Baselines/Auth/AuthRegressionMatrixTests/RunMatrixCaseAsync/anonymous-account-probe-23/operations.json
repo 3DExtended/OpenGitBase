@@ -1,0 +1,3 @@
+[Intent] anonymous Get verification debug code
+[HttpRequest] POST http://localhost:8089/api/account/debug/verification-code | POST http://localhost:8089/api/account/debug/verification-code
+[HttpResponse] 401 Unauthorized

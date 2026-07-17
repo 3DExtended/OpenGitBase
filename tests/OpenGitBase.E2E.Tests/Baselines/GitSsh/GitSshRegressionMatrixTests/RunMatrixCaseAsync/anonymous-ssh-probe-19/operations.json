@@ -1,0 +1,3 @@
+[Intent] anonymous delete missing SSH key
+[HttpRequest] DELETE http://localhost:8089/api/public-git-ssh-key/{{GUID}} | DELETE http://localhost:8089/api/public-git-ssh-key/{{GUID}}
+[HttpResponse] 401 Unauthorized

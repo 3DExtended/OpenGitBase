@@ -1,0 +1,3 @@
+[Intent] outsider replication summary
+[HttpRequest] GET http://localhost:8089/api/admin/storage-nodes/replication-summary | GET http://localhost:8089/api/admin/storage-nodes/replication-summary
+[HttpResponse] 403 Forbidden

@@ -1,0 +1,3 @@
+[Intent] anonymous list admin repositories
+[HttpRequest] GET http://localhost:8089/api/admin/repositories | GET http://localhost:8089/api/admin/repositories
+[HttpResponse] 401 Unauthorized

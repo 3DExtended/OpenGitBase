@@ -1,0 +1,3 @@
+[Intent] Owner can list SSH keys
+[HttpRequest] GET http://localhost:8089/api/public-git-ssh-key | GET http://localhost:8089/api/public-git-ssh-key
+[HttpResponse] 200 OK | []

@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "[{\u0022repositoryId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022userId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022username\u0022:\u0022rm-fx-reader-{{SHA}}\u0022,\u0022role\u0022:1,\u0022id\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022}},{\u0022repositoryId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022userId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022username\u0022:\u0022rm-fx-writer-{{SHA}}\u0022,\u0022role\u0022:2,\u0022id\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022}},{\u0022repositoryId\u0022:null,\u0022userId\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022},\u0022username\u0022:\u0022rm-fx-owner-{{SHA}}\u0022,\u0022role\u0022:4,\u0022id\u0022:{\u0022value\u0022:\u0022{{GUID}}\u0022}}]",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository-member/{{GUID}}"
+}

@@ -1,0 +1,3 @@
+[Intent] Register rejects duplicate email
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 409 Conflict | Email taken

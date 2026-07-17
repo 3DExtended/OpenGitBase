@@ -1,0 +1,3 @@
+[Intent] outsider get repository by id
+[HttpRequest] GET http://localhost:8089/api/repository/{{GUID}} | GET http://localhost:8089/api/repository/{{GUID}}
+[HttpResponse] 403 Forbidden

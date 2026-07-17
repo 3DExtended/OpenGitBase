@@ -1,0 +1,3 @@
+[Intent] anonymous add unknown user
+[HttpRequest] POST http://localhost:8089/api/repository-member | POST http://localhost:8089/api/repository-member
+[HttpResponse] 401 Unauthorized

@@ -1,0 +1,6 @@
+{
+  "StatusCode": 401,
+  "Body": "",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/organization"
+}

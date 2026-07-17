@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{{JWT}}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/register/register"
+}

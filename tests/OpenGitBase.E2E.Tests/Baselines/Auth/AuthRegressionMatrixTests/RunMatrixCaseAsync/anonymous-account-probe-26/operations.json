@@ -1,0 +1,3 @@
+[Intent] anonymous Debug verify email
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 401 Unauthorized

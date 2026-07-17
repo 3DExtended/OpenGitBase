@@ -1,0 +1,3 @@
+[Intent] admin create storage enrollment
+[HttpRequest] POST http://localhost:8089/api/admin/storage-enrollments | POST http://localhost:8089/api/admin/storage-enrollments
+[HttpResponse] 200 OK | {"enrollmentId":"{{GUID}}","nodeId":"node-{{RUN_SUFFIX}}-pop27-019","enrollmentToken":"CVcjYMdSDdOX2O4xDZYgq/b5SQfr30EkJL61Dlqr7w0=","expiresAt":"{{TIMESTAMP}}"}

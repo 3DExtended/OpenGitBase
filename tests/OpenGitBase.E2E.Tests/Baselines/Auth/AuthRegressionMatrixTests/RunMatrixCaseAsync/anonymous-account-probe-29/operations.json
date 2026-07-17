@@ -1,0 +1,3 @@
+[Intent] anonymous Signout endpoint
+[HttpRequest] POST http://localhost:8089/api/signin/signout | POST http://localhost:8089/api/signin/signout
+[HttpResponse] 200 OK | Signed out

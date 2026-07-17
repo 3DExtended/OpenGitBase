@@ -1,0 +1,3 @@
+[Intent] anonymous get missing repo replication
+[HttpRequest] GET http://localhost:8089/api/admin/repositories/{{GUID}}/replication | GET http://localhost:8089/api/admin/repositories/{{GUID}}/replication
+[HttpResponse] 401 Unauthorized

@@ -1,0 +1,3 @@
+[Intent] owner list admin repositories
+[HttpRequest] GET http://localhost:8089/api/admin/repositories | GET http://localhost:8089/api/admin/repositories
+[HttpResponse] 403 Forbidden

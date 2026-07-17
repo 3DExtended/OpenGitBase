@@ -1,0 +1,3 @@
+[Intent] reader list members again
+[HttpRequest] GET http://localhost:8089/api/repository-member/{{GUID}} | GET http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 200 OK | [{"repositoryId":{"value":"{{GUID}}"},"userId":{"value":"{{GUID}}"},"username":"rm-fx-reader-{{SHA}}","role":1,"id":{"value":"{{GUID}}"}},{"repositoryId":{"value":"{{GUID}}"},"userId":{"value":"{{GUID}}"},"username":"rm-fx-writer-{{SHA}}","role":2,"id":{"value":"{{GUID}}"}},{"repositoryId":null,"userId":{"value":"{{GUID}}"},"username":"rm-fx-owner-{{SHA}}","role":4,"id":{"value":"{{GUID}}"}}]

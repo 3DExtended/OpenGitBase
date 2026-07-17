@@ -1,0 +1,3 @@
+[Intent] anonymous update missing membership
+[HttpRequest] PUT http://localhost:8089/api/repository-member/{{GUID}} | PUT http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 401 Unauthorized

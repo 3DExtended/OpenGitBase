@@ -1,0 +1,6 @@
+{
+  "StatusCode": 400,
+  "Body": "{\u0022error\u0022:\u0022NodeId is required.\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/admin/storage-enrollments"
+}

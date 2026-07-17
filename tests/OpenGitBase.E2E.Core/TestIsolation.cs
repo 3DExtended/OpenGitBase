@@ -127,4 +127,32 @@ public sealed class IdentityFixture : IIdentityFixture
             Client = client,
         };
     }
+
+    /// <summary>
+    /// Logs in as the compose-seeded platform admin (<c>AdminSeed</c>), not a freshly registered user.
+    /// </summary>
+    public async Task<AuthenticatedClient> LoginPlatformAdminAsync(CancellationToken cancellationToken = default)
+    {
+        var username = Environment.GetEnvironmentVariable("OGB_E2E_ADMIN_USERNAME")
+            ?? Environment.GetEnvironmentVariable("AdminSeed__Username")
+            ?? "admin";
+        var password = Environment.GetEnvironmentVariable("OGB_E2E_ADMIN_PASSWORD")
+            ?? Environment.GetEnvironmentVariable("AdminSeed__Password")
+            ?? "change-me-admin";
+
+        _transcript.Describe($"Login as platform admin {username}");
+        var anon = new E2eApiClient(_transcript, _context.Normalizer);
+        var login = await anon.PostAsync("/signin/login", new { username, password }, cancellationToken)
+            .ConfigureAwait(false);
+        var token = E2eScenarioHelpers.ParseJwtToken(login);
+        var userId = E2eScenarioHelpers.ExtractUserIdFromJwt(token);
+        _context.Normalizer.RegisterToken("ADMIN_USER_ID", userId);
+        return new AuthenticatedClient
+        {
+            Username = username,
+            Token = token,
+            UserId = userId,
+            Client = new E2eApiClient(_transcript, _context.Normalizer, token),
+        };
+    }
 }

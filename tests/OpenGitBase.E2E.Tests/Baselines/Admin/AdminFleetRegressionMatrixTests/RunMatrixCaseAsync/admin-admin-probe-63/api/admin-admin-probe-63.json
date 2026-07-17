@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022publicKey\u0022:\u0022ssh-{{SHA}} AAAAC3NzaC1lZDI1NTE5AAAAIDODvJHtLATqF/aiOHuoyG/U929CMfreSV6SCjMR1khX opengitbase-dispatcher-storage\u0022}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key"
+}

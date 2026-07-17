@@ -1,0 +1,6 @@
+{
+  "StatusCode": 400,
+  "Body": "{\u0022type\u0022:\u0022https://tools.ietf.org/html/rfc9110#section-15.5.1\u0022,\u0022title\u0022:\u0022One or more validation errors occurred.\u0022,\u0022status\u0022:400,\u0022errors\u0022:{\u0022fingerprint\u0022:[\u0022The fingerprint field is required.\u0022]},\u0022traceId\u0022:\u0022{{TRACE_ID}}\u0022}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/api/v1/ssh-authentication/by-fingerprint?fingerprint="
+}

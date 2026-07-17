@@ -1,0 +1,3 @@
+[Intent] Anonymous cannot list storage nodes
+[HttpRequest] GET http://localhost:8089/api/admin/storage-nodes | GET http://localhost:8089/api/admin/storage-nodes
+[HttpResponse] 401 Unauthorized

@@ -1,0 +1,3 @@
+[Intent] reader update missing membership
+[HttpRequest] PUT http://localhost:8089/api/repository-member/{{GUID}} | PUT http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 400 Bad Request | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"UpdatedModel.UserId":["The UserId field is required."]},"traceId":"{{TRACE_ID}}"}

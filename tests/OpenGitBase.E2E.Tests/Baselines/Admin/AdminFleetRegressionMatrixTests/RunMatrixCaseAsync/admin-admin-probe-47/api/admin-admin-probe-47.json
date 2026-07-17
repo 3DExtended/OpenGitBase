@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022items\u0022:[{\u0022repositoryId\u0022:\u0022{{GUID}}\u0022,\u0022name\u0022:\u0022Discovery Smoke\u0022,\u0022ownerSlug\u0022:\u0022discovery-smoke-owner-mark-read-missing-{{SHA}}\u0022,\u0022replicationState\u0022:\u0022Rf4Healthy\u0022,\u0022replicaCount\u0022:3,\u0022primaryNodeId\u0022:\u0022storage-1\u0022,\u0022primaryWatermark\u0022:0,\u0022maxWatermarkLag\u0022:0,\u0022writeQuorumAvailable\u0022:true,\u0022replicationEpoch\u0022:1,\u0022oldestLastSyncedAt\u0022:null},{\u0022repositoryId\u0022:\u0022{{GUID}}\u0022,\u0022name\u0022:\u0022Discovery Smoke\u0022,\u0022ownerSlug\u0022:\u0022discovery-smoke-owner-mark-read-missing-{{SHA}}\u0022,\u0022replicationState\u0022:\u0022Rf4Healthy\u0022,\u0022replicaCount\u0022:3,\u0022primaryNodeId\u0022:\u0022storage-1\u0022,\u0022primaryWatermark\u0022:0,\u0022maxWatermarkLag\u0022:0,\u0022writeQuorumAvailable\u0022:true,\u0022replicationEpoch\u0022:1,\u0022oldestLastSyncedAt\u0022:null}],\u0022totalCount\u0022:2,\u0022page\u0022:1,\u0022pageSize\u0022:50}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/admin/repositories?search=missing"
+}

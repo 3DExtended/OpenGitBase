@@ -1,0 +1,3 @@
+[Intent] Register succeeds for new username
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}

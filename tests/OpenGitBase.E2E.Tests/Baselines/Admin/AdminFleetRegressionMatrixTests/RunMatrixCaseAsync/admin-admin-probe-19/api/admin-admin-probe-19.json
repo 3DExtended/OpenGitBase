@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022enrollmentId\u0022:\u0022{{GUID}}\u0022,\u0022nodeId\u0022:\u0022node-{{RUN_SUFFIX}}-pop27-019\u0022,\u0022enrollmentToken\u0022:\u0022CVcjYMdSDdOX2O4xDZYgq/b5SQfr30EkJL61Dlqr7w0=\u0022,\u0022expiresAt\u0022:\u0022{{TIMESTAMP}}\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/admin/storage-enrollments"
+}

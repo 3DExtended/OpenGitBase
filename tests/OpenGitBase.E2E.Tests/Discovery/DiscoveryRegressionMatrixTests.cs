@@ -71,12 +71,10 @@ internal static class DiscoveryRegressionMatrix
             (HttpMethod.Get, "/notifications?unreadOnly=true", 200, 200, 200, 401, "list unread notifications"),
             (HttpMethod.Get, "/notifications?unreadOnly=false", 200, 200, 200, 401, "list all notifications"),
             (HttpMethod.Post, "/notifications/00000000-0000-0000-0000-000000000000/read", 404, 404, 404, 401, "mark missing notification read"),
-            (HttpMethod.Get, "/public/owners/{{OWNER}}?probe=1", 200, 200, 200, 200, "owner profile probe"),
             (HttpMethod.Get, "/public/repositories?q={{OWNER}}", 200, 200, 200, 200, "repository query by owner"),
-            (HttpMethod.Get, "/public/repositories?q={{SLUG}}&probe=matrix", 200, 200, 200, 200, "repository query probe"),
-            (HttpMethod.Get, "/notifications?unreadOnly=true&probe=matrix", 200, 200, 200, 401, "notifications probe"),
-            (HttpMethod.Get, "/public/repositories/recent?probe=matrix", 200, 200, 200, 200, "recent repositories probe"),
             (HttpMethod.Post, "/notifications/00000000-0000-0000-0000-000000000001/read", 404, 404, 404, 401, "mark another missing notification read"),
+            (HttpMethod.Get, "/public/repositories?q=", 200, 200, 200, 200, "empty search query"),
+            (HttpMethod.Get, "/public/owners/missing-owner-{{SLUG}}", 404, 404, 404, 404, "missing owner profile"),
         };
 
         var actors = new[]

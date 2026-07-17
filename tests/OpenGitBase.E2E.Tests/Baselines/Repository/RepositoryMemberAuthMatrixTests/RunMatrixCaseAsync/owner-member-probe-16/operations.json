@@ -1,0 +1,3 @@
+[Intent] owner delete missing membership
+[HttpRequest] DELETE http://localhost:8089/api/repository-member/{{GUID}} | DELETE http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 404 Not Found | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404,"traceId":"{{TRACE_ID}}"}

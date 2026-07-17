@@ -1,0 +1,3 @@
+[Intent] admin get fleet ssh public key
+[HttpRequest] GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key | GET http://localhost:8089/api/admin/fleet/dispatcher-ssh-public-key
+[HttpResponse] 200 OK | {"publicKey":"ssh-{{SHA}} AAAAC3NzaC1lZDI1NTE5AAAAIDODvJHtLATqF/aiOHuoyG/U929CMfreSV6SCjMR1khX opengitbase-dispatcher-storage"}

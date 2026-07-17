@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022branches\u0022:[],\u0022tags\u0022:[],\u0022defaultRef\u0022:null,\u0022isEmpty\u0022:true,\u0022replicationLag\u0022:{\u0022behind\u0022:false,\u0022message\u0022:null}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/repository/by-slug/rm-fx-owner-{{SHA}}/rm-fx-{{SHA}}/content/refs"
+}

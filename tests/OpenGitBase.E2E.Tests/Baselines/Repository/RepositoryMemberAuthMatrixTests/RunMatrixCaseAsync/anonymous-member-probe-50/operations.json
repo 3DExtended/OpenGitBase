@@ -1,0 +1,3 @@
+[Intent] anonymous list members again
+[HttpRequest] GET http://localhost:8089/api/repository-member/{{GUID}} | GET http://localhost:8089/api/repository-member/{{GUID}}
+[HttpResponse] 401 Unauthorized

@@ -1,0 +1,3 @@
+[Intent] anonymous list repositories search
+[HttpRequest] GET http://localhost:8089/api/admin/repositories?search=missing | GET http://localhost:8089/api/admin/repositories?search=missing
+[HttpResponse] 401 Unauthorized
