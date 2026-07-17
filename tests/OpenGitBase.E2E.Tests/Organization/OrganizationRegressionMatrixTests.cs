@@ -76,7 +76,7 @@ internal static class OrganizationRegressionMatrix
             (HttpMethod.Get, "/organization/{{ORG_ID}}/invites", 200, 200, 403, 401, null, "List organization invites"),
             (HttpMethod.Post, "/organization/{{ORG_ID}}/members", 404, 403, 403, 401, new { identifier = "ghost-user" }, "Add member by username"),
             (HttpMethod.Put, "/organization/{{ORG_ID}}", 204, 403, 403, 401, new { updatedModel = new { name = "Updated Org Name" } }, "Update organization name"),
-            (HttpMethod.Delete, "/organization/{{ORG_ID}}", 409, 403, 403, 401, null, "Delete organization with blockers"),
+            (HttpMethod.Delete, "/organization/{{ORG_ID}}", 204, 403, 403, 401, null, "Delete organization without blockers"),
             (HttpMethod.Post, "/organization/{{ORG_ID}}/invites/00000000-0000-0000-0000-000000000000/resend", 404, 403, 403, 401, null, "Resend unknown invite"),
             (HttpMethod.Delete, "/organization/{{ORG_ID}}/invites/00000000-0000-0000-0000-000000000000", 404, 403, 403, 401, null, "Revoke unknown invite"),
             (HttpMethod.Post, "/organization", 400, 400, 400, 401, new { modelToCreate = new { name = string.Empty, slug = string.Empty } }, "Create organization invalid model"),

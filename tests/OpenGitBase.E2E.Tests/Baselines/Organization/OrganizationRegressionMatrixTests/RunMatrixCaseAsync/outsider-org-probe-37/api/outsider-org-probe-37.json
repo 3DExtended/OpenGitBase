@@ -1,0 +1,6 @@
+{
+  "StatusCode": 403,
+  "Body": "",
+  "Method": "DELETE",
+  "Url": "http://localhost:8089/api/organization/{{GUID}}"
+}

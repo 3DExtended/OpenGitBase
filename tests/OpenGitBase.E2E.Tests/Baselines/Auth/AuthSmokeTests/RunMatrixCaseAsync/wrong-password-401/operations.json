@@ -1,0 +1,3 @@
+[Intent] Wrong credentials return 401 on login
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 401 Unauthorized | {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.2","title":"Unauthorized","status":401,"traceId":"{{TRACE_ID}}"}

@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022organizationId\u0022:\u0022{{GUID}}\u0022,\u0022defaultPlacementPolicy\u0022:0,\u0022defaultSelfHostPreference\u0022:0,\u0022bytesLimit\u0022:{{SHA}},\u0022platformBytesLimit\u0022:{{SHA}},\u0022contributedBytesCapacity\u0022:0}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/organization/{{GUID}}/storage/settings"
+}

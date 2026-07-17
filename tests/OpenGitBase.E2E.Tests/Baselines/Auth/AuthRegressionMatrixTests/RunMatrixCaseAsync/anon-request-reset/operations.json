@@ -1,0 +1,3 @@
+[Intent] Anonymous can request password reset by username
+[HttpRequest] POST http://localhost:8089/api/signin/requestresetpassword | POST http://localhost:8089/api/signin/requestresetpassword
+[HttpResponse] 200 OK | Email sent

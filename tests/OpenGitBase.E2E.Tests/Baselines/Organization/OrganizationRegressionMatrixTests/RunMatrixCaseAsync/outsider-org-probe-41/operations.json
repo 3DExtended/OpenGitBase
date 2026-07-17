@@ -1,0 +1,3 @@
+[Intent] outsider Resend unknown invite
+[HttpRequest] POST http://localhost:8089/api/organization/{{GUID}}/invites/{{GUID}}/resend | POST http://localhost:8089/api/organization/{{GUID}}/invites/{{GUID}}/resend
+[HttpResponse] 403 Forbidden

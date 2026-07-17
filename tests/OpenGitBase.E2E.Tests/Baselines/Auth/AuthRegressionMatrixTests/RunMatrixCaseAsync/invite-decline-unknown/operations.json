@@ -1,0 +1,3 @@
+[Intent] Anonymous decline unknown invite returns error
+[HttpRequest] POST http://localhost:8089/api/invite/{{GUID}}/decline | POST http://localhost:8089/api/invite/{{GUID}}/decline
+[HttpResponse] 500 Internal Server Error

@@ -1,0 +1,3 @@
+[Intent] owner Change password invalid body
+[HttpRequest] POST http://localhost:8089/api/account/change-password | POST http://localhost:8089/api/account/change-password
+[HttpResponse] 400 Bad Request | Could not change password!

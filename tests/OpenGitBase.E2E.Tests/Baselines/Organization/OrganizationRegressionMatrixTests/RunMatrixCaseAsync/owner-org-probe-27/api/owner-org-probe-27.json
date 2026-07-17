@@ -1,0 +1,6 @@
+{
+  "StatusCode": 404,
+  "Body": "{\u0022error\u0022:\u0022User not found.\u0022}",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/organization/{{GUID}}/members"
+}

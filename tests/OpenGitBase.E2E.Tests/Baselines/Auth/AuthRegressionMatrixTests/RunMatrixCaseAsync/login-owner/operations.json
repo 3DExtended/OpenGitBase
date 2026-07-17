@@ -1,0 +1,3 @@
+[Intent] Login succeeds for registered user
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}

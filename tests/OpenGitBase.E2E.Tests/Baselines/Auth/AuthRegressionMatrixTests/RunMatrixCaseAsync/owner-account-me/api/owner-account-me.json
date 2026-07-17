@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "{\u0022userId\u0022:\u0022{{GUID}}\u0022,\u0022username\u0022:\u0022auth-owner-pop15-008-{{RUN_SUFFIX}}\u0022,\u0022emailVerified\u0022:true,\u0022isAdmin\u0022:false,\u0022debug\u0022:{\u0022emailVerification\u0022:true}}",
+  "Method": "GET",
+  "Url": "http://localhost:8089/api/account/me"
+}

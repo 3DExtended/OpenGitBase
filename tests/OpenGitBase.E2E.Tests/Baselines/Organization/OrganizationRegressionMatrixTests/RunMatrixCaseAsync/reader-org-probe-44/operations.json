@@ -1,0 +1,3 @@
+[Intent] reader Revoke unknown invite
+[HttpRequest] DELETE http://localhost:8089/api/organization/{{GUID}}/invites/{{GUID}} | DELETE http://localhost:8089/api/organization/{{GUID}}/invites/{{GUID}}
+[HttpResponse] 403 Forbidden

@@ -1,0 +1,3 @@
+[Intent] owner Get account me
+[HttpRequest] GET http://localhost:8089/api/account/me | GET http://localhost:8089/api/account/me
+[HttpResponse] 200 OK | {"userId":"{{GUID}}","username":"auth-owner-pop15-012-{{RUN_SUFFIX}}","emailVerified":true,"isAdmin":false,"debug":{"emailVerification":true}}

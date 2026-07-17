@@ -1,0 +1,6 @@
+{
+  "StatusCode": 200,
+  "Body": "Email sent",
+  "Method": "POST",
+  "Url": "http://localhost:8089/api/signin/requestresetpassword"
+}

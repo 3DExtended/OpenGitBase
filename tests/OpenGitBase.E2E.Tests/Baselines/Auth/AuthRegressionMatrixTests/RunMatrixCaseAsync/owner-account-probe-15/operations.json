@@ -1,0 +1,3 @@
+[Intent] owner Resend verification
+[HttpRequest] POST http://localhost:8089/api/account/resend-verification | POST http://localhost:8089/api/account/resend-verification
+[HttpResponse] 400 Bad Request | Could not send verification email!

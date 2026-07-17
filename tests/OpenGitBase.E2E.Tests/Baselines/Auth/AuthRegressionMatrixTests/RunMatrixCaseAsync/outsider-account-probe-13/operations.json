@@ -1,0 +1,3 @@
+[Intent] outsider Get account me
+[HttpRequest] GET http://localhost:8089/api/account/me | GET http://localhost:8089/api/account/me
+[HttpResponse] 200 OK | {"userId":"{{USER_ID}}","username":"auth-outsider-pop15-013-{{RUN_SUFFIX}}","emailVerified":true,"isAdmin":false,"debug":{"emailVerification":true}}

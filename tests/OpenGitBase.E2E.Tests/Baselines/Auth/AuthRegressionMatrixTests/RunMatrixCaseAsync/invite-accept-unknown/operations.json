@@ -1,0 +1,3 @@
+[Intent] Anonymous cannot accept unknown invite
+[HttpRequest] POST http://localhost:8089/api/invite/{{GUID}}/accept | POST http://localhost:8089/api/invite/{{GUID}}/accept
+[HttpResponse] 401 Unauthorized

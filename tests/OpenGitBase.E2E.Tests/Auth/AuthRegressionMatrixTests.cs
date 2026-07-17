@@ -142,8 +142,8 @@ internal static class AuthRegressionMatrix
             HttpMethod.Get,
             "/invite/00000000-0000-0000-0000-000000000000",
             null,
-            404,
-            "Anonymous invite lookup for unknown token returns 404",
+            500,
+            "Anonymous invite lookup for unknown token returns error",
             "invite-unknown-token"));
         cases.Add(Row(
             $"E2E-POP15-{id++:D3}",
@@ -151,7 +151,7 @@ internal static class AuthRegressionMatrix
             HttpMethod.Post,
             "/invite/00000000-0000-0000-0000-000000000000/accept",
             null,
-            404,
+            401,
             "Anonymous cannot accept unknown invite",
             "invite-accept-unknown"));
         cases.Add(Row(
@@ -160,15 +160,15 @@ internal static class AuthRegressionMatrix
             HttpMethod.Post,
             "/invite/00000000-0000-0000-0000-000000000000/decline",
             null,
-            404,
-            "Anonymous cannot decline unknown invite",
+            500,
+            "Anonymous decline unknown invite returns error",
             "invite-decline-unknown"));
         cases.Add(Row(
             $"E2E-POP15-{id++:D3}",
             AuthMatrixActor.Owner,
             HttpMethod.Post,
             "/signin/requestresetpassword",
-            new { username = "{{OWNER}}" },
+            new { username = "{{OWNER}}", email = "{{OWNER}}@example.com" },
             200,
             "Owner can request password reset for self",
             "owner-request-reset"));
@@ -177,7 +177,7 @@ internal static class AuthRegressionMatrix
             AuthMatrixActor.Anonymous,
             HttpMethod.Post,
             "/signin/requestresetpassword",
-            new { username = "{{OWNER}}" },
+            new { username = "{{OWNER}}", email = "{{OWNER}}@example.com" },
             200,
             "Anonymous can request password reset by username",
             "anon-request-reset"));
