@@ -13,6 +13,7 @@ x-kafka-broker-env: &kafka-broker-env
   KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
   KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
   KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
   KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
   KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
   KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
@@ -27,7 +28,7 @@ x-kafka-healthcheck: &kafka-healthcheck
   interval: 10s
   timeout: 15s
   retries: 18
-  start_period: 60s
+  start_period: 90s
 
 x-api-environment: &api-environment
   ASPNETCORE_ENVIRONMENT: Development
@@ -343,10 +344,12 @@ services:
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 1
-      KAFKA_LISTENERS: PLAINTEXT://kafka-1:29092,CONTROLLER://kafka-1:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
     ports:
       - "9092:9092"
+    volumes:
+      - opengitbase_kafka1_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -358,8 +361,10 @@ services:
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 2
-      KAFKA_LISTENERS: PLAINTEXT://kafka-2:29092,CONTROLLER://kafka-2:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
+    volumes:
+      - opengitbase_kafka2_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -371,8 +376,10 @@ services:
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 3
-      KAFKA_LISTENERS: PLAINTEXT://kafka-3:29092,CONTROLLER://kafka-3:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
+    volumes:
+      - opengitbase_kafka3_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -506,6 +513,9 @@ services:
 volumes:
   opengitbase_pgdata:
   opengitbase_minio_data:
+  opengitbase_kafka1_data:
+  opengitbase_kafka2_data:
+  opengitbase_kafka3_data:
   opengitbase_storage1_repos:
   opengitbase_storage2_repos:
   opengitbase_storage3_repos:

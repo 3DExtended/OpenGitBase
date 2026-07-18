@@ -13,7 +13,7 @@ ROLL_ARGS=()
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--full] [--skip-tunnel-check] [--prune-cache] [--no-pull]
+Usage: $(basename "$0") [--full] [--kafka] [--skip-tunnel-check] [--prune-cache] [--no-pull]
 
 Starts scripts/rolling-update.sh on ${HOST} under nohup and streams the log until it
 finishes. Safe for multi-hour full fleet deploys over SSH.
@@ -26,7 +26,7 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --full | --skip-tunnel-check | --prune-cache)
+    --full | --kafka | --skip-tunnel-check | --prune-cache)
       ROLL_ARGS+=("$1")
       shift
       ;;

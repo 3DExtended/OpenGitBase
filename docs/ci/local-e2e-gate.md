@@ -14,4 +14,4 @@ scripts/test-pipelines-e2e.sh
 
 - **KVM missing** — Firecracker falls back to process sandbox; E2E still passes but MicroVM path is not exercised.
 - **Compute agent unhealthy** — check `/admin/compute` and enrollment token in `docker-compose.override.yml`.
-- **Kafka down** — platform wake signals degrade to poll; jobs still complete but slower.
+- **Kafka down** — platform wake signals degrade to poll; jobs still complete but slower. **Git push ingest** remains durable via Postgres `GitPushOutbox` (see [docs/deployment/kafka-operations.md](../deployment/kafka-operations.md)); use `./scripts/kafka-quorum-reset.sh --restart` (or `--wipe` only if quorum metadata is corrupted).

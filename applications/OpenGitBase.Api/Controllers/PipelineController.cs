@@ -50,6 +50,16 @@ public sealed class PipelineController : ControllerBase
         return result.IsSome ? Accepted() : BadRequest();
     }
 
+    [HttpPost("api/v1/internal/pipelines/kafka-wake-republish")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RepublishKafkaJobWakes(CancellationToken cancellationToken)
+    {
+        var result = await _queryProcessor
+            .RunQueryAsync(new RepublishKafkaJobWakesQuery(), cancellationToken)
+            .ConfigureAwait(false);
+        return result.IsSome ? Ok(result.Get()) : StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+
     [HttpGet("repository/{repositoryId:guid}/pipelines")]
     [AllowAnonymous]
     public async Task<IActionResult> ListRepositoryRuns(Guid repositoryId, CancellationToken cancellationToken)

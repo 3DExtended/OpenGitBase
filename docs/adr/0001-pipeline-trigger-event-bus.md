@@ -23,5 +23,5 @@ Storage nodes do not parse pipeline YAML. The hook only reports facts about the 
 - New git-side features can subscribe to the same event without extending `post-receive` shell scripts.
 - Pipeline scheduling retries and observability live in the API tier.
 - Event ordering and idempotency must be handled in the scheduler (duplicate events for the same `afterSha` should not create duplicate runs).
-- Kafka becomes required infrastructure for CI triggers; docker-compose includes **three Kafka brokers** (KRaft) with topic replication factor 3, consistent with the project's HA storage posture.
+- Kafka becomes required infrastructure for CI triggers; docker-compose includes **three Kafka brokers** (KRaft) with topic replication factor 3, consistent with the project's HA storage posture. Single-host compose persists each broker's KRaft logs on named volumes and recreates brokers as one unit (`scripts/kafka-quorum-reset.sh`). Pipeline push triggers are also written to a Postgres outbox so scheduling survives Kafka wipe/outage.
 - MR-triggered pipelines will likely publish a different event later rather than overloading the storage hook.

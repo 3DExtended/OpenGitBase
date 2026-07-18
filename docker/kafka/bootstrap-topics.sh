@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BOOTSTRAP="${KAFKA_BOOTSTRAP_SERVERS:-kafka-1:29092,kafka-2:29092,kafka-3:29092}"
-TOPICS=(git.push.received ci.job.available)
+TOPICS=(git.push.received ci.job.available ci.job.cancelled)
 
 echo "Waiting for Kafka cluster at ${BOOTSTRAP}..."
 for _ in $(seq 1 60); do

@@ -288,6 +288,7 @@ public class Startup
         {
             services.AddHostedService<ApiFleetComponentRegistrationService>();
             services.AddHostedService<GitPushReceivedConsumer>();
+            services.AddHostedService<GitPushOutboxWorker>();
             services.AddHostedService<JobDispatchCoordinator>();
             services.AddHostedService<DependencyLayerPromotionWorker>();
             services.AddHostedService<JobTimeoutEnforcerService>();
@@ -358,6 +359,7 @@ public class Startup
         services.AddSingleton<IJobCancelledEventPublisher>(sp =>
             sp.GetRequiredService<KafkaPipelineEventPublisher>()
         );
+        services.AddScoped<OpenGitBase.Features.Pipeline.Services.GitPushOutboxDrainService>();
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();

@@ -1,16 +1,18 @@
+using Microsoft.EntityFrameworkCore;
+using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
-using OpenGitBase.Features.Pipeline.Services;
+using OpenGitBase.Features.Pipeline.Entities;
 
 namespace OpenGitBase.Features.Pipeline.QueryHandlers;
 
 public sealed class IngestGitPushQueryHandler : IQueryHandler<IngestGitPushQuery, bool>
 {
-    private readonly IGitPushEventPublisher _publisher;
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
 
-    public IngestGitPushQueryHandler(IGitPushEventPublisher publisher)
+    public IngestGitPushQueryHandler(IDbContextFactory<OpenGitBaseDbContext> contextFactory)
     {
-        _publisher = publisher;
+        _contextFactory = contextFactory;
     }
 
     public async Task<Option<bool>> RunQueryAsync(
@@ -23,9 +25,36 @@ public sealed class IngestGitPushQueryHandler : IQueryHandler<IngestGitPushQuery
             return Option<bool>.None;
         }
 
-        await _publisher
-            .PublishAsync(query.RepositoryId, query.Ref, query.AfterSha, cancellationToken)
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        var exists = await context
+            .Set<GitPushOutboxEntity>()
+            .AnyAsync(
+                entity =>
+                    entity.RepositoryId == query.RepositoryId && entity.AfterSha == query.AfterSha,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (!exists)
+        {
+            context.Set<GitPushOutboxEntity>()
+                .Add(
+                    new GitPushOutboxEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        RepositoryId = query.RepositoryId,
+                        Ref = query.Ref ?? string.Empty,
+                        AfterSha = query.AfterSha,
+                        Status = GitPushOutboxStatus.Pending,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    }
+                );
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         return Option.From(true);
     }
 }

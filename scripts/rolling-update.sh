@@ -17,20 +17,23 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
 SKIP_TUNNEL_CHECK=false
 ROLL_FLEET=false
 PRUNE_CACHE=false
+ROLL_KAFKA=false
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--full] [--skip-tunnel-check] [--prune-cache]
+Usage: $(basename "$0") [--full] [--kafka] [--skip-tunnel-check] [--prune-cache]
 
 Rebuild images and roll services one at a time for zero-downtime updates.
 Compose: docker-compose.yml plus docker-compose.override.yml when present.
 
 By default only API and web replicas are rolled (typical code changes).
 Use --full to also roll storage nodes and dispatchers.
+Kafka is left alone unless --kafka is passed (atomic restart via kafka-quorum-reset.sh).
 BuildKit layer and package caches are retained between runs unless --prune-cache is passed.
 
 Options:
   --full                Also roll storage and dispatcher services
+  --kafka               After app roll, atomically restart the Kafka quorum (keeps volumes)
   --skip-tunnel-check   Skip Cloudflare tunnel API check when tunnel is running
   --prune-cache         Prune unused BuildKit cache and dangling images after success
   -h, --help            Show this help
@@ -88,6 +91,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --full)
       ROLL_FLEET=true
+      shift
+      ;;
+    --kafka)
+      ROLL_KAFKA=true
       shift
       ;;
     --skip-tunnel-check)
@@ -340,7 +347,7 @@ run_step "Validate HAProxy configuration" \
   haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
 
 run_step "Ensure postgres is up" \
-  compose up -d --remove-orphans --wait-timeout "${WAIT_TIMEOUT}" --wait postgres
+  compose up -d --no-deps --remove-orphans --wait-timeout "${WAIT_TIMEOUT}" --wait postgres
 
 prepare_deploy_build_env
 
@@ -400,6 +407,13 @@ if [ "${PRUNE_CACHE}" = true ]; then
     bash -c 'docker builder prune -f && docker image prune -f'
 else
   echo "==> Skipping build cache prune (pass --prune-cache to reclaim disk space)"
+fi
+
+if [ "${ROLL_KAFKA}" = true ]; then
+  run_step "Restart Kafka quorum (atomic, keep volumes)" \
+    "${SCRIPT_DIR}/kafka-quorum-reset.sh" --restart
+else
+  echo "==> Skipping Kafka (pass --kafka to atomically restart the quorum)"
 fi
 
 echo ""
