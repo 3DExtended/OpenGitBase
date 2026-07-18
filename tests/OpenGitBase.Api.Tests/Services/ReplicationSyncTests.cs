@@ -7,6 +7,7 @@ public class ReplicationSyncTests
     [Theory]
     [InlineData(3, 3, true)]
     [InlineData(2, 3, false)]
+    [InlineData(4, 3, true)]
     public void IsInSync_ComparesAppliedAndPrimaryWatermarks(
         long applied,
         long primary,

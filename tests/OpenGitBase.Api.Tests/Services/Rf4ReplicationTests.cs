@@ -269,6 +269,187 @@ public class Rf4ReplicationTests
         }
     }
 
+    [Fact]
+    public async Task QuorumReplicateRepositoryQueryHandler_Rf4Healthy_CatchUpPersistsSecondEncryptedWatermark()
+    {
+        var repositoryId = Guid.NewGuid();
+        var primaryId = Guid.NewGuid();
+        var encAId = Guid.NewGuid();
+        var encBId = Guid.NewGuid();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<GetRepositoryReplicationContextQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                Option.From(
+                    new RepositoryReplicationContextDto
+                    {
+                        RepositoryId = repositoryId,
+                        ReplicationEpoch = 1,
+                        PrimaryWatermark = 0,
+                        IsPrimary = true,
+                        PhysicalPath = $"/srv/git/{repositoryId}.git",
+                        ReplicationState = nameof(ReplicationState.Rf4Healthy),
+                        Peers =
+                        [
+                            new RepositoryReplicationPeerDto
+                            {
+                                StorageNodeId = primaryId,
+                                InternalHost = "storage-1",
+                                InternalHttpPort = 8081,
+                                Role = nameof(RepositoryReplicaRole.Primary),
+                                IsHealthy = true,
+                            },
+                            new RepositoryReplicationPeerDto
+                            {
+                                StorageNodeId = encAId,
+                                InternalHost = "storage-enc-a",
+                                InternalHttpPort = 8081,
+                                Role = nameof(RepositoryReplicaRole.EncryptedReplica),
+                                IsHealthy = true,
+                            },
+                            new RepositoryReplicationPeerDto
+                            {
+                                StorageNodeId = encBId,
+                                InternalHost = "storage-enc-b",
+                                InternalHttpPort = 8081,
+                                Role = nameof(RepositoryReplicaRole.EncryptedReplica),
+                                IsHealthy = true,
+                            },
+                        ],
+                    }
+                )
+            );
+        foreach (var nodeId in new[] { encAId, encBId })
+        {
+            queryProcessor
+                .RunQueryAsync(
+                    Arg.Is<GetStorageNodeQuery>(query => query.ModelId.Value == nodeId),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(
+                    Option.From(
+                        new StorageNodeDto
+                        {
+                            Id = StorageNodeId.From(nodeId),
+                            NodeId = nodeId.ToString(),
+                            InternalHost = nodeId.ToString(),
+                            InternalHttpPort = 8081,
+                            IsHealthy = true,
+                        }
+                    )
+                );
+            queryProcessor
+                .RunQueryAsync(
+                    Arg.Is<GetStorageNodeApiTokenQuery>(query => query.StorageNodeId.Value == nodeId),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(Option.From("token"));
+        }
+
+        queryProcessor
+            .RunQueryAsync(
+                Arg.Any<CommitReplicationWatermarkQuery>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                Option.From(
+                    new CommitReplicationWatermarkResult
+                    {
+                        Success = true,
+                        PrimaryWatermark = 1,
+                    }
+                )
+            );
+
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        provisioner
+            .TryGetReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                ReplicationArtifactFetchResult.Ok(
+                    "{\"epoch\":1,\"watermark\":1,\"bundleSha256\":\"ABC\",\"keyVersion\":1}",
+                    [1, 2, 3]
+                )
+            );
+        provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+
+        var (handler, provider) = await CreateQuorumHandlerAsync(
+            repositoryId,
+            primaryId,
+            encAId,
+            configureProcessor: queryProcessor,
+            provisioner: provisioner,
+            seedReplicas: [(encAId, null), (encBId, null)]
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new QuorumReplicateRepositoryQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                    StorageNodeId = StorageNodeId.From(primaryId),
+                    AppliedWatermark = 1,
+                    ConfirmedEncryptedNodeIds = [encAId],
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.IsSome);
+            Assert.True(result.Get().Success);
+
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            long? encBWatermark = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var context = await contextFactory.CreateDbContextAsync();
+                encBWatermark = await context
+                    .Set<RepositoryReplicaEntity>()
+                    .Where(entity => entity.StorageNodeId == encBId)
+                    .Select(entity => entity.ArtifactWatermark)
+                    .SingleAsync();
+                if (encBWatermark == 1)
+                {
+                    break;
+                }
+
+                await Task.Delay(50);
+            }
+
+            Assert.Equal(1, encBWatermark);
+            await provisioner
+                .Received()
+                .UploadReplicationArtifactAsync(
+                    Arg.Is<StorageNodeDto>(node => node.Id.Value == encBId),
+                    Arg.Any<string>(),
+                    repositoryId,
+                    1,
+                    Arg.Any<string>(),
+                    Arg.Any<byte[]>(),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+    }
+
     private static void ConfigureRf4ContextQuery(
         IQueryProcessor queryProcessor,
         Guid repositoryId,
@@ -384,7 +565,8 @@ public class Rf4ReplicationTests
             Guid primaryId,
             Guid encId,
             IQueryProcessor? configureProcessor,
-            IStorageProvisionerClient? provisioner = null
+            IStorageProvisionerClient? provisioner = null,
+            IReadOnlyList<(Guid NodeId, long? ArtifactWatermark)>? seedReplicas = null
         )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -399,8 +581,59 @@ public class Rf4ReplicationTests
         services.AddSingleton(connection);
         services.AddSingleton(queryProcessor);
         services.AddSingleton(provisioner ?? (IStorageProvisionerClient)new FakeStorageProvisionerClient());
+        services.AddSingleton<IFeatureAssemblyProvider>(
+            new FeatureAssemblyProvider(
+                [
+                    typeof(RepositoryMapsterConfig).Assembly,
+                    typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
+                ]
+            )
+        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
         var provider = services.BuildServiceProvider();
+
+        if (seedReplicas is not null)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            await context.Database.EnsureCreatedAsync();
+            var replicas = new List<RepositoryReplicaEntity>
+            {
+                Replica(repositoryId, primaryId, RepositoryReplicaRole.Primary),
+            };
+            foreach (var (nodeId, artifactWatermark) in seedReplicas)
+            {
+                replicas.Add(
+                    new RepositoryReplicaEntity
+                    {
+                        RepositoryId = repositoryId,
+                        StorageNodeId = nodeId,
+                        Role = RepositoryReplicaRole.EncryptedReplica,
+                        AppliedWatermark = 0,
+                        ArtifactWatermark = artifactWatermark,
+                    }
+                );
+            }
+
+            context.Set<RepositoryEntity>().Add(
+                new RepositoryEntity
+                {
+                    Id = repositoryId,
+                    Name = "repo",
+                    Slug = "repo",
+                    OwnerUserId = Guid.NewGuid(),
+                    PhysicalPath = $"/srv/git/{repositoryId}.git",
+                    StorageNodeId = primaryId,
+                    PrimaryStorageNodeId = primaryId,
+                    PrimaryWatermark = 0,
+                    ReplicationState = ReplicationState.Rf4Healthy,
+                    Replicas = replicas,
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
         return (provider.GetRequiredService<QuorumReplicateRepositoryQueryHandler>(), provider);
     }
 

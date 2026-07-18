@@ -14,18 +14,21 @@ public sealed class AntiEntropyReconcilerService
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
+    private readonly IRepositoryKeyService _repositoryKeyService;
     private readonly Rf1BackfillService _backfillService;
 
     public AntiEntropyReconcilerService(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
+        IRepositoryKeyService repositoryKeyService,
         Rf1BackfillService backfillService
     )
     {
         _contextFactory = contextFactory;
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
+        _repositoryKeyService = repositoryKeyService;
         _backfillService = backfillService;
     }
 
@@ -38,6 +41,13 @@ public sealed class AntiEntropyReconcilerService
             .Where(repository =>
                 repository.Replicas.Any(replica =>
                     replica.AppliedWatermark < repository.PrimaryWatermark
+                    || (
+                        replica.Role == RepositoryReplicaRole.EncryptedReplica
+                        && (
+                            replica.ArtifactWatermark == null
+                            || replica.ArtifactWatermark < repository.PrimaryWatermark
+                        )
+                    )
                 )
             )
             .Take(10)
@@ -94,6 +104,8 @@ public sealed class AntiEntropyReconcilerService
             return;
         }
 
+        ReplicationArtifactFetchResult? bootstrappedArtifact = null;
+
         foreach (var replica in repository.Replicas)
         {
             if (replica.Role == RepositoryReplicaRole.EncryptedReplica)
@@ -106,7 +118,10 @@ public sealed class AntiEntropyReconcilerService
                     await RepairEncryptedArtifactAsync(
                             repository,
                             replica,
+                            primaryNode,
                             nodeById,
+                            () => bootstrappedArtifact,
+                            artifact => bootstrappedArtifact = artifact,
                             cancellationToken
                         )
                         .ConfigureAwait(false);
@@ -154,49 +169,42 @@ public sealed class AntiEntropyReconcilerService
     private async Task RepairEncryptedArtifactAsync(
         RepositoryEntity repository,
         RepositoryReplicaEntity replica,
+        StorageNodeDto primaryNode,
         IReadOnlyDictionary<Guid, StorageNodeDto> nodeById,
+        Func<ReplicationArtifactFetchResult?> getBootstrappedArtifact,
+        Action<ReplicationArtifactFetchResult> setBootstrappedArtifact,
         CancellationToken cancellationToken
     )
     {
-        var sourceReplica = repository.Replicas
-            .Where(candidate =>
-                candidate.Role == RepositoryReplicaRole.EncryptedReplica
-                && candidate.StorageNodeId != replica.StorageNodeId
-                && candidate.ArtifactWatermark >= repository.PrimaryWatermark
-            )
-            .FirstOrDefault();
-        if (sourceReplica is null)
+        if (!nodeById.TryGetValue(replica.StorageNodeId, out var targetNode))
         {
             return;
         }
 
-        if (
-            !nodeById.TryGetValue(sourceReplica.StorageNodeId, out var sourceNode)
-            || !nodeById.TryGetValue(replica.StorageNodeId, out var targetNode)
-        )
-        {
-            return;
-        }
-
-        var sourceToken = await GetApiTokenAsync(sourceNode.Id, cancellationToken)
-            .ConfigureAwait(false);
         var targetToken = await GetApiTokenAsync(targetNode.Id, cancellationToken)
             .ConfigureAwait(false);
-        if (sourceToken is null || targetToken is null)
+        if (targetToken is null)
         {
             return;
         }
 
-        var artifact = await _storageProvisionerClient
-            .TryGetReplicationArtifactAsync(
-                sourceNode,
-                sourceToken,
-                repository.Id,
-                repository.PrimaryWatermark,
+        if (repository.PrimaryWatermark <= 0)
+        {
+            replica.ArtifactWatermark = repository.PrimaryWatermark;
+            replica.LastSyncedAt = DateTimeOffset.UtcNow;
+            return;
+        }
+
+        var artifact = await ResolveEncryptedArtifactAsync(
+                repository,
+                primaryNode,
+                nodeById,
+                getBootstrappedArtifact,
+                setBootstrappedArtifact,
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (!artifact.Success)
+        if (artifact is null || !artifact.Success)
         {
             return;
         }
@@ -217,6 +225,87 @@ public sealed class AntiEntropyReconcilerService
             replica.ArtifactWatermark = repository.PrimaryWatermark;
             replica.LastSyncedAt = DateTimeOffset.UtcNow;
         }
+    }
+
+    private async Task<ReplicationArtifactFetchResult?> ResolveEncryptedArtifactAsync(
+        RepositoryEntity repository,
+        StorageNodeDto primaryNode,
+        IReadOnlyDictionary<Guid, StorageNodeDto> nodeById,
+        Func<ReplicationArtifactFetchResult?> getBootstrappedArtifact,
+        Action<ReplicationArtifactFetchResult> setBootstrappedArtifact,
+        CancellationToken cancellationToken
+    )
+    {
+        var cached = getBootstrappedArtifact();
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var sourceReplica = repository.Replicas
+            .Where(candidate =>
+                candidate.Role == RepositoryReplicaRole.EncryptedReplica
+                && candidate.ArtifactWatermark >= repository.PrimaryWatermark
+            )
+            .FirstOrDefault();
+        if (sourceReplica is not null
+            && nodeById.TryGetValue(sourceReplica.StorageNodeId, out var sourceNode))
+        {
+            var sourceToken = await GetApiTokenAsync(sourceNode.Id, cancellationToken)
+                .ConfigureAwait(false);
+            if (sourceToken is not null)
+            {
+                var fromPeer = await _storageProvisionerClient
+                    .TryGetReplicationArtifactAsync(
+                        sourceNode,
+                        sourceToken,
+                        repository.Id,
+                        repository.PrimaryWatermark,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (fromPeer.Success)
+                {
+                    setBootstrappedArtifact(fromPeer);
+                    return fromPeer;
+                }
+            }
+        }
+
+        var primaryToken = await GetApiTokenAsync(primaryNode.Id, cancellationToken)
+            .ConfigureAwait(false);
+        if (primaryToken is null)
+        {
+            return null;
+        }
+
+        var key = await _repositoryKeyService
+            .TryGetRepositoryKeyAsync(repository.Id, cancellationToken)
+            .ConfigureAwait(false);
+        if (key is null)
+        {
+            return null;
+        }
+
+        var created = await _storageProvisionerClient
+            .CreateReplicationArtifactAsync(
+                primaryNode,
+                primaryToken,
+                repository.PhysicalPath,
+                repository.Id,
+                repository.PrimaryWatermark,
+                repository.ReplicationEpoch,
+                Convert.ToHexString(key.KeyMaterial).ToLowerInvariant(),
+                key.KeyVersion,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (created.Success)
+        {
+            setBootstrappedArtifact(created);
+        }
+
+        return created;
     }
 
     private async Task<string?> GetApiTokenAsync(

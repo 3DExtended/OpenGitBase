@@ -1,4 +1,6 @@
-﻿using OpenGitBase.Cqrs;
+﻿using Microsoft.EntityFrameworkCore;
+using OpenGitBase.Common.Data;
+using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.StorageNode.Contracts;
@@ -12,14 +14,17 @@ public sealed class QuorumReplicateRepositoryQueryHandler
 
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
+    private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
 
     public QuorumReplicateRepositoryQueryHandler(
         IQueryProcessor queryProcessor,
-        IStorageProvisionerClient storageProvisionerClient
+        IStorageProvisionerClient storageProvisionerClient,
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory
     )
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
+        _contextFactory = contextFactory;
     }
 
     public async Task<Option<QuorumReplicateRepositoryResult>> RunQueryAsync(
@@ -318,7 +323,42 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                     cancellationToken
                 )
                 .ConfigureAwait(false);
+            await PersistEncryptedArtifactWatermarkAsync(
+                    repositoryId,
+                    encryptedPeer.StorageNodeId,
+                    watermark,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
+    }
+
+    private async Task PersistEncryptedArtifactWatermarkAsync(
+        Guid repositoryId,
+        Guid storageNodeId,
+        long watermark,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var db = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var replica = await db
+            .Set<RepositoryReplicaEntity>()
+            .FirstOrDefaultAsync(
+                entity =>
+                    entity.RepositoryId == repositoryId && entity.StorageNodeId == storageNodeId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (replica is null)
+        {
+            return;
+        }
+
+        replica.ArtifactWatermark = watermark;
+        replica.LastSyncedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<Option<QuorumReplicateRepositoryResult>> RunRf3QuorumAsync(

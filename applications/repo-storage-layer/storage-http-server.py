@@ -164,6 +164,54 @@ def fetch_replication_artifact(repository_id: str, watermark: int) -> tuple[dict
     return manifest, bundle_path.read_bytes()
 
 
+def create_replication_artifact(
+    physical_path: str,
+    repository_id: str,
+    watermark: int,
+    epoch: int,
+    key_hex: str,
+    key_version: int,
+) -> tuple[dict[str, Any], bytes]:
+    """Create an encrypted git bundle artifact from a plaintext primary repository."""
+    if not _is_valid_physical_path(physical_path):
+        raise ValueError("Invalid physicalPath.")
+    if not Path(physical_path).is_dir():
+        raise FileNotFoundError(f"Repository path not found: {physical_path}")
+    if _is_encrypted_replica(repository_id):
+        raise ValueError("Cannot create replication artifacts on encrypted replica storage.")
+
+    from storage_artifact_crypto import encrypt_bundle
+
+    with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as bundle_file:
+        bundle_path = bundle_file.name
+
+    try:
+        subprocess.run(
+            ["git", "-C", physical_path, "bundle", "create", bundle_path, "--all"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        bundle_plaintext = Path(bundle_path).read_bytes()
+        return encrypt_bundle(
+            bundle_plaintext,
+            bytes.fromhex(key_hex),
+            repository_id,
+            watermark,
+            epoch,
+            key_version,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise RuntimeError(f"git bundle create failed: {detail}") from exc
+    finally:
+        try:
+            os.unlink(bundle_path)
+        except OSError:
+            pass
+
+
 def _write_initial_watermark(physical_path: str) -> None:
     WATERMARK_DIR.mkdir(parents=True, exist_ok=True)
     repo_id = _repository_id_from_path(physical_path)
@@ -770,6 +818,10 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             self._handle_import_bundle()
             return
 
+        if parsed.path == "/internal/repos/create-replication-artifact":
+            self._handle_create_replication_artifact()
+            return
+
         if parsed.path != "/internal/repos":
             self.send_error(404)
             return
@@ -931,6 +983,53 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             self._handle_content_error(exc)
             return
         self._send_json(200, {"refName": ref_name})
+
+    def _handle_create_replication_artifact(self) -> None:
+        data = self._read_json()
+        physical_path = data.get("physicalPath", "")
+        repository_id = str(data.get("repositoryId") or "")
+        key_hex = str(data.get("keyHex") or "")
+        try:
+            watermark = int(data.get("watermark"))
+            epoch = int(data.get("epoch") or 0)
+            key_version = int(data.get("keyVersion") or 1)
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "watermark, epoch, and keyVersion must be integers."})
+            return
+
+        if not physical_path or not repository_id or not key_hex:
+            self._send_json(
+                400,
+                {"error": "physicalPath, repositoryId, and keyHex are required."},
+            )
+            return
+
+        try:
+            manifest, bundle_bytes = create_replication_artifact(
+                physical_path,
+                repository_id,
+                watermark,
+                epoch,
+                key_hex,
+                key_version,
+            )
+        except FileNotFoundError as exc:
+            self._send_json(404, {"error": str(exc)})
+            return
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except Exception as exc:  # noqa: BLE001 — surface storage errors to API caller
+            self._send_json(500, {"error": str(exc)})
+            return
+
+        self._send_json(
+            200,
+            {
+                "manifest": manifest,
+                "bundleBase64": bundle_bytes.hex(),
+            },
+        )
 
     def _handle_import_bundle(self) -> None:
         data = self._read_json()

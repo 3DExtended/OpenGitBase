@@ -48,6 +48,18 @@ public interface IStorageProvisionerClient
         CancellationToken cancellationToken = default
     );
 
+    Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        Guid repositoryId,
+        long watermark,
+        long epoch,
+        string keyHex,
+        int keyVersion,
+        CancellationToken cancellationToken = default
+    );
+
     Task<StorageProvisionerResult> DeleteReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,

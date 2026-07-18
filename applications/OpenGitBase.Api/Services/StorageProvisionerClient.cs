@@ -151,15 +151,61 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
             );
         }
 
-        using var document = JsonDocument.Parse(body);
-        var manifestJson = document.RootElement.GetProperty("manifest").GetRawText();
-        var bundleHex = document.RootElement.GetProperty("bundleBase64").GetString() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(bundleHex))
+        return ParseArtifactResponse(body);
+    }
+
+    public async Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        Guid repositoryId,
+        long watermark,
+        long epoch,
+        string keyHex,
+        int keyVersion,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
         {
-            return ReplicationArtifactFetchResult.Fail(502, "Artifact response missing bundle payload.");
+            return ReplicationArtifactFetchResult.Fail(401, "Storage node API token is missing.");
         }
 
-        return ReplicationArtifactFetchResult.Ok(manifestJson, Convert.FromHexString(bundleHex));
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/create-replication-artifact";
+        var payload = JsonSerializer.Serialize(
+            new
+            {
+                physicalPath,
+                repositoryId = repositoryId.ToString("D"),
+                watermark,
+                epoch,
+                keyHex,
+                keyVersion,
+            }
+        );
+        using var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if ((int)response.StatusCode != 200)
+        {
+            return ReplicationArtifactFetchResult.Fail(
+                (int)response.StatusCode,
+                string.IsNullOrWhiteSpace(body)
+                    ? $"Artifact create failed with status {(int)response.StatusCode}."
+                    : body
+            );
+        }
+
+        return ParseArtifactResponse(body);
     }
 
     public async Task<StorageProvisionerResult> DeleteReplicationArtifactAsync(
@@ -242,6 +288,19 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
                 ? $"Bundle import failed with status {(int)response.StatusCode}."
                 : body
         );
+    }
+
+    private static ReplicationArtifactFetchResult ParseArtifactResponse(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+        var manifestJson = document.RootElement.GetProperty("manifest").GetRawText();
+        var bundleHex = document.RootElement.GetProperty("bundleBase64").GetString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(bundleHex))
+        {
+            return ReplicationArtifactFetchResult.Fail(502, "Artifact response missing bundle payload.");
+        }
+
+        return ReplicationArtifactFetchResult.Ok(manifestJson, Convert.FromHexString(bundleHex));
     }
 
     private async Task<StorageProvisionerResult> SendSyncFromAsync(

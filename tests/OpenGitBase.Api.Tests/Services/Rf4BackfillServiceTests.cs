@@ -55,6 +55,167 @@ public class Rf4BackfillServiceTests
                 repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)
             );
             Assert.True(repository.Replicas.Count >= 3);
+            Assert.All(
+                repository.Replicas.Where(replica =>
+                    replica.Role == RepositoryReplicaRole.EncryptedReplica
+                ),
+                replica => Assert.Equal(0, replica.ArtifactWatermark)
+            );
+        }
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenPrimaryHasContent_CreatesAndUploadsEncryptedArtifacts()
+    {
+        var repositoryId = Guid.NewGuid();
+        var primaryId = Guid.NewGuid();
+        var replicaId = Guid.NewGuid();
+        var encAId = Guid.NewGuid();
+        var encBId = Guid.NewGuid();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        provisioner
+            .ProvisionRepositoryAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+        provisioner
+            .CreateReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                ReplicationArtifactFetchResult.Ok(
+                    "{\"epoch\":0,\"watermark\":12,\"bundleSha256\":\"ABC\",\"keyVersion\":1}",
+                    [1, 2, 3]
+                )
+            );
+        provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+
+        var (service, provider) = await CreateServiceAsync(
+            repositoryId,
+            primaryId,
+            replicaId,
+            [primaryId, replicaId, encAId, encBId],
+            primaryWatermark: 12,
+            provisioner: provisioner
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .Include(entity => entity.Replicas)
+                .SingleAsync();
+            Assert.Equal(ReplicationState.Rf4Healthy, repository.ReplicationState);
+            Assert.All(
+                repository.Replicas.Where(replica =>
+                    replica.Role == RepositoryReplicaRole.EncryptedReplica
+                ),
+                replica => Assert.Equal(12, replica.ArtifactWatermark)
+            );
+            await provisioner
+                .Received(1)
+                .CreateReplicationArtifactAsync(
+                    Arg.Is<StorageNodeDto>(node => node.Id.Value == primaryId),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    repositoryId,
+                    12,
+                    Arg.Any<long>(),
+                    Arg.Any<string>(),
+                    Arg.Any<int>(),
+                    Arg.Any<CancellationToken>()
+                );
+            await provisioner
+                .Received(2)
+                .UploadReplicationArtifactAsync(
+                    Arg.Any<StorageNodeDto>(),
+                    Arg.Any<string>(),
+                    repositoryId,
+                    12,
+                    Arg.Any<string>(),
+                    Arg.Any<byte[]>(),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenCreateArtifactFails_LeavesRepositoryMigrating()
+    {
+        var repositoryId = Guid.NewGuid();
+        var primaryId = Guid.NewGuid();
+        var replicaId = Guid.NewGuid();
+        var encAId = Guid.NewGuid();
+        var encBId = Guid.NewGuid();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        provisioner
+            .ProvisionRepositoryAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+        provisioner
+            .CreateReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ReplicationArtifactFetchResult.Fail(500, "bundle failed"));
+
+        var (service, provider) = await CreateServiceAsync(
+            repositoryId,
+            primaryId,
+            replicaId,
+            [primaryId, replicaId, encAId, encBId],
+            primaryWatermark: 5,
+            provisioner: provisioner
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context.Set<RepositoryEntity>().SingleAsync();
+            Assert.Equal(ReplicationState.Rf4Migrating, repository.ReplicationState);
         }
     }
 
@@ -63,7 +224,9 @@ public class Rf4BackfillServiceTests
             Guid repositoryId,
             Guid primaryId,
             Guid replicaId,
-            IReadOnlyList<Guid> healthyNodeIds
+            IReadOnlyList<Guid> healthyNodeIds,
+            long primaryWatermark = 0,
+            IStorageProvisionerClient? provisioner = null
         )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -111,7 +274,7 @@ public class Rf4BackfillServiceTests
         var services = new ServiceCollection();
         services.AddSingleton(connection);
         services.AddSingleton(queryProcessor);
-        services.AddSingleton<IStorageProvisionerClient, FakeStorageProvisionerClient>();
+        services.AddSingleton(provisioner ?? (IStorageProvisionerClient)new FakeStorageProvisionerClient());
         services.AddSingleton<IRepositoryKeyService, RepositoryKeyService>();
         services.AddSingleton(
             Options.Create(new RepositoryStorageQuotaOptions { Enabled = false })
@@ -173,6 +336,7 @@ public class Rf4BackfillServiceTests
                     PhysicalPath = $"/srv/git/{repositoryId}.git",
                     StorageNodeId = primaryId,
                     PrimaryStorageNodeId = primaryId,
+                    PrimaryWatermark = primaryWatermark,
                     ReplicationState = ReplicationState.Rf3Healthy,
                     Replicas =
                     [
@@ -181,14 +345,14 @@ public class Rf4BackfillServiceTests
                             RepositoryId = repositoryId,
                             StorageNodeId = primaryId,
                             Role = RepositoryReplicaRole.Primary,
-                            AppliedWatermark = 0,
+                            AppliedWatermark = primaryWatermark,
                         },
                         new RepositoryReplicaEntity
                         {
                             RepositoryId = repositoryId,
                             StorageNodeId = replicaId,
                             Role = RepositoryReplicaRole.Replica,
-                            AppliedWatermark = 0,
+                            AppliedWatermark = primaryWatermark,
                         },
                     ],
                 }

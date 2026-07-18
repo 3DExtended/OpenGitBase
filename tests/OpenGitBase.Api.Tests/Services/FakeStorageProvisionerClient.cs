@@ -52,6 +52,24 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
             ReplicationArtifactFetchResult.Ok("{\"epoch\":0,\"watermark\":0,\"bundleSha256\":\"ABC\",\"keyVersion\":1}", [])
         );
 
+    public Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
+        StorageNodeDto node,
+        string apiToken,
+        string physicalPath,
+        Guid repositoryId,
+        long watermark,
+        long epoch,
+        string keyHex,
+        int keyVersion,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult(
+            ReplicationArtifactFetchResult.Ok(
+                $"{{\"epoch\":{epoch},\"watermark\":{watermark},\"bundleSha256\":\"ABC\",\"keyVersion\":{keyVersion}}}",
+                [1, 2, 3]
+            )
+        );
+
     public Task<StorageProvisionerResult> DeleteReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,

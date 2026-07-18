@@ -79,5 +79,103 @@ class StorageHttpServerTests(unittest.TestCase):
             )
 
 
+    def test_create_replication_artifact_encrypts_bundle(self) -> None:
+        import subprocess
+        import sys
+        import types
+        from unittest import mock
+
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(self.repo_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        work = Path(self.temp_dir) / "work"
+        work.mkdir()
+        subprocess.run(
+            ["git", "clone", str(self.repo_path), str(work)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        (work / "README").write_text("hi", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(work), "add", "README"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(work),
+                "-c",
+                "user.email=t@e",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-m",
+                "init",
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["git", "-C", str(work), "push", "origin", "main"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        repository_id = "33333333-3333-3333-3333-333333333333"
+        fake_crypto = types.ModuleType("storage_artifact_crypto")
+
+        def fake_encrypt(bundle_plaintext, key, repo_id, watermark, epoch, key_version):
+            self.assertGreater(len(bundle_plaintext), 0)
+            self.assertEqual(repository_id, repo_id)
+            return (
+                {
+                    "epoch": epoch,
+                    "watermark": watermark,
+                    "bundleSha256": "ABC",
+                    "keyVersion": key_version,
+                },
+                b"\x00" * 32,
+            )
+
+        fake_crypto.encrypt_bundle = fake_encrypt
+        with mock.patch.dict(sys.modules, {"storage_artifact_crypto": fake_crypto}):
+            manifest, payload = storage_http_server.create_replication_artifact(
+                str(self.repo_path),
+                repository_id,
+                watermark=7,
+                epoch=1,
+                key_hex="00" * 32,
+                key_version=1,
+            )
+
+        self.assertEqual(7, manifest["watermark"])
+        self.assertEqual(1, manifest["epoch"])
+        self.assertEqual(1, manifest["keyVersion"])
+        self.assertEqual(32, len(payload))
+
+    def test_create_replication_artifact_rejects_encrypted_role(self) -> None:
+        repository_id = "44444444-4444-4444-4444-444444444444"
+        storage_http_server._write_repo_role(repository_id, "EncryptedReplica")
+        with self.assertRaises(ValueError):
+            storage_http_server.create_replication_artifact(
+                str(self.repo_path),
+                repository_id,
+                watermark=1,
+                epoch=0,
+                key_hex="00" * 32,
+                key_version=1,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
+
