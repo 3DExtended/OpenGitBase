@@ -24,7 +24,7 @@ Both modes:
 2. Optionally wipe volumes (`--wipe`)
 3. Start all three brokers together and wait until healthy
 4. Run `kafka-init` (creates `git.push.received`, `ci.job.available`, `ci.job.cancelled`)
-5. POST `/api/v1/internal/pipelines/kafka-wake-republish` (queued/cancelled job wakes)
+5. POST `/api/v1/internal/pipelines/kafka-wake-republish` from inside the compose network (queued/cancelled job wakes). Host curls to `:8089` are skipped when they would fail InternalNetwork checks.
 
 Pass `--no-republish` to skip step 5.
 

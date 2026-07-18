@@ -154,14 +154,45 @@ republish_wakes() {
     return 0
   fi
 
-  local url="${API_URL%/}/api/v1/internal/pipelines/kafka-wake-republish"
-  echo "==> Republishing job wakes via ${url}"
-  if curl -fsS -X POST "${url}" >/dev/null; then
+  # Call API on the compose network (internal). Host curl to :8089 often hits HAProxy
+  # with a non-internal client IP and gets 401/403 from InternalNetworkMiddleware.
+  local network=""
+  local container
+  for container in opengitbase_api_1 opengitbase_ssh_lb opengitbase_kafka_1; do
+    if docker inspect "${container}" >/dev/null 2>&1; then
+      network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "${container}")"
+      if [ -n "${network}" ]; then
+        break
+      fi
+    fi
+  done
+
+  local path="/api/v1/internal/pipelines/kafka-wake-republish"
+  echo "==> Republishing job wakes via in-network API${network:+ (network ${network})}"
+
+  local ok=false
+  if [ -n "${network}" ]; then
+    if docker run --rm --network "${network}" curlimages/curl:8.5.0 \
+      -fsS -X POST "http://api-1:8080${path}" >/dev/null 2>&1 \
+      || docker run --rm --network "${network}" curlimages/curl:8.5.0 \
+        -fsS -X POST "http://api-lb:8080${path}" >/dev/null 2>&1; then
+      ok=true
+    fi
+  fi
+
+  if [ "${ok}" != true ]; then
+    local url="${API_URL%/}${path}"
+    if curl -fsS -X POST "${url}" >/dev/null 2>&1; then
+      ok=true
+    fi
+  fi
+
+  if [ "${ok}" = true ]; then
     echo "    wake republish ok"
   else
-    echo "    wake republish failed (API may still be starting); outbox + agent poll remain durable" >&2
-    return 0
+    echo "    wake republish failed (API may lack the endpoint yet, or still starting); outbox + agent poll remain durable" >&2
   fi
+  return 0
 }
 
 echo "==> Kafka quorum ${MODE} in ${REPO_ROOT}"
