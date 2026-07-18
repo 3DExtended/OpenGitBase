@@ -68,7 +68,10 @@ compose() {
 }
 
 BROKERS=(kafka-1 kafka-2 kafka-3)
-VOLUMES=(opengitbase_kafka1_data opengitbase_kafka2_data opengitbase_kafka3_data)
+# Compose volume keys (project prefix added by Docker).
+VOLUME_KEYS=(kafka1_data kafka2_data kafka3_data)
+# Legacy names from the first durable deploy (safe to remove on wipe).
+LEGACY_VOLUME_KEYS=(opengitbase_kafka1_data opengitbase_kafka2_data opengitbase_kafka3_data)
 
 broker_health() {
   local service="$1"
@@ -109,11 +112,17 @@ wait_for_brokers_healthy() {
 }
 
 project_name() {
-  # Prefer compose project name from a running broker, else directory name.
   local container
   container="$(compose ps -q kafka-1 2>/dev/null || true)"
   if [ -n "${container}" ]; then
     docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "${container}" 2>/dev/null && return
+  fi
+  # Match compose project label used on Tower (directory / compose -p).
+  local from_ps
+  from_ps="$(docker ps -a --filter name=opengitbase_kafka --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -1 || true)"
+  if [ -n "${from_ps}" ]; then
+    echo "${from_ps}"
+    return
   fi
   basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
 }
@@ -122,8 +131,9 @@ remove_kafka_volumes() {
   local project
   project="$(project_name)"
   echo "==> Removing Kafka data volumes for project '${project}'"
-  for vol in "${VOLUMES[@]}"; do
-    local full="${project}_${vol}"
+  local key full
+  for key in "${VOLUME_KEYS[@]}" "${LEGACY_VOLUME_KEYS[@]}"; do
+    full="${project}_${key}"
     if docker volume inspect "${full}" >/dev/null 2>&1; then
       docker volume rm -f "${full}" >/dev/null
       echo "    removed ${full}"
@@ -131,6 +141,11 @@ remove_kafka_volumes() {
       echo "    skip missing ${full}"
     fi
   done
+}
+
+prepare_volume_permissions() {
+  echo "==> Ensuring Kafka data volumes are writable by uid 1000"
+  compose run --rm --no-deps kafka-vol-init
 }
 
 republish_wakes() {
@@ -151,17 +166,18 @@ republish_wakes() {
 
 echo "==> Kafka quorum ${MODE} in ${REPO_ROOT}"
 
-compose stop "${BROKERS[@]}" kafka-init 2>/dev/null || true
-compose rm -f "${BROKERS[@]}" kafka-init 2>/dev/null || true
+compose stop "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
+compose rm -f "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
 
 if [ "${MODE}" = "wipe" ]; then
   remove_kafka_volumes
 fi
 
+# Create volumes (if needed) and chown before brokers start.
+prepare_volume_permissions
 compose up -d --no-deps --remove-orphans "${BROKERS[@]}"
 wait_for_brokers_healthy
 compose up -d --no-deps --remove-orphans kafka-init
-# kafka-init exits after creating topics
 compose logs --tail=30 kafka-init || true
 republish_wakes
 

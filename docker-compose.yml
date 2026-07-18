@@ -336,20 +336,36 @@ services:
     ports:
       - "6379:6379"
 
+  kafka-vol-init:
+    image: busybox:1.36
+    container_name: opengitbase_kafka_vol_init
+    # Named volumes are root-owned on first create; apache/kafka runs as uid 1000.
+    command: ["sh", "-c", "chown -R 1000:1000 /kafka1 /kafka2 /kafka3"]
+    volumes:
+      - kafka1_data:/kafka1
+      - kafka2_data:/kafka2
+      - kafka3_data:/kafka3
+    restart: "no"
+
   kafka-1:
     image: apache/kafka:3.9.0
     container_name: opengitbase_kafka_1
     hostname: kafka-1
     restart: unless-stopped
+    depends_on:
+      kafka-vol-init:
+        condition: service_completed_successfully
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 1
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      # Bind/advertise hostname for inter-broker; 0.0.0.0 only on host-facing listener.
+      # Advertising 0.0.0.0 fails StorageTool: "advertised.listeners cannot use ... 0.0.0.0".
+      KAFKA_LISTENERS: PLAINTEXT://kafka-1:29092,CONTROLLER://kafka-1:29093,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
     ports:
       - "9092:9092"
     volumes:
-      - opengitbase_kafka1_data:/var/lib/kafka/data
+      - kafka1_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -358,13 +374,16 @@ services:
     container_name: opengitbase_kafka_2
     hostname: kafka-2
     restart: unless-stopped
+    depends_on:
+      kafka-vol-init:
+        condition: service_completed_successfully
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 2
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka-2:29092,CONTROLLER://kafka-2:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
     volumes:
-      - opengitbase_kafka2_data:/var/lib/kafka/data
+      - kafka2_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -373,13 +392,16 @@ services:
     container_name: opengitbase_kafka_3
     hostname: kafka-3
     restart: unless-stopped
+    depends_on:
+      kafka-vol-init:
+        condition: service_completed_successfully
     environment:
       <<: *kafka-broker-env
       KAFKA_NODE_ID: 3
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka-3:29092,CONTROLLER://kafka-3:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
     volumes:
-      - opengitbase_kafka3_data:/var/lib/kafka/data
+      - kafka3_data:/var/lib/kafka/data
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -513,9 +535,9 @@ services:
 volumes:
   opengitbase_pgdata:
   opengitbase_minio_data:
-  opengitbase_kafka1_data:
-  opengitbase_kafka2_data:
-  opengitbase_kafka3_data:
+  kafka1_data:
+  kafka2_data:
+  kafka3_data:
   opengitbase_storage1_repos:
   opengitbase_storage2_repos:
   opengitbase_storage3_repos:

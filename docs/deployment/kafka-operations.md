@@ -4,7 +4,9 @@ OpenGitBase runs a **3-broker Apache Kafka** cluster in KRaft mode (compose serv
 
 ## Durable volumes
 
-Each broker mounts `opengitbase_kafka{N}_data` at `/var/lib/kafka/data` (`KAFKA_LOG_DIRS`). Do **not** recreate a single broker alone after a failure — treat the quorum as one unit.
+Each broker mounts `kafka{N}_data` at `/var/lib/kafka/data` (`KAFKA_LOG_DIRS`). A one-shot `kafka-vol-init` service `chown`s those volumes to uid/gid `1000` (apache/kafka `appuser`) so Unraid/root-owned named volumes do not crash-loop brokers.
+
+Do **not** recreate a single broker alone after a failure — treat the quorum as one unit.
 
 ## Lifecycle script
 
