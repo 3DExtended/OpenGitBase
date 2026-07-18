@@ -11,7 +11,7 @@ Vertical slices from the project-wide code review (security, behavioral regressi
 | 5 | `fix-02` | [MR page error handling and review threads](./08-mr-page-error-handling.md) | AFK | ready | — |
 | 6 | `sec-02` | [Internal network trust behind reverse proxy](./02-internal-network-trust.md) | HITL | ready | — |
 | 7 | `sec-04` | [Storage destructive ops and push enforcement](./04-storage-push-hardening.md) | AFK | ready | 6 |
-| 8 | `sec-06` | [Web auth redirect and site gate policy](./06-web-auth-redirect-site-gate.md) | HITL | ready | — |
+| 8 | `sec-06` | [Web auth redirect and site gate policy](./06-web-auth-redirect-site-gate.md) | HITL | done | — |
 | 9 | `fix-03` | [Commit change view test coverage gaps](./09-commit-view-test-gaps.md) | AFK | ready | 4 |
 
 **Recommended order:** sec-01 → sec-03 → sec-05 → fix-01 → fix-02 → sec-02 → sec-04 → sec-06 → fix-03

@@ -20,7 +20,7 @@ async function waitForApp(page: import('@playwright/test').Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('ogb-site-gate-unlocked', '1')
+    document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     void navigator.serviceWorker.getRegistrations().then(registrations =>
       Promise.all(registrations.map(registration => registration.unregister())),
     )

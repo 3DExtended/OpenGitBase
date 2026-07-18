@@ -72,7 +72,7 @@ async function mockAuthenticatedOrgApis(page: import('@playwright/test').Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('ogb-site-gate-unlocked', '1')
+    document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
 })
 

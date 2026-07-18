@@ -6,18 +6,19 @@
 
 - ID: sec-06
 - Type: HITL
-- Status: ready
+- Status: done
 - Source: code review (Jul 2026)
 
 ## What to build
 
 Close open-redirect vulnerabilities on sign-in and site gate, and implement a deliberate site-gate policy for production.
 
-**Decision required (HITL):** Choose site gate approach for production:
+**Decision (HITL):** Cosmetic client-side site gate for all deployed UI by default.
 
-- Remove site gate entirely from production builds, or
-- Move verification server-side (API or edge), or
-- Keep as cosmetic staging-only gate with password not in client bundle (document that it is not a security boundary)
+- Shared password `OpenGitBase` once per browser session (session cookie), then free navigation
+- Not a security boundary — password in client bundle; unlock cookie forgeable
+- Default on (`NUXT_PUBLIC_SITE_GATE_ENABLED=true`); env can disable for Playwright / public UI
+- `/api` remains ungated
 
 **Behavior (regardless of site gate decision):**
 
@@ -27,11 +28,11 @@ Close open-redirect vulnerabilities on sign-in and site gate, and implement a de
 
 ## Acceptance criteria
 
-- [ ] Sign-in with `?redirect=/settings` navigates to `/settings` after success
-- [ ] Sign-in with `?redirect=//evil.com` or external URL navigates to safe default, not external site
-- [ ] Gate page redirect validation matches sign-in rules
-- [ ] Site gate policy documented; production build matches decision (removed, server-side, or staging-only)
-- [ ] Playwright tests cover allowed and blocked redirect values
+- [x] Sign-in with `?redirect=/settings` navigates to `/settings` after success
+- [x] Sign-in with `?redirect=//evil.com` or external URL navigates to safe default, not external site
+- [x] Gate page redirect validation matches sign-in rules
+- [x] Site gate policy documented; production build matches decision (cosmetic client gate, default on)
+- [x] Playwright tests cover allowed and blocked redirect values
 
 ## Blocked by
 

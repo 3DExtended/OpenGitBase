@@ -1,29 +1,46 @@
 const STORAGE_KEY = 'ogb-site-gate-unlocked'
+const SITE_GATE_PASSWORD = 'OpenGitBase'
 
-// Cosmetic staging-only gate for local/dev previews. Not a security boundary.
-// Production images set NUXT_PUBLIC_SITE_GATE_ENABLED=false and omit the password from the bundle.
-const DEV_SITE_GATE_PASSWORD = import.meta.dev ? 'OpenGitBase' : ''
+// Cosmetic site-wide preview lock. Not a security boundary — unlock is a forgeable
+// session cookie and the password ships in the client bundle when the gate is enabled.
 
-export function isSiteGateUnlocked(): boolean {
-  if (!import.meta.client) {
-    return false
+function canUseDocumentCookie(): boolean {
+  return typeof document !== 'undefined'
+}
+
+function readCookie(name: string): string | null {
+  if (!canUseDocumentCookie()) {
+    return null
   }
 
-  return localStorage.getItem(STORAGE_KEY) === '1'
+  const prefix = `${name}=`
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length))
+    }
+  }
+
+  return null
+}
+
+function writeSessionCookie(name: string, value: string): void {
+  if (!canUseDocumentCookie()) {
+    return
+  }
+
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; SameSite=Lax`
+}
+
+export function isSiteGateUnlocked(): boolean {
+  return readCookie(STORAGE_KEY) === '1'
 }
 
 export function unlockSiteGate(password: string): boolean {
-  if (!import.meta.dev || !DEV_SITE_GATE_PASSWORD) {
+  if (password !== SITE_GATE_PASSWORD) {
     return false
   }
 
-  if (password !== DEV_SITE_GATE_PASSWORD) {
-    return false
-  }
-
-  if (import.meta.client) {
-    localStorage.setItem(STORAGE_KEY, '1')
-  }
-
+  writeSessionCookie(STORAGE_KEY, '1')
   return true
 }

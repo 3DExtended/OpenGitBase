@@ -101,7 +101,7 @@ Fleet enrollment tokens are written by `./scripts/bootstrap-fleet.sh` into `dock
 
 Override branding at **image build time** via the `web.build.args` section in `docker-compose.override.yml` (`NUXT_PUBLIC_INSTANCE_NAME`, `NUXT_PUBLIC_INSTANCE_LOGO_URL`, `NUXT_PUBLIC_API_BASE`, `NUXT_PUBLIC_SITE_GATE_ENABLED`).
 
-**Site gate policy:** production Docker images default to `NUXT_PUBLIC_SITE_GATE_ENABLED=false`. When enabled for local dev (`pnpm dev`), the gate is a cosmetic preview lock only — the password is not shipped in production bundles and the middleware does not run outside `import.meta.dev`.
+**Site gate policy:** Docker images default to `NUXT_PUBLIC_SITE_GATE_ENABLED=true`. When enabled, every UI route requires the shared password `OpenGitBase` once per browser session (session cookie), then free navigation. This is a **cosmetic preview lock only** — not a security boundary (password ships in the client bundle; unlock cookie is forgeable). Set `NUXT_PUBLIC_SITE_GATE_ENABLED=false` to disable (e.g. Playwright, public forge UI). `/api` is not gated.
 
 Set `NUXT_PUBLIC_*` variables at **build time** (they are baked into the static bundle).
 

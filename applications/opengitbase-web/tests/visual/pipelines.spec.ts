@@ -21,7 +21,7 @@ async function waitForApp(page: import('@playwright/test').Page) {
 test.describe('Pipeline visuals', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
+      document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })
   })
 

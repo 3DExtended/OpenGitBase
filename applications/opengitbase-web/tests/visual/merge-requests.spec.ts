@@ -195,7 +195,7 @@ async function installLinkedDiscussionsSidebarRoutes(page: import('@playwright/t
 test.describe('Merge request visuals', () => {
   test('gallery merge request sections', async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
+      document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })
     await page.goto(`${baseURL}/__visual__/?msw=1`)
     await page.waitForLoadState('networkidle')

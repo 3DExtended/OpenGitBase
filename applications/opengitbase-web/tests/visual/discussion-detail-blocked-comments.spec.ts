@@ -92,7 +92,7 @@ async function installBlockedCommentsRoutes(page: import('@playwright/test').Pag
 test.describe('Discussion detail page blocked /comments path', () => {
   test('still renders bundled threads when /comments is blocked', async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('ogb-site-gate-unlocked', '1')
+      document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
       void navigator.serviceWorker.getRegistrations().then(registrations =>
         Promise.all(registrations.map(registration => registration.unregister())),
       )

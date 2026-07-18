@@ -95,7 +95,7 @@ async function installDiscussionRoutes(page: import('@playwright/test').Page) {
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
-    localStorage.setItem('ogb-site-gate-unlocked', '1')
+    document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     void navigator.serviceWorker.getRegistrations().then(registrations =>
       Promise.all(registrations.map(registration => registration.unregister())),
     )
