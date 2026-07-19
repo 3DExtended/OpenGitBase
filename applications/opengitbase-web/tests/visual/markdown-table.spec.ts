@@ -1,0 +1,34 @@
+import { test, expect } from '@playwright/test'
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
+
+async function waitForApp(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
+  })
+  await page.goto(`${baseURL}/__visual__/?msw=1`)
+  await page.waitForLoadState('networkidle')
+  await page.evaluate(async () => {
+    await document.fonts.ready
+  })
+  await page.addStyleTag({
+    content: `
+      *, *::before, *::after {
+        animation-duration: 0s !important;
+        animation-delay: 0s !important;
+        transition-duration: 0s !important;
+        transition-delay: 0s !important;
+      }
+    `,
+  })
+}
+
+test.describe('Markdown table', () => {
+  test('rendered markdown table styling', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-markdown-table')).toHaveScreenshot(
+      'markdown-table.png',
+      { fullPage: false },
+    )
+  })
+})

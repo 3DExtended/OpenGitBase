@@ -89,3 +89,45 @@ body {
     padding: 2rem;
   }
 }
+
+/* Markdown tables (docs, READMEs, discussion bodies) */
+.repo-markdown__prose table {
+  width: 100%;
+  margin: 1.25rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ogb-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--ogb-surface);
+  display: table;
+}
+
+.repo-markdown__prose th,
+.repo-markdown__prose td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: top;
+  border-right: 1px solid var(--ogb-border);
+  border-bottom: 1px solid var(--ogb-border);
+}
+
+.repo-markdown__prose th:last-child,
+.repo-markdown__prose td:last-child {
+  border-right: none;
+}
+
+.repo-markdown__prose tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.repo-markdown__prose thead th {
+  background: var(--ogb-bg);
+  font-weight: 600;
+  color: var(--ogb-text);
+  border-bottom: 1px solid var(--ogb-border);
+}
+
+.repo-markdown__prose tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ogb-bg) 65%, transparent);
+}

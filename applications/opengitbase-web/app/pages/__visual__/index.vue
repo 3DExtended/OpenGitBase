@@ -651,6 +651,26 @@ const selfHostOptions = [
     </section>
 
     <section
+      class="mt-10 max-w-2xl space-y-4"
+      data-testid="visual-markdown-table"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Markdown table
+      </h2>
+      <UCard>
+        <RepoMarkdown
+          :source="`## Identity model
+
+| Credential | Lifetime | Purpose |
+|------------|----------|---------|
+| **Node Identity** | Long-lived | Enrollment, heartbeat, claim work |
+| **Job Identity** | Per job | Read repo at SHA, logs, fetch base/layer blobs, report status |
+`"
+        />
+      </UCard>
+    </section>
+
+    <section
       class="mt-10 max-w-5xl space-y-4"
       data-testid="visual-admin-rf4-replication"
     >

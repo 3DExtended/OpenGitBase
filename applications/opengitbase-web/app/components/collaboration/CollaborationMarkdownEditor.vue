@@ -332,19 +332,42 @@ onBeforeUnmount(() => {
 }
 
 .discussion-rich-editor :deep(.ProseMirror table) {
-  border-collapse: collapse;
   width: 100%;
+  margin: 1.25rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ogb-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--ogb-surface);
 }
 
 .discussion-rich-editor :deep(.ProseMirror th),
 .discussion-rich-editor :deep(.ProseMirror td) {
-  border: 1px solid var(--ogb-border);
-  padding: 0.25rem 0.5rem;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: top;
+  border-right: 1px solid var(--ogb-border);
+  border-bottom: 1px solid var(--ogb-border);
+}
+
+.discussion-rich-editor :deep(.ProseMirror th:last-child),
+.discussion-rich-editor :deep(.ProseMirror td:last-child) {
+  border-right: none;
+}
+
+.discussion-rich-editor :deep(.ProseMirror tbody tr:last-child td) {
+  border-bottom: none;
 }
 
 .discussion-rich-editor :deep(.ProseMirror th) {
   background: var(--ogb-bg);
   font-weight: 600;
+  color: var(--ogb-text);
+}
+
+.discussion-rich-editor :deep(.ProseMirror tbody tr:nth-child(even) td) {
+  background: color-mix(in srgb, var(--ogb-bg) 65%, transparent);
 }
 
 .discussion-rich-editor :deep(.ProseMirror ul[data-type='taskList']) {
