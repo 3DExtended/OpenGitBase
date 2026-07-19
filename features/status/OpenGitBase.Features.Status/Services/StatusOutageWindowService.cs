@@ -195,14 +195,17 @@ public sealed class StatusOutageWindowService
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var stale = await context
+        var candidates = await context
             .Set<StatusOutageWindowEntity>()
-            .Where(e =>
-                (e.EndedAt != null && e.EndedAt < cutoff)
-                || (e.EndedAt == null && e.BecamePublicAt == null && e.UnhealthySince < cutoff)
-            )
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        var stale = candidates
+            .Where(e =>
+                (e.EndedAt is { } endedAt && endedAt < cutoff)
+                || (e.EndedAt is null && e.BecamePublicAt is null && e.UnhealthySince < cutoff)
+            )
+            .ToList();
 
         if (stale.Count == 0)
         {

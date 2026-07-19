@@ -76,6 +76,12 @@ public sealed class StatusAggregatorService
             await _outageWindowService
                 .ApplySnapshotAsync(snapshot, cancellationToken)
                 .ConfigureAwait(false);
+            await _outageWindowService
+                .PruneOlderThanAsync(
+                    TimeSpan.FromDays(_options.HistoryRetentionDays),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
             await PersistSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
             await _historyService
                 .RecordSnapshotAsync(snapshot, cancellationToken)

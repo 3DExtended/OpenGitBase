@@ -8,10 +8,12 @@ const auth = useAuth()
 
 useHead({ title: t('status.title') })
 
-const windowsDays = 7
+const defaultWindowsDays = 7
+const windowsDays = ref(defaultWindowsDays)
 const snapshot = ref<PublicStatusSnapshot | null>(null)
 const history = ref<PublicStatusHistory | null>(null)
 const windows = ref<PublicStatusOutageWindowDto[]>([])
+const windowsLoading = ref(false)
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -24,12 +26,21 @@ const incidentColor = computed(() => {
   return 'info'
 })
 
+async function refreshWindows() {
+  windowsLoading.value = true
+  const windowsResult = await api.status.getWindows(windowsDays.value)
+  if (!windowsResult.error) {
+    windows.value = windowsResult.data ?? []
+  }
+  windowsLoading.value = false
+}
+
 async function refresh() {
   error.value = null
-  const [statusResult, historyResult, windowsResult] = await Promise.all([
+  const [statusResult, historyResult] = await Promise.all([
     api.status.get(),
     api.status.getHistory(90),
-    api.status.getWindows(windowsDays),
+    refreshWindows(),
   ])
 
   if (statusResult.error) {
@@ -43,11 +54,12 @@ async function refresh() {
     history.value = historyResult.data
   }
 
-  if (!windowsResult.error) {
-    windows.value = windowsResult.data ?? []
-  }
-
   loading.value = false
+}
+
+function onWindowsDaysChange(days: number) {
+  windowsDays.value = days
+  void refreshWindows()
 }
 
 onMounted(() => {
@@ -144,6 +156,8 @@ onMounted(() => {
         :windows="windows"
         :groups="snapshot.groups"
         :days="windowsDays"
+        :loading="windowsLoading"
+        @update:days="onWindowsDaysChange"
       />
 
       <StatusHistoryCharts :history="history" />

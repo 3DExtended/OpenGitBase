@@ -5,9 +5,16 @@ const props = defineProps<{
   windows: PublicStatusOutageWindowDto[]
   groups?: StatusGroupSnapshot[]
   days?: number
+  loading?: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:days': [days: number]
 }>()
 
 const { t } = useI18n()
+
+const archiveOptions = [7, 30, 90]
 
 const timezoneMode = ref<'utc' | 'local'>('utc')
 const expandedIds = ref<Set<string>>(new Set())
@@ -18,6 +25,12 @@ const lookbackDays = computed(() => props.days ?? 7)
 
 function setTimezoneMode(mode: 'utc' | 'local') {
   timezoneMode.value = mode
+}
+
+function selectArchiveDays(days: number) {
+  if (days !== lookbackDays.value) {
+    emit('update:days', days)
+  }
 }
 
 function toggleExpand(windowId: string) {
@@ -85,23 +98,42 @@ function canExpand(window: PublicStatusOutageWindowDto): boolean {
             {{ t('status.timeline.subtitle', { days: lookbackDays }) }}
           </p>
         </div>
-        <div class="flex gap-2">
-          <UButton
-            size="xs"
-            color="neutral"
-            :variant="timezoneMode === 'utc' ? 'solid' : 'outline'"
-            @click="setTimezoneMode('utc')"
+        <div class="flex flex-wrap items-center gap-2">
+          <div
+            v-if="props.days != null"
+            class="flex gap-1"
+            data-testid="status-outage-timeline-archive"
           >
-            {{ t('status.timeline.utc') }}
-          </UButton>
-          <UButton
-            size="xs"
-            color="neutral"
-            :variant="timezoneMode === 'local' ? 'solid' : 'outline'"
-            @click="setTimezoneMode('local')"
-          >
-            {{ t('status.timeline.local') }}
-          </UButton>
+            <UButton
+              v-for="option in archiveOptions"
+              :key="option"
+              size="xs"
+              color="neutral"
+              :disabled="props.loading"
+              :variant="lookbackDays === option ? 'solid' : 'outline'"
+              @click="selectArchiveDays(option)"
+            >
+              {{ t('status.timeline.archiveDays', { days: option }) }}
+            </UButton>
+          </div>
+          <div class="flex gap-1">
+            <UButton
+              size="xs"
+              color="neutral"
+              :variant="timezoneMode === 'utc' ? 'solid' : 'outline'"
+              @click="setTimezoneMode('utc')"
+            >
+              {{ t('status.timeline.utc') }}
+            </UButton>
+            <UButton
+              size="xs"
+              color="neutral"
+              :variant="timezoneMode === 'local' ? 'solid' : 'outline'"
+              @click="setTimezoneMode('local')"
+            >
+              {{ t('status.timeline.local') }}
+            </UButton>
+          </div>
         </div>
       </div>
 

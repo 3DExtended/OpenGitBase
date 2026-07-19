@@ -21,4 +21,10 @@
   visuals (new timeline specs green; `visual-gallery`/`status-page` re-baselined for the new
   section). Frontend unit tests 137 green; backend 48 status tests unaffected. See
   `items/sow-03-handoff.md`.
-- Remaining sow-05 in progress on main.
+- **sow-05** (#225) completed. Aggregator tick now calls
+  `StatusOutageWindowService.PruneOlderThanAsync(HistoryRetentionDays)` after `ApplySnapshotAsync`;
+  fixed a real SQLite LINQ-translation bug in `PruneOlderThanAsync` found by new prune-boundary
+  tests. Public timeline gained a 7d/30d/90d archive control that refetches only the windows list.
+  51 status feature tests green (48 + 3 new); frontend unit 137 green; Playwright visuals green
+  apart from the same pre-existing flakiness. See `items/sow-05-handoff.md`.
+- All slices (sow-01..sow-05) complete on main.

@@ -50,6 +50,114 @@ public class StatusOutageWindowServiceTests
         Assert.Null(entity.EndedAt);
     }
 
+    [Fact]
+    public async Task PruneOlderThanAsync_ClosedWindowPastRetention_IsRemoved()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var provider = CreateProvider(connection, T0);
+        await using var scope = provider.CreateAsyncScope();
+        await EnsureCreatedAsync(scope);
+
+        var retention = TimeSpan.FromDays(90);
+        await SeedWindowAsync(
+            scope,
+            unhealthySince: T0 - retention - TimeSpan.FromDays(1),
+            becamePublicAt: T0 - retention - TimeSpan.FromDays(1),
+            endedAt: T0 - retention - TimeSpan.FromMinutes(1)
+        );
+
+        var service = scope.ServiceProvider.GetRequiredService<StatusOutageWindowService>();
+        await service.PruneOlderThanAsync(retention, CancellationToken.None);
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        Assert.Empty(context.Set<StatusOutageWindowEntity>());
+    }
+
+    [Fact]
+    public async Task PruneOlderThanAsync_ClosedWindowWithinRetention_IsKept()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var provider = CreateProvider(connection, T0);
+        await using var scope = provider.CreateAsyncScope();
+        await EnsureCreatedAsync(scope);
+
+        var retention = TimeSpan.FromDays(90);
+        await SeedWindowAsync(
+            scope,
+            unhealthySince: T0 - retention + TimeSpan.FromDays(1),
+            becamePublicAt: T0 - retention + TimeSpan.FromDays(1),
+            endedAt: T0 - retention + TimeSpan.FromMinutes(1)
+        );
+
+        var service = scope.ServiceProvider.GetRequiredService<StatusOutageWindowService>();
+        await service.PruneOlderThanAsync(retention, CancellationToken.None);
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        Assert.Single(context.Set<StatusOutageWindowEntity>());
+    }
+
+    [Fact]
+    public async Task PruneOlderThanAsync_OpenPublicWindow_IsNeverPrunedRegardlessOfAge()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var provider = CreateProvider(connection, T0);
+        await using var scope = provider.CreateAsyncScope();
+        await EnsureCreatedAsync(scope);
+
+        var retention = TimeSpan.FromDays(90);
+        await SeedWindowAsync(
+            scope,
+            unhealthySince: T0 - retention - TimeSpan.FromDays(365),
+            becamePublicAt: T0 - retention - TimeSpan.FromDays(365),
+            endedAt: null
+        );
+
+        var service = scope.ServiceProvider.GetRequiredService<StatusOutageWindowService>();
+        await service.PruneOlderThanAsync(retention, CancellationToken.None);
+
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        Assert.Single(context.Set<StatusOutageWindowEntity>());
+    }
+
+    private static async Task SeedWindowAsync(
+        AsyncServiceScope scope,
+        DateTimeOffset unhealthySince,
+        DateTimeOffset? becamePublicAt,
+        DateTimeOffset? endedAt
+    )
+    {
+        var contextFactory = scope.ServiceProvider.GetRequiredService<
+            IDbContextFactory<OpenGitBaseDbContext>
+        >();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        context.Set<StatusOutageWindowEntity>().Add(
+            new StatusOutageWindowEntity
+            {
+                Id = Guid.NewGuid(),
+                Scope = OutageWindowScope.Group,
+                ComponentGroup = StatusComponentGroup.MessageBus,
+                DisplayName = "Message bus",
+                UnhealthySince = unhealthySince,
+                BecamePublicAt = becamePublicAt,
+                EndedAt = endedAt,
+                UpdatedAt = unhealthySince,
+            }
+        );
+        await context.SaveChangesAsync();
+    }
+
     private static PublicStatusSnapshotDto UnhealthyMessageBusSnapshot(DateTimeOffset checkedAt) =>
         new()
         {

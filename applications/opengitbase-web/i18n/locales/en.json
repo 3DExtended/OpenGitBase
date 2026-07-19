@@ -82,6 +82,7 @@
       "open": "Open",
       "utc": "UTC",
       "local": "Local",
+      "archiveDays": "{days}d",
       "expand": "Show instances",
       "collapse": "Hide instances",
       "partialTitle": "Partial issues",
