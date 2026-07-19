@@ -9,4 +9,6 @@ public sealed class PublicStatusSnapshotDto
     public List<StatusGroupSnapshot> Groups { get; set; } = [];
 
     public PublicStatusIncidentDto? Incident { get; set; }
+
+    public List<PublicStatusOutageWindowDto> OpenWindows { get; set; } = [];
 }

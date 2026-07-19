@@ -57,6 +57,8 @@ public sealed class GetPublicStatusQueryHandler
                 OverallStatus = PublicHealthStatus.Unhealthy,
                 CheckedAt = entity.CheckedAt,
             };
+        snapshot.OpenWindows ??= [];
+        snapshot.Groups ??= [];
 
         return Option.From(snapshot);
     }

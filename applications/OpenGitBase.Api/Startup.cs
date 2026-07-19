@@ -310,6 +310,7 @@ public class Startup
         services.AddSingleton<OpenGitBase.Features.Status.Services.StorageGroupStatusBuilder>();
         services.AddSingleton<OpenGitBase.Features.Status.Services.MessageBusGroupStatusBuilder>();
         services.AddSingleton<OpenGitBase.Features.Status.Services.StatusHistoryService>();
+        services.AddScoped<OpenGitBase.Features.Status.Services.StatusOutageWindowService>();
         services.AddScoped<OpenGitBase.Features.Status.Services.StatusAggregatorService>();
         services.AddHostedService<StatusAggregatorBackgroundService>();
         services.AddScoped<Rf1BackfillService>();

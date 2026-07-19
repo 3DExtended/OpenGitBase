@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Status.Contracts;
 using OpenGitBase.Features.Status.Entities;
@@ -23,9 +24,11 @@ public sealed class StatusAggregatorService
     private readonly StorageGroupStatusBuilder _storageGroupStatusBuilder;
     private readonly MessageBusGroupStatusBuilder _messageBusGroupStatusBuilder;
     private readonly StatusHistoryService _historyService;
+    private readonly StatusOutageWindowService _outageWindowService;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IConfiguration _configuration;
     private readonly StatusProbeOptions _options;
+    private readonly ISystemClock _clock;
     private readonly ILogger<StatusAggregatorService> _logger;
 
     public StatusAggregatorService(
@@ -34,9 +37,11 @@ public sealed class StatusAggregatorService
         StorageGroupStatusBuilder storageGroupStatusBuilder,
         MessageBusGroupStatusBuilder messageBusGroupStatusBuilder,
         StatusHistoryService historyService,
+        StatusOutageWindowService outageWindowService,
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IConfiguration configuration,
         StatusProbeOptions options,
+        ISystemClock clock,
         ILogger<StatusAggregatorService> logger
     )
     {
@@ -45,9 +50,11 @@ public sealed class StatusAggregatorService
         _storageGroupStatusBuilder = storageGroupStatusBuilder;
         _messageBusGroupStatusBuilder = messageBusGroupStatusBuilder;
         _historyService = historyService;
+        _outageWindowService = outageWindowService;
         _contextFactory = contextFactory;
         _configuration = configuration;
         _options = options;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -66,6 +73,9 @@ public sealed class StatusAggregatorService
         try
         {
             var snapshot = await BuildSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            await _outageWindowService
+                .ApplySnapshotAsync(snapshot, cancellationToken)
+                .ConfigureAwait(false);
             await PersistSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
             await _historyService
                 .RecordSnapshotAsync(snapshot, cancellationToken)
@@ -86,7 +96,7 @@ public sealed class StatusAggregatorService
 
     public async Task<PublicStatusSnapshotDto> BuildSnapshotAsync(CancellationToken cancellationToken)
     {
-        var checkedAt = DateTimeOffset.UtcNow;
+        var checkedAt = _clock.UtcNow;
         var fleetComponents = await _queryProcessor
             .RunQueryAsync(new ListFleetComponentsQuery(), cancellationToken)
             .ConfigureAwait(false);
