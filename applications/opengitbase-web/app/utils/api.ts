@@ -3,6 +3,7 @@ import { normalizeRepositoryMemberRole } from './discussionPermissions'
 import type {
   PublicStatusHistory,
   PublicStatusIncident,
+  PublicStatusOutageWindowDto,
   PublicStatusSnapshot,
 } from './publicStatus'
 
@@ -78,19 +79,8 @@ export interface CreateComputeNodeEnrollmentResult {
   expiresAt: string
 }
 
-export interface AdminStatusOutageWindowDto {
-  id: string
-  scope: number
-  group: number
-  instanceId?: string | null
-  displayName: string
-  startedAt: string
-  endedAt?: string | null
-  isOpen: boolean
-  isPartial: boolean
-  durationMinutes?: number | null
+export interface AdminStatusOutageWindowDto extends PublicStatusOutageWindowDto {
   suppressed: boolean
-  annotation?: string | null
 }
 
 export interface BaseImageCatalogEntryDto {
@@ -2760,6 +2750,8 @@ export function createApi(baseUrl: string) {
       get: () => request<PublicStatusSnapshot>('/public/status'),
       getHistory: (days = 90) =>
         request<PublicStatusHistory>(`/public/status/history?days=${days}`),
+      getWindows: (days = 7) =>
+        request<PublicStatusOutageWindowDto[]>(`/public/status/windows?days=${days}`),
     },
 
     admin: {

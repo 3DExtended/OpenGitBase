@@ -349,6 +349,7 @@ export const handlers = [
       overallStatus: 0,
       checkedAt: '2026-07-10T12:00:00Z',
       incident: null,
+      openWindows: [],
       groups: [
         {
           group: 1,
@@ -400,6 +401,50 @@ export const handlers = [
         { group: 5, days: [{ date: '2026-07-10', uptimePercent: 100, healthyRatio: 1, degradedRatio: 0, unhealthyRatio: 0 }] },
       ],
     })
+  }),
+
+  http.get('/api/public/status/windows', () => {
+    return HttpResponse.json([
+      {
+        id: 'window-open',
+        scope: 0,
+        group: 6,
+        instanceId: null,
+        displayName: 'Message bus',
+        startedAt: '2026-07-19T10:00:00Z',
+        endedAt: null,
+        isOpen: true,
+        isPartial: false,
+        durationMinutes: 65,
+        annotation: null,
+      },
+      {
+        id: 'window-closed-annotated',
+        scope: 0,
+        group: 3,
+        instanceId: null,
+        displayName: 'Git',
+        startedAt: '2026-07-18T08:00:00Z',
+        endedAt: '2026-07-18T08:40:00Z',
+        isOpen: false,
+        isPartial: false,
+        durationMinutes: 40,
+        annotation: 'Scheduled failover drill.',
+      },
+      {
+        id: 'window-partial',
+        scope: 1,
+        group: 3,
+        instanceId: 'dispatcher-2',
+        displayName: 'dispatcher-2',
+        startedAt: '2026-07-17T22:00:00Z',
+        endedAt: '2026-07-17T22:12:00Z',
+        isOpen: false,
+        isPartial: true,
+        durationMinutes: 12,
+        annotation: null,
+      },
+    ])
   }),
 
   http.get('/api/admin/status/incident', () => HttpResponse.json(null)),

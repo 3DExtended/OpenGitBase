@@ -58,6 +58,59 @@ const sampleOutageWindows = [
   },
 ]
 
+const samplePublicOutageWindows = [
+  {
+    id: 'window-open',
+    scope: 0,
+    group: 6,
+    instanceId: null,
+    displayName: 'Message bus',
+    startedAt: '2026-07-19T10:00:00Z',
+    endedAt: null,
+    isOpen: true,
+    isPartial: false,
+    durationMinutes: 65,
+    annotation: null,
+  },
+  {
+    id: 'window-closed-annotated',
+    scope: 0,
+    group: 3,
+    instanceId: null,
+    displayName: 'Git',
+    startedAt: '2026-07-18T08:00:00Z',
+    endedAt: '2026-07-18T08:40:00Z',
+    isOpen: false,
+    isPartial: false,
+    durationMinutes: 40,
+    annotation: 'Scheduled failover drill.',
+  },
+  {
+    id: 'window-partial',
+    scope: 1,
+    group: 3,
+    instanceId: 'dispatcher-2',
+    displayName: 'dispatcher-2',
+    startedAt: '2026-07-17T22:00:00Z',
+    endedAt: '2026-07-17T22:12:00Z',
+    isOpen: false,
+    isPartial: true,
+    durationMinutes: 12,
+    annotation: null,
+  },
+]
+
+const sampleOutageTimelineGroups = [
+  {
+    group: 6,
+    status: 2,
+    instances: [
+      { instanceId: 'broker-1', status: 2, lastCheckedAt: '2026-07-19T11:00:00Z' },
+      { instanceId: 'broker-2', status: 2, lastCheckedAt: '2026-07-19T11:00:00Z' },
+    ],
+  },
+]
+
 useHead({ title: 'Visual Gallery' })
 
 function toggleTheme() {
@@ -723,6 +776,33 @@ const selfHostOptions = [
         Admin outage window controls
       </h2>
       <StatusAdminOutageWindowList :windows="sampleOutageWindows as any" />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-status-outage-timeline"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Public status outage timeline
+      </h2>
+      <StatusOutageTimeline
+        :windows="samplePublicOutageWindows as any"
+        :groups="sampleOutageTimelineGroups as any"
+        :days="7"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-status-outage-timeline-empty"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Public status outage timeline (empty)
+      </h2>
+      <StatusOutageTimeline
+        :windows="[]"
+        :days="7"
+      />
     </section>
 
     <section

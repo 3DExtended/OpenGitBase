@@ -14,4 +14,11 @@
   new `visual-admin-outage-windows` gallery snapshot. Backend tests 48 (status) + 10 (API)
   green; frontend unit tests 137 green; Playwright visuals green apart from pre-existing
   font-rendering flakiness unrelated to this slice. See `items/sow-04-handoff.md`.
-- Remaining sow-03 → sow-05 in progress on main.
+- **sow-03** (#224) completed. `PublicStatusOutageWindowDto` type + `status.getWindows(days)`
+  client, new `StatusOutageTimeline.vue` (primary/partial split, UTC/local toggle, duration and
+  annotation metadata, live-instance expand for open windows, empty state), wired into
+  `status.vue` between live groups and charts. MSW handler + gallery fixtures + Playwright
+  visuals (new timeline specs green; `visual-gallery`/`status-page` re-baselined for the new
+  section). Frontend unit tests 137 green; backend 48 status tests unaffected. See
+  `items/sow-03-handoff.md`.
+- Remaining sow-05 in progress on main.

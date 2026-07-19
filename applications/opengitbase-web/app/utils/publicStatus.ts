@@ -21,11 +21,26 @@ export interface StatusGroupSnapshot {
   instances: StatusInstanceSnapshot[]
 }
 
+export interface PublicStatusOutageWindowDto {
+  id: string
+  scope: number
+  group: number
+  instanceId?: string | null
+  displayName: string
+  startedAt: string
+  endedAt?: string | null
+  isOpen: boolean
+  isPartial: boolean
+  durationMinutes?: number | null
+  annotation?: string | null
+}
+
 export interface PublicStatusSnapshot {
   overallStatus: PublicHealthStatus
   checkedAt: string
   groups: StatusGroupSnapshot[]
   incident: PublicStatusIncident | null
+  openWindows: PublicStatusOutageWindowDto[]
 }
 
 export interface PublicStatusHistoryDay {

@@ -72,6 +72,22 @@
       "lastSeen": "Last seen",
       "message": "Message"
     },
+    "timeline": {
+      "title": "Outage history",
+      "subtitle": "Auto-detected outage windows from the last {days} days.",
+      "empty": "No outages recorded in the last {days} days.",
+      "downSince": "{name} down since {start}",
+      "downRange": "{name} down {start} \u2013 {end}",
+      "duration": "Duration: {minutes} min",
+      "open": "Open",
+      "utc": "UTC",
+      "local": "Local",
+      "expand": "Show instances",
+      "collapse": "Hide instances",
+      "partialTitle": "Partial issues",
+      "partialSubtitle": "Instance-level issues that did not affect the overall group status.",
+      "annotationPrefix": "Note:"
+    },
     "charts": {
       "uptimeTitle": "90-day uptime",
       "uptimeSubtitle": "Daily uptime percentage. Toggle groups to overlay component lines.",

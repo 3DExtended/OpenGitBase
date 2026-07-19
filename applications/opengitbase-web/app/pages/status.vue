@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PublicStatusHistory, PublicStatusSnapshot } from '~/utils/publicStatus'
+import type { PublicStatusHistory, PublicStatusOutageWindowDto, PublicStatusSnapshot } from '~/utils/publicStatus'
 import { incidentSeverityKey } from '~/utils/publicStatus'
 
 const { t } = useI18n()
@@ -8,8 +8,10 @@ const auth = useAuth()
 
 useHead({ title: t('status.title') })
 
+const windowsDays = 7
 const snapshot = ref<PublicStatusSnapshot | null>(null)
 const history = ref<PublicStatusHistory | null>(null)
+const windows = ref<PublicStatusOutageWindowDto[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -24,9 +26,10 @@ const incidentColor = computed(() => {
 
 async function refresh() {
   error.value = null
-  const [statusResult, historyResult] = await Promise.all([
+  const [statusResult, historyResult, windowsResult] = await Promise.all([
     api.status.get(),
     api.status.getHistory(90),
+    api.status.getWindows(windowsDays),
   ])
 
   if (statusResult.error) {
@@ -38,6 +41,10 @@ async function refresh() {
 
   if (!historyResult.error) {
     history.value = historyResult.data
+  }
+
+  if (!windowsResult.error) {
+    windows.value = windowsResult.data ?? []
   }
 
   loading.value = false
@@ -132,6 +139,12 @@ onMounted(() => {
           :group="group"
         />
       </div>
+
+      <StatusOutageTimeline
+        :windows="windows"
+        :groups="snapshot.groups"
+        :days="windowsDays"
+      />
 
       <StatusHistoryCharts :history="history" />
     </template>
