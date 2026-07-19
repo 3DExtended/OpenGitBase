@@ -13,6 +13,51 @@ function memberLabel(userId: string): string {
   return userId === 'user-1' ? 'alice' : 'bob'
 }
 
+const sampleOutageWindows = [
+  {
+    id: 'window-open',
+    scope: 0,
+    group: 6,
+    instanceId: null,
+    displayName: 'Message bus',
+    startedAt: '2026-07-19T10:00:00Z',
+    endedAt: null,
+    isOpen: true,
+    isPartial: false,
+    durationMinutes: 65,
+    suppressed: false,
+    annotation: null,
+  },
+  {
+    id: 'window-closed-annotated',
+    scope: 0,
+    group: 3,
+    instanceId: null,
+    displayName: 'Git',
+    startedAt: '2026-07-18T08:00:00Z',
+    endedAt: '2026-07-18T08:40:00Z',
+    isOpen: false,
+    isPartial: false,
+    durationMinutes: 40,
+    suppressed: false,
+    annotation: 'Scheduled failover drill.',
+  },
+  {
+    id: 'window-suppressed',
+    scope: 1,
+    group: 5,
+    instanceId: 'redis',
+    displayName: 'Redis',
+    startedAt: '2026-07-17T22:00:00Z',
+    endedAt: '2026-07-17T22:12:00Z',
+    isOpen: false,
+    isPartial: true,
+    durationMinutes: 12,
+    suppressed: true,
+    annotation: null,
+  },
+]
+
 useHead({ title: 'Visual Gallery' })
 
 function toggleTheme() {
@@ -668,6 +713,16 @@ const selfHostOptions = [
 `"
         />
       </UCard>
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-admin-outage-windows"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin outage window controls
+      </h2>
+      <StatusAdminOutageWindowList :windows="sampleOutageWindows as any" />
     </section>
 
     <section

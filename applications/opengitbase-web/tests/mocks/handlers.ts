@@ -403,4 +403,55 @@ export const handlers = [
   }),
 
   http.get('/api/admin/status/incident', () => HttpResponse.json(null)),
+
+  http.get('/api/admin/status/windows', () => HttpResponse.json([])),
+  http.post('/api/admin/status/windows/:windowId/suppress', ({ params }) => {
+    return HttpResponse.json({
+      id: params.windowId,
+      scope: 0,
+      group: 6,
+      instanceId: null,
+      displayName: 'Message bus',
+      startedAt: '2026-07-10T12:00:00Z',
+      endedAt: null,
+      isOpen: true,
+      isPartial: false,
+      durationMinutes: 45,
+      suppressed: true,
+      annotation: null,
+    })
+  }),
+  http.post('/api/admin/status/windows/:windowId/unsuppress', ({ params }) => {
+    return HttpResponse.json({
+      id: params.windowId,
+      scope: 0,
+      group: 6,
+      instanceId: null,
+      displayName: 'Message bus',
+      startedAt: '2026-07-10T12:00:00Z',
+      endedAt: null,
+      isOpen: true,
+      isPartial: false,
+      durationMinutes: 45,
+      suppressed: false,
+      annotation: null,
+    })
+  }),
+  http.put('/api/admin/status/windows/:windowId/annotation', async ({ params, request }) => {
+    const body = await request.json() as { annotation?: string | null }
+    return HttpResponse.json({
+      id: params.windowId,
+      scope: 0,
+      group: 6,
+      instanceId: null,
+      displayName: 'Message bus',
+      startedAt: '2026-07-10T12:00:00Z',
+      endedAt: null,
+      isOpen: true,
+      isPartial: false,
+      durationMinutes: 45,
+      suppressed: false,
+      annotation: body?.annotation ?? null,
+    })
+  }),
 ]

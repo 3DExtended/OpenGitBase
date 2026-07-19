@@ -113,6 +113,81 @@ public sealed class StatusOutageWindowService
         return OrderForPublicHistory(rows, now);
     }
 
+    public async Task<List<AdminStatusOutageWindowDto>> ListAdminWindowsAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var now = _clock.UtcNow;
+
+        var rows = await context
+            .Set<StatusOutageWindowEntity>()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .OrderByDescending(e => e.UnhealthySince)
+            .Select(e => ToAdminDto(e, now))
+            .ToList();
+    }
+
+    public async Task<AdminStatusOutageWindowDto?> SetSuppressedAsync(
+        Guid windowId,
+        bool suppressed,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var entity = await context
+            .Set<StatusOutageWindowEntity>()
+            .FirstOrDefaultAsync(e => e.Id == windowId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var now = _clock.UtcNow;
+        entity.Suppressed = suppressed;
+        entity.UpdatedAt = now;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return ToAdminDto(entity, now);
+    }
+
+    public async Task<AdminStatusOutageWindowDto?> SetAnnotationAsync(
+        Guid windowId,
+        string? annotation,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var entity = await context
+            .Set<StatusOutageWindowEntity>()
+            .FirstOrDefaultAsync(e => e.Id == windowId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var now = _clock.UtcNow;
+        var trimmed = string.IsNullOrWhiteSpace(annotation) ? null : annotation.Trim();
+        entity.Annotation = trimmed is { Length: > 2000 } ? trimmed[..2000] : trimmed;
+        entity.UpdatedAt = now;
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return ToAdminDto(entity, now);
+    }
+
     public async Task PruneOlderThanAsync(TimeSpan retention, CancellationToken cancellationToken)
     {
         var cutoff = _clock.UtcNow - retention;
@@ -236,6 +311,30 @@ public sealed class StatusOutageWindowService
             IsOpen = entity.EndedAt is null,
             IsPartial = entity.IsPartial,
             DurationMinutes = Math.Round(duration, 1),
+            Annotation = entity.Annotation,
+        };
+    }
+
+    private static AdminStatusOutageWindowDto ToAdminDto(
+        StatusOutageWindowEntity entity,
+        DateTimeOffset now
+    )
+    {
+        var end = entity.EndedAt ?? now;
+        var duration = (end - entity.UnhealthySince).TotalMinutes;
+        return new AdminStatusOutageWindowDto
+        {
+            Id = entity.Id,
+            Scope = entity.Scope,
+            Group = entity.ComponentGroup,
+            InstanceId = entity.InstanceId,
+            DisplayName = entity.DisplayName,
+            StartedAt = entity.UnhealthySince,
+            EndedAt = entity.EndedAt,
+            IsOpen = entity.EndedAt is null,
+            IsPartial = entity.IsPartial,
+            DurationMinutes = Math.Round(duration, 1),
+            Suppressed = entity.Suppressed,
             Annotation = entity.Annotation,
         };
     }

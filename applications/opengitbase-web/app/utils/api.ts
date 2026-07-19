@@ -78,6 +78,21 @@ export interface CreateComputeNodeEnrollmentResult {
   expiresAt: string
 }
 
+export interface AdminStatusOutageWindowDto {
+  id: string
+  scope: number
+  group: number
+  instanceId?: string | null
+  displayName: string
+  startedAt: string
+  endedAt?: string | null
+  isOpen: boolean
+  isPartial: boolean
+  durationMinutes?: number | null
+  suppressed: boolean
+  annotation?: string | null
+}
+
 export interface BaseImageCatalogEntryDto {
   id: string
   slug: string
@@ -2854,6 +2869,20 @@ export function createApi(baseUrl: string) {
           }),
         resolveIncident: () =>
           request<null>('/admin/status/incident/resolve', { method: 'POST' }),
+        listWindows: () => request<AdminStatusOutageWindowDto[]>('/admin/status/windows'),
+        suppressWindow: (windowId: string) =>
+          request<AdminStatusOutageWindowDto>(`/admin/status/windows/${windowId}/suppress`, {
+            method: 'POST',
+          }),
+        unsuppressWindow: (windowId: string) =>
+          request<AdminStatusOutageWindowDto>(`/admin/status/windows/${windowId}/unsuppress`, {
+            method: 'POST',
+          }),
+        setWindowAnnotation: (windowId: string, annotation: string | null) =>
+          request<AdminStatusOutageWindowDto>(`/admin/status/windows/${windowId}/annotation`, {
+            method: 'PUT',
+            body: JSON.stringify({ annotation }),
+          }),
       },
     },
   }

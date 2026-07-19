@@ -82,4 +82,67 @@ public sealed class AdminStatusController : ControllerBase
         );
         return NoContent();
     }
+
+    [HttpGet("windows")]
+    [ProducesResponseType(typeof(List<AdminStatusOutageWindowDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<AdminStatusOutageWindowDto>>> GetWindows(
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new ListAdminStatusOutageWindowsQuery(),
+            cancellationToken
+        );
+        return Ok(result.Get());
+    }
+
+    [HttpPost("windows/{windowId:guid}/suppress")]
+    [ProducesResponseType(typeof(AdminStatusOutageWindowDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminStatusOutageWindowDto>> Suppress(
+        Guid windowId,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new SuppressStatusOutageWindowQuery { WindowId = windowId, Suppressed = true },
+            cancellationToken
+        );
+        return result.IsNone ? NotFound() : Ok(result.Get());
+    }
+
+    [HttpPost("windows/{windowId:guid}/unsuppress")]
+    [ProducesResponseType(typeof(AdminStatusOutageWindowDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminStatusOutageWindowDto>> Unsuppress(
+        Guid windowId,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new SuppressStatusOutageWindowQuery { WindowId = windowId, Suppressed = false },
+            cancellationToken
+        );
+        return result.IsNone ? NotFound() : Ok(result.Get());
+    }
+
+    [HttpPut("windows/{windowId:guid}/annotation")]
+    [ProducesResponseType(typeof(AdminStatusOutageWindowDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminStatusOutageWindowDto>> SetWindowAnnotation(
+        Guid windowId,
+        [FromBody] SetStatusOutageWindowAnnotationRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new SetStatusOutageWindowAnnotationQuery
+            {
+                WindowId = windowId,
+                Annotation = request.Annotation,
+            },
+            cancellationToken
+        );
+        return result.IsNone ? NotFound() : Ok(result.Get());
+    }
 }

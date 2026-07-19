@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AdminStatusOutageWindowDto } from '~/utils/api'
 import type { PublicStatusIncident } from '~/utils/publicStatus'
 
 definePageMeta({ middleware: 'admin' })
@@ -15,6 +16,10 @@ const message = ref('')
 const severity = ref<'Info' | 'Warning' | 'Outage'>('Warning')
 const activeIncident = ref<PublicStatusIncident | null>(null)
 
+const windows = ref<AdminStatusOutageWindowDto[]>([])
+const windowsError = ref<string | null>(null)
+const mutatingWindowId = ref<string | null>(null)
+
 async function refresh() {
   loading.value = true
   error.value = null
@@ -29,6 +34,60 @@ async function refresh() {
         : 'Info'
   }
   loading.value = false
+}
+
+async function refreshWindows() {
+  windowsError.value = null
+  const result = await api.admin.status.listWindows()
+  if (result.error) {
+    windowsError.value = result.error
+  }
+  else {
+    windows.value = result.data ?? []
+  }
+}
+
+async function suppressWindow(windowId: string) {
+  mutatingWindowId.value = windowId
+  const result = await api.admin.status.suppressWindow(windowId)
+  if (result.error) {
+    windowsError.value = result.error
+  }
+  else if (result.data) {
+    applyWindowUpdate(result.data)
+  }
+  mutatingWindowId.value = null
+}
+
+async function unsuppressWindow(windowId: string) {
+  mutatingWindowId.value = windowId
+  const result = await api.admin.status.unsuppressWindow(windowId)
+  if (result.error) {
+    windowsError.value = result.error
+  }
+  else if (result.data) {
+    applyWindowUpdate(result.data)
+  }
+  mutatingWindowId.value = null
+}
+
+async function saveWindowAnnotation(windowId: string, annotation: string | null) {
+  mutatingWindowId.value = windowId
+  const result = await api.admin.status.setWindowAnnotation(windowId, annotation)
+  if (result.error) {
+    windowsError.value = result.error
+  }
+  else if (result.data) {
+    applyWindowUpdate(result.data)
+  }
+  mutatingWindowId.value = null
+}
+
+function applyWindowUpdate(updated: AdminStatusOutageWindowDto) {
+  const index = windows.value.findIndex(window => window.id === updated.id)
+  if (index >= 0) {
+    windows.value[index] = updated
+  }
 }
 
 async function saveIncident() {
@@ -62,7 +121,10 @@ async function resolveIncident() {
   saving.value = false
 }
 
-onMounted(refresh)
+onMounted(() => {
+  void refresh()
+  void refreshWindows()
+})
 </script>
 
 <template>
@@ -162,5 +224,41 @@ onMounted(refresh)
         </div>
       </div>
     </UCard>
+
+    <div class="space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold">
+          {{ t('admin.status.windows.title') }}
+        </h2>
+        <UButton
+          to="/status"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          trailing-icon="i-lucide-external-link"
+        >
+          {{ t('admin.status.preview') }}
+        </UButton>
+      </div>
+      <p class="text-sm text-[var(--ogb-text-muted)]">
+        {{ t('admin.status.windows.description') }}
+      </p>
+
+      <UAlert
+        v-if="windowsError"
+        color="error"
+        variant="subtle"
+        :title="t('admin.status.windows.error')"
+        :description="windowsError"
+      />
+
+      <StatusAdminOutageWindowList
+        :windows="windows"
+        :mutating-id="mutatingWindowId"
+        @suppress="suppressWindow"
+        @unsuppress="unsuppressWindow"
+        @save-annotation="saveWindowAnnotation"
+      />
+    </div>
   </div>
 </template>

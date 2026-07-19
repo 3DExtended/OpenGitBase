@@ -833,7 +833,25 @@
       "save": "Publish banner",
       "resolve": "Resolve banner",
       "activeTitle": "Active incident",
-      "error": "Unable to update incident banner"
+      "error": "Unable to update incident banner",
+      "windows": {
+        "title": "Outage windows",
+        "description": "Suppress false positives and annotate planned work. Start and end times are not editable.",
+        "empty": "No outage windows recorded yet.",
+        "open": "Open",
+        "closed": "Closed",
+        "partial": "Partial",
+        "suppressed": "Suppressed",
+        "openSince": "Down since {start}",
+        "closedRange": "{start} \u2013 {end}",
+        "duration": "Duration: {minutes} min",
+        "suppress": "Suppress",
+        "unsuppress": "Unsuppress",
+        "annotationLabel": "Annotation (visible to visitors when set)",
+        "annotationPlaceholder": "e.g. Planned maintenance window",
+        "saveAnnotation": "Save annotation",
+        "error": "Unable to update outage window"
+      }
     },
     "replication": {
       "title": "Repository replication",
