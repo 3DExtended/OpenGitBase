@@ -88,6 +88,31 @@ public sealed class StatusOutageWindowService
             .ConfigureAwait(false);
     }
 
+    public async Task<List<PublicStatusOutageWindowDto>> ListPublicWindowsAsync(
+        int days,
+        CancellationToken cancellationToken
+    )
+    {
+        var clampedDays = Math.Clamp(days, 1, 90);
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var now = _clock.UtcNow;
+        var cutoff = now - TimeSpan.FromDays(clampedDays);
+
+        var candidates = await context
+            .Set<StatusOutageWindowEntity>()
+            .Where(e => e.BecamePublicAt != null && !e.Suppressed)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var rows = candidates
+            .Where(e => e.EndedAt is null || e.EndedAt >= cutoff)
+            .ToList();
+
+        return OrderForPublicHistory(rows, now);
+    }
+
     public async Task PruneOlderThanAsync(TimeSpan retention, CancellationToken cancellationToken)
     {
         var cutoff = _clock.UtcNow - retention;
@@ -134,6 +159,26 @@ public sealed class StatusOutageWindowService
             .OrderByDescending(e => e.UnhealthySince)
             .Select(e => ToDto(e, now))
             .ToList();
+    }
+
+    private static List<PublicStatusOutageWindowDto> OrderForPublicHistory(
+        List<StatusOutageWindowEntity> rows,
+        DateTimeOffset now
+    ) =>
+        rows
+            .OrderBy(e => HistoryCategoryOf(e))
+            .ThenByDescending(e => e.UnhealthySince)
+            .Select(e => ToDto(e, now))
+            .ToList();
+
+    private static int HistoryCategoryOf(StatusOutageWindowEntity entity)
+    {
+        if (entity.IsPartial)
+        {
+            return 2;
+        }
+
+        return entity.EndedAt is null ? 0 : 1;
     }
 
     private static OutageWindowRecord ToRecord(StatusOutageWindowEntity entity) =>

@@ -43,4 +43,18 @@ public sealed class PublicStatusController : ControllerBase
         );
         return Ok(result.Get());
     }
+
+    [HttpGet("windows")]
+    [ProducesResponseType(typeof(List<PublicStatusOutageWindowDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<PublicStatusOutageWindowDto>>> GetWindows(
+        [FromQuery] int days = 7,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetPublicStatusWindowsQuery { Days = days },
+            cancellationToken
+        );
+        return Ok(result.Get());
+    }
 }
