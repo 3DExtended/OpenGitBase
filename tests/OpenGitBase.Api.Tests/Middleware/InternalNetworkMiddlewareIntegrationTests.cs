@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenGitBase.Api.Middleware;
@@ -54,6 +55,17 @@ public class InternalNetworkMiddlewareIntegrationTests
     }
 
     [Fact]
+    public async Task E2ePath_ExternalClient_WhenCaptureEmailEnabled_AllowsRequest()
+    {
+        var response = await SendAsync(
+            "/internal/e2e/emails",
+            "203.0.113.10",
+            captureEmail: true);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task UnrestrictedPath_ExternalClientForwardedByTrustedProxy_AllowsRequest()
     {
         var response = await SendAsync("/public/ping", "203.0.113.10");
@@ -61,9 +73,12 @@ public class InternalNetworkMiddlewareIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    private static async Task<HttpResponseMessage> SendAsync(string path, string forwardedFor)
+    private static async Task<HttpResponseMessage> SendAsync(
+        string path,
+        string forwardedFor,
+        bool captureEmail = false)
     {
-        var host = await CreateHostAsync();
+        var host = await CreateHostAsync(captureEmail);
         try
         {
             var client = host.GetTestClient();
@@ -76,9 +91,16 @@ public class InternalNetworkMiddlewareIntegrationTests
         }
     }
 
-    private static Task<IHost> CreateHostAsync()
+    private static Task<IHost> CreateHostAsync(bool captureEmail = false)
     {
         return new HostBuilder()
+            .ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["E2E:CaptureEmail"] = captureEmail ? "true" : "false",
+                });
+            })
             .ConfigureWebHost(webBuilder =>
             {
                 webBuilder
