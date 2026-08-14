@@ -10,6 +10,11 @@ namespace OpenGitBase.Features.Pipeline.Services;
 
 public sealed class GitPushOutboxDrainService
 {
+    // A poison row (e.g. a repository that was deleted after the push landed) would
+    // otherwise retry forever every 2 seconds with only a log line. After this many
+    // consecutive failures it's dead-lettered instead, for operator inspection.
+    public const int MaxAttempts = 10;
+
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IGitPushEventPublisher _publisher;
@@ -63,10 +68,30 @@ public sealed class GitPushOutboxDrainService
             }
             catch (Exception ex)
             {
+                row.AttemptCount++;
+                row.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+
+                if (row.AttemptCount >= MaxAttempts)
+                {
+                    row.Status = GitPushOutboxStatus.DeadLettered;
+                    row.ProcessedAt = DateTimeOffset.UtcNow;
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    _logger.LogError(
+                        ex,
+                        "Scheduling outbox {OutboxId} failed {AttemptCount} times; dead-lettering.",
+                        row.Id,
+                        row.AttemptCount
+                    );
+                    continue;
+                }
+
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 _logger.LogWarning(
                     ex,
-                    "Scheduling outbox {OutboxId} failed; leaving Pending for retry.",
-                    row.Id
+                    "Scheduling outbox {OutboxId} failed (attempt {AttemptCount}/{MaxAttempts}); leaving Pending for retry.",
+                    row.Id,
+                    row.AttemptCount,
+                    MaxAttempts
                 );
                 continue;
             }

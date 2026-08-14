@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.Services;
@@ -9,17 +11,32 @@ namespace OpenGitBase.Api.Services;
 public sealed class DependencyLayerPromotionWorker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<DependencyLayerPromotionWorker> _logger;
 
-    public DependencyLayerPromotionWorker(IServiceProvider serviceProvider)
+    public DependencyLayerPromotionWorker(
+        IServiceProvider serviceProvider,
+        ILogger<DependencyLayerPromotionWorker> logger
+    )
     {
         _serviceProvider = serviceProvider;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await ProcessQueuedPromotionsAsync(stoppingToken).ConfigureAwait(false);
+            try
+            {
+                await ProcessQueuedPromotionsAsync(stoppingToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // An unhandled exception here would otherwise crash the whole API process.
+                // Log and retry next tick instead.
+                _logger.LogError(ex, "Dependency layer promotion cycle failed.");
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
         }
     }
@@ -33,6 +50,45 @@ public sealed class DependencyLayerPromotionWorker : BackgroundService
         var publisher = scope.ServiceProvider.GetRequiredService<IJobAvailableEventPublisher>();
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        // Serialize across API replicas: without this, two replicas can both pick up the
+        // same queued promotion request and each create a duplicate pipeline run/job for it.
+        if (
+            !await PostgresAdvisoryLockService
+                .TryAcquireAsync(
+                    context,
+                    BackgroundWorkerAdvisoryLocks.DependencyLayerPromotionWorker,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            return;
+        }
+
+        try
+        {
+            await ProcessQueuedPromotionsCoreAsync(context, publisher, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await PostgresAdvisoryLockService
+                .ReleaseAsync(
+                    context,
+                    BackgroundWorkerAdvisoryLocks.DependencyLayerPromotionWorker,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task ProcessQueuedPromotionsCoreAsync(
+        OpenGitBaseDbContext context,
+        IJobAvailableEventPublisher publisher,
+        CancellationToken cancellationToken
+    )
+    {
         var queued = await context
             .Set<DependencyPromotionRequestEntity>()
             .Where(entity => entity.Status == DependencyPromotionRequestStatus.Queued)

@@ -66,21 +66,31 @@ public sealed class ComputeAgentWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!_registered)
+            try
             {
-                _registered = await RegisterAsync(client, stoppingToken).ConfigureAwait(false);
                 if (!_registered)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
-                    continue;
+                    _registered = await RegisterAsync(client, stoppingToken).ConfigureAwait(false);
+                    if (!_registered)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    ApplyNodeIdentity(client);
                 }
 
-                ApplyNodeIdentity(client);
+                await SendHeartbeatAsync(client, stoppingToken).ConfigureAwait(false);
+                await TryClaimJobAsync(client, stoppingToken).ConfigureAwait(false);
+                await WaitForClaimWakeAsync(stoppingToken).ConfigureAwait(false);
             }
-
-            await SendHeartbeatAsync(client, stoppingToken).ConfigureAwait(false);
-            await TryClaimJobAsync(client, stoppingToken).ConfigureAwait(false);
-            await WaitForClaimWakeAsync(stoppingToken).ConfigureAwait(false);
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A transient failure here (e.g. a brief network blip talking to the API)
+                // would otherwise crash the whole compute agent process. Log and retry.
+                _logger.LogWarning(ex, "Compute agent register/heartbeat/claim cycle failed.");
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+            }
         }
 
         if (kafkaWakeLoop is not null)

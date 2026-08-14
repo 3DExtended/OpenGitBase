@@ -40,12 +40,21 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
 
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
-            var heartbeatStatus = await _client
-                .HeartbeatAsync(instanceId, stoppingToken)
-                .ConfigureAwait(false);
-            if (!IsSuccess(heartbeatStatus))
+            try
             {
-                await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
+                var heartbeatStatus = await _client
+                    .HeartbeatAsync(instanceId, stoppingToken)
+                    .ConfigureAwait(false);
+                if (!IsSuccess(heartbeatStatus))
+                {
+                    await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A transient failure here (e.g. the API being briefly unreachable) would
+                // otherwise crash the whole Dispatcher process. Log and retry next tick.
+                _logger.LogWarning(ex, "Fleet component heartbeat cycle failed for dispatcher {InstanceId}", instanceId);
             }
         }
     }

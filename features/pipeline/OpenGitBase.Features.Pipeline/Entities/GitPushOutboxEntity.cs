@@ -17,4 +17,8 @@ public sealed class GitPushOutboxEntity : IIdentifiableEntity<Guid>
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? ProcessedAt { get; set; }
+
+    public int AttemptCount { get; set; }
+
+    public string? LastError { get; set; }
 }

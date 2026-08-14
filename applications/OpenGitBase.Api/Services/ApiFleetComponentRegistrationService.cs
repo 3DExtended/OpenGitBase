@@ -48,7 +48,16 @@ public sealed class ApiFleetComponentRegistrationService : BackgroundService
 
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
-            await SendHeartbeatAsync(instanceId, stoppingToken).ConfigureAwait(false);
+            try
+            {
+                await SendHeartbeatAsync(instanceId, stoppingToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A transient failure here (e.g. a brief DB hiccup) would otherwise crash
+                // the whole API process. Log and retry next tick instead.
+                _logger.LogError(ex, "Fleet component heartbeat cycle failed for {InstanceId}", instanceId);
+            }
         }
     }
 

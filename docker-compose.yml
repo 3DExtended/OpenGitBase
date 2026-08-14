@@ -169,6 +169,16 @@ services:
       default:
         aliases:
           - api-lb
+    healthcheck:
+      # No curl/wget in the haproxy image - use bash's /dev/tcp to make a real HTTP
+      # request against haproxy's own monitor-uri (answered by haproxy itself, no
+      # backend involved), so a wedged haproxy process is detected even though the
+      # TCP port would still accept connections.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /haproxy-health HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   storage-1:
     <<: *storage-common

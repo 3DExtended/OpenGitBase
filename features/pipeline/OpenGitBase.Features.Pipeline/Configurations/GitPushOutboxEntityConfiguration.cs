@@ -12,6 +12,7 @@ public sealed class GitPushOutboxEntityConfiguration : IEntityTypeConfiguration<
         builder.HasKey(entity => entity.Id);
         builder.Property(entity => entity.Ref).HasMaxLength(256).IsRequired();
         builder.Property(entity => entity.AfterSha).HasMaxLength(64).IsRequired();
+        builder.Property(entity => entity.LastError).HasMaxLength(2000);
         builder.HasIndex(entity => new { entity.RepositoryId, entity.AfterSha }).IsUnique();
         builder.HasIndex(entity => new { entity.Status, entity.CreatedAt });
     }

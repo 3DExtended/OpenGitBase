@@ -43,39 +43,52 @@ public sealed class HaStorageBackgroundService : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var now = DateTimeOffset.UtcNow;
-            try
+
+            // Each sub-job is isolated behind its own try/catch and advances its own "due"
+            // timestamp before running. A failure in one (e.g. one repo's promotion throwing)
+            // must not starve the other three, which a single shared catch around all four did.
+            if (now >= failoverDue)
             {
-                if (now >= failoverDue)
-                {
-                    await RunFailoverAsync(stoppingToken).ConfigureAwait(false);
-                    failoverDue = now.AddSeconds(_options.FailoverIntervalSeconds);
-                }
-
-                if (now >= backfillDue)
-                {
-                    await RunRf1BackfillAsync(stoppingToken).ConfigureAwait(false);
-                    await RunRf4BackfillAsync(stoppingToken).ConfigureAwait(false);
-                    backfillDue = now.AddSeconds(_options.BackfillIntervalSeconds);
-                }
-
-                if (now >= rebalanceDue)
-                {
-                    await RunRebalanceAsync(stoppingToken).ConfigureAwait(false);
-                    rebalanceDue = now.AddSeconds(_options.RebalanceIntervalSeconds);
-                }
-
-                if (now >= reconcileDue)
-                {
-                    await RunReconcilerAsync(stoppingToken).ConfigureAwait(false);
-                    reconcileDue = now.AddSeconds(_options.ReconcilerIntervalSeconds);
-                }
+                failoverDue = now.AddSeconds(_options.FailoverIntervalSeconds);
+                await RunCycleAsync("failover", RunFailoverAsync, stoppingToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+
+            if (now >= backfillDue)
             {
-                _logger.LogError(ex, "HA storage background cycle failed.");
+                backfillDue = now.AddSeconds(_options.BackfillIntervalSeconds);
+                await RunCycleAsync("rf1-backfill", RunRf1BackfillAsync, stoppingToken).ConfigureAwait(false);
+                await RunCycleAsync("rf4-backfill", RunRf4BackfillAsync, stoppingToken).ConfigureAwait(false);
+            }
+
+            if (now >= rebalanceDue)
+            {
+                rebalanceDue = now.AddSeconds(_options.RebalanceIntervalSeconds);
+                await RunCycleAsync("rebalance", RunRebalanceAsync, stoppingToken).ConfigureAwait(false);
+            }
+
+            if (now >= reconcileDue)
+            {
+                reconcileDue = now.AddSeconds(_options.ReconcilerIntervalSeconds);
+                await RunCycleAsync("reconcile", RunReconcilerAsync, stoppingToken).ConfigureAwait(false);
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunCycleAsync(
+        string cycleName,
+        Func<CancellationToken, Task> cycle,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await cycle(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "HA storage {Cycle} cycle failed.", cycleName);
         }
     }
 

@@ -1,7 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 
-namespace OpenGitBase.Features.Status.Services;
+namespace OpenGitBase.Common.Services;
 
 public static class PostgresAdvisoryLockService
 {
