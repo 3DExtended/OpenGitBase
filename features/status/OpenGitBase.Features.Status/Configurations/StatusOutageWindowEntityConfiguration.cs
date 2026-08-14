@@ -25,6 +25,22 @@ public class StatusOutageWindowEntityConfiguration
             })
             .HasDatabaseName("IX_StatusOutageWindow_ActiveKey");
 
+        // Enforce at most one open/tracking window per key. OutageWindowDetector.Apply
+        // assumes this invariant when it dictionary-keys existing open windows; without it,
+        // a race between concurrent aggregation cycles can insert duplicates that then make
+        // every future cycle throw and the status snapshot never advances again.
+        builder
+            .HasIndex(entity => new { entity.Scope, entity.ComponentGroup, entity.InstanceId })
+            .IsUnique()
+            .HasFilter("\"EndedAt\" IS NULL AND \"InstanceId\" IS NOT NULL")
+            .HasDatabaseName("IX_StatusOutageWindow_ActiveKey_Instance_Unique");
+
+        builder
+            .HasIndex(entity => new { entity.Scope, entity.ComponentGroup })
+            .IsUnique()
+            .HasFilter("\"EndedAt\" IS NULL AND \"InstanceId\" IS NULL")
+            .HasDatabaseName("IX_StatusOutageWindow_ActiveKey_Group_Unique");
+
         builder
             .HasIndex(entity => entity.UnhealthySince)
             .HasDatabaseName("IX_StatusOutageWindow_UnhealthySince");
