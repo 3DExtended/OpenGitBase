@@ -362,6 +362,11 @@ services:
     container_name: opengitbase_kafka_1
     hostname: kafka-1
     restart: unless-stopped
+    # Give the KRaft controller time to flush its metadata log and step down cleanly on
+    # SIGTERM. The default 10s grace period isn't always enough, and a killed-mid-write
+    # broker can diverge from its peers' __cluster_metadata log, causing a permanent
+    # Raft split-vote deadlock across all three brokers after restart.
+    stop_grace_period: 30s
     depends_on:
       kafka-vol-init:
         condition: service_completed_successfully
@@ -384,6 +389,7 @@ services:
     container_name: opengitbase_kafka_2
     hostname: kafka-2
     restart: unless-stopped
+    stop_grace_period: 30s
     depends_on:
       kafka-vol-init:
         condition: service_completed_successfully
@@ -402,6 +408,7 @@ services:
     container_name: opengitbase_kafka_3
     hostname: kafka-3
     restart: unless-stopped
+    stop_grace_period: 30s
     depends_on:
       kafka-vol-init:
         condition: service_completed_successfully
