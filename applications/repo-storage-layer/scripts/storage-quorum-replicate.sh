@@ -75,14 +75,20 @@ if [ "${REPLICATION_STATE}" = "Rf4Healthy" ]; then
   KEY_HEX="$(python3 -c 'import base64,sys; print(base64.b64decode(sys.argv[1]).hex())' "${KEY_BASE64}")"
 
   BUNDLE_FILE="$(mktemp)"
+  ARTIFACT_FILE="$(mktemp)"
   cleanup() {
-    rm -f "${BUNDLE_FILE}"
+    rm -f "${BUNDLE_FILE}" "${ARTIFACT_FILE}"
   }
   trap cleanup EXIT
 
   git -C "${PHYSICAL_PATH}" bundle create "${BUNDLE_FILE}" --all
-  ARTIFACT_JSON="$(python3 /usr/local/bin/storage_artifact_crypto.py encrypt \
-    "${BUNDLE_FILE}" "${KEY_HEX}" "${REPO_ID}" "${NEW_WATERMARK}" "${REPLICATION_EPOCH}" "${KEY_VERSION}")"
+  # The artifact JSON embeds the full hex-encoded encrypted bundle. Write it to a
+  # file instead of a shell variable: passing it as a command-line argument
+  # exceeds the kernel's per-argument limit (Linux MAX_ARG_STRLEN, 128 KiB) for
+  # any non-trivial repository and aborts with "Argument list too long".
+  python3 /usr/local/bin/storage_artifact_crypto.py encrypt \
+    "${BUNDLE_FILE}" "${KEY_HEX}" "${REPO_ID}" "${NEW_WATERMARK}" "${REPLICATION_EPOCH}" "${KEY_VERSION}" \
+    > "${ARTIFACT_FILE}"
 
   ENCRYPTED_TARGET="$(python3 - <<'PY' "${CONTEXT}"
 import json
@@ -103,12 +109,13 @@ PY
   TARGET_PORT="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("internalHttpPort", 8081))' <<< "${ENCRYPTED_TARGET}")"
   TARGET_NODE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("storageNodeId", ""))' <<< "${ENCRYPTED_TARGET}")"
 
-  python3 - <<'PY' "${ARTIFACT_JSON}" "${API_URL}" "${REPO_ID}" "${NEW_WATERMARK}" "${TOKEN}" "${TARGET_HOST}" "${TARGET_PORT}"
+  python3 - <<'PY' "${ARTIFACT_FILE}" "${API_URL}" "${REPO_ID}" "${NEW_WATERMARK}" "${TOKEN}" "${TARGET_HOST}" "${TARGET_PORT}"
 import json
 import sys
 import urllib.request
 
-artifact = json.loads(sys.argv[1])
+with open(sys.argv[1], "r", encoding="utf-8") as artifact_file:
+    artifact = json.load(artifact_file)
 api_url = sys.argv[2]
 repo_id = sys.argv[3]
 watermark = sys.argv[4]
