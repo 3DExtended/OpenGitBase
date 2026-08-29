@@ -30,11 +30,13 @@ COPY storage_artifact_crypto.py /usr/local/bin/storage_artifact_crypto.py
 COPY storage-pre-receive.sh /usr/local/bin/storage-pre-receive.sh
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
 COPY scripts/storage-quorum-replicate.sh /usr/local/bin/storage-quorum-replicate.sh
+COPY scripts/storage-replication-heal.sh /usr/local/bin/storage-replication-heal.sh
 COPY nginx-git-http.conf /etc/opengitbase/nginx-git-http.conf
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh \
     /usr/local/bin/storage-http-server.py /usr/local/bin/storage-git-http.sh \
     /usr/local/bin/storage-pre-receive.sh \
     /usr/local/bin/storage-quorum-replicate.sh \
+    /usr/local/bin/storage-replication-heal.sh \
     /usr/local/bin/storage_artifact_crypto.py
 
 EXPOSE 22 8081 8082 8443
