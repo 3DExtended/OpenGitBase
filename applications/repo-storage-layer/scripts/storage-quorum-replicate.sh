@@ -105,11 +105,13 @@ if not peers:
 print(json.dumps(peers[0]))
 PY
 )"
-  TARGET_HOST="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("internalHost", ""))' <<< "${ENCRYPTED_TARGET}")"
-  TARGET_PORT="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("internalHttpPort", 8081))' <<< "${ENCRYPTED_TARGET}")"
   TARGET_NODE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("storageNodeId", ""))' <<< "${ENCRYPTED_TARGET}")"
 
-  python3 - <<'PY' "${ARTIFACT_FILE}" "${API_URL}" "${REPO_ID}" "${NEW_WATERMARK}" "${TOKEN}" "${TARGET_HOST}" "${TARGET_PORT}"
+  # Relay the artifact through the control-plane API rather than pushing it
+  # node-to-node. Storage nodes hold per-node API tokens and cannot authenticate
+  # to one another's internal HTTP endpoints; the API knows every node's token
+  # and performs the upload to the target encrypted replica on our behalf.
+  python3 - <<'PY' "${ARTIFACT_FILE}" "${API_URL}" "${REPO_ID}" "${NEW_WATERMARK}" "${TOKEN}" "${TARGET_NODE_ID}" "${NODE_ID}" "${CERT_THUMBPRINT}"
 import json
 import sys
 import urllib.request
@@ -120,27 +122,32 @@ api_url = sys.argv[2]
 repo_id = sys.argv[3]
 watermark = sys.argv[4]
 token = sys.argv[5]
-target_host = sys.argv[6]
-target_port = sys.argv[7]
+target_node_id = sys.argv[6]
+node_id = sys.argv[7]
+cert_thumbprint = sys.argv[8]
 
 payload = json.dumps(
     {
+        "targetStorageNodeId": target_node_id,
+        "watermark": int(watermark),
         "manifest": artifact["manifest"],
         "bundleBase64": artifact["bundleHex"],
     }
 ).encode("utf-8")
 request = urllib.request.Request(
-    f"http://{target_host}:{target_port}/internal/repos/{repo_id}/artifacts/{watermark}",
+    f"{api_url}/api/v1/storage-nodes/repositories/{repo_id}/replicate-artifact",
     data=payload,
-    method="PUT",
+    method="POST",
     headers={
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
+        "X-Storage-Node-Id": node_id,
+        "X-Storage-Node-Certificate-Thumbprint": cert_thumbprint,
     },
 )
 with urllib.request.urlopen(request, timeout=300) as response:
     if response.status not in (200, 201):
-        raise RuntimeError(f"artifact upload failed with status {response.status}")
+        raise RuntimeError(f"artifact relay failed with status {response.status}")
 PY
 
   CONFIRMED_ENCRYPTED_JSON="[\"${TARGET_NODE_ID}\"]"

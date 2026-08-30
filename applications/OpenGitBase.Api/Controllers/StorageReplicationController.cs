@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OpenGitBase.Api.Models;
@@ -137,6 +138,72 @@ public sealed class StorageReplicationController : ControllerBase
                 PrimaryWatermark = result.Get().PrimaryWatermark,
             }
         );
+    }
+
+    [HttpPost("{repositoryId:guid}/replicate-artifact")]
+    [ProducesResponseType(typeof(RelayReplicationArtifactResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<RelayReplicationArtifactResult>> ReplicateArtifact(
+        Guid repositoryId,
+        [FromBody] ReplicateArtifactRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var storageNodeId = await AuthenticateStorageNodeAsync(cancellationToken).ConfigureAwait(false);
+        if (storageNodeId is null)
+        {
+            return Unauthorized();
+        }
+
+        byte[] bundlePayload;
+        try
+        {
+            bundlePayload = Convert.FromHexString(request.BundleBase64);
+        }
+        catch (FormatException)
+        {
+            return BadRequest(
+                RelayReplicationArtifactResult.Failed(400, "bundleBase64 must be hexadecimal.")
+            );
+        }
+
+        var manifestJson =
+            request.Manifest.ValueKind == JsonValueKind.Undefined
+                ? "{}"
+                : request.Manifest.GetRawText();
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new RelayReplicationArtifactQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                    StorageNodeId = storageNodeId,
+                    TargetStorageNodeId = request.TargetStorageNodeId,
+                    Watermark = request.Watermark,
+                    ManifestJson = manifestJson,
+                    BundlePayload = bundlePayload,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (result.IsNone)
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                RelayReplicationArtifactResult.Failed(502, "Artifact relay failed.")
+            );
+        }
+
+        var relay = result.Get();
+        if (!relay.Success)
+        {
+            return StatusCode(relay.StatusCode == 0 ? 502 : relay.StatusCode, relay);
+        }
+
+        return Ok(relay);
     }
 
     private async Task<StorageNodeId?> AuthenticateStorageNodeAsync(CancellationToken cancellationToken)

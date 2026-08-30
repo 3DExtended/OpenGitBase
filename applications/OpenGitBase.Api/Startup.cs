@@ -402,6 +402,13 @@ public class Startup
             QuorumReplicateRepositoryQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<
+                RelayReplicationArtifactQuery,
+                RelayReplicationArtifactResult
+            >,
+            RelayReplicationArtifactQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<ApplyRepositoryWatermarksQuery, ApplyRepositoryWatermarksResult>,
             ApplyRepositoryWatermarksQueryHandler
         >();
