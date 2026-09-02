@@ -40,6 +40,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/storage-agent.sh \
     /usr/local/bin/storage_artifact_crypto.py
 
 EXPOSE 22 8081 8082 8443
-VOLUME ["/home/git/.ssh", "/srv/git"]
+# /var/lib/opengitbase holds the encrypted-replica artifact store and replication
+# watermarks. It must persist across container recreation so an encrypted replica
+# does not lose its only copy of the data on a rolling deploy (ticket #227).
+VOLUME ["/home/git/.ssh", "/srv/git", "/var/lib/opengitbase"]
 
 CMD ["/usr/local/bin/entrypoint.sh"]

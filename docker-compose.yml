@@ -194,6 +194,7 @@ services:
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage1_repos:/srv/git
+      - opengitbase_storage1_data:/var/lib/opengitbase
       - ./docker/pki/storage-1.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-1.key:/etc/opengitbase/node.key:ro
       - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
@@ -212,6 +213,7 @@ services:
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage2_repos:/srv/git
+      - opengitbase_storage2_data:/var/lib/opengitbase
       - ./docker/pki/storage-2.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-2.key:/etc/opengitbase/node.key:ro
       - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
@@ -230,6 +232,7 @@ services:
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage3_repos:/srv/git
+      - opengitbase_storage3_data:/var/lib/opengitbase
       - ./docker/pki/storage-3.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-3.key:/etc/opengitbase/node.key:ro
       - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
@@ -248,6 +251,7 @@ services:
       DISPATCHER_SSH_PUBLIC_KEY: ""
     volumes:
       - opengitbase_storage4_repos:/srv/git
+      - opengitbase_storage4_data:/var/lib/opengitbase
       - ./docker/pki/storage-4.crt:/etc/opengitbase/node.crt:ro
       - ./docker/pki/storage-4.key:/etc/opengitbase/node.key:ro
       - ./docker/pki/ca.crt:/etc/opengitbase/ca.crt:ro
@@ -559,3 +563,10 @@ volumes:
   opengitbase_storage2_repos:
   opengitbase_storage3_repos:
   opengitbase_storage4_repos:
+  # Encrypted-replica artifact store + replication watermarks (/var/lib/opengitbase).
+  # Must persist across container recreation so encrypted replicas do not lose their
+  # only copy of the data on every rolling deploy (see ticket #227).
+  opengitbase_storage1_data:
+  opengitbase_storage2_data:
+  opengitbase_storage3_data:
+  opengitbase_storage4_data:
