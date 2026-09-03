@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;font-family:'Inter',ui-sans-serif,system-ui,sans-serif;background:#fafafa;color:#18181b;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+.wrap{width:1280px;min-height:100%;background:#fafafa;overflow:hidden}
+.topbar{height:56px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:20px;padding:0 24px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+.nav{display:flex;gap:22px;color:#71717a;font-size:14px}.nav .on{color:#18181b;font-weight:500}
+.spacer{flex:1}.tr{display:flex;align-items:center;gap:16px;color:#71717a}
+.usermenu{display:flex;align-items:center;gap:6px;color:#18181b}
+.body{display:flex;align-items:stretch}
+.side{width:256px;background:#fff;border-right:1px solid #e4e4e7;padding:14px 12px;display:flex;flex-direction:column;gap:1px;flex:none}
+.side .cap{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#a1a1aa;font-weight:600;margin:16px 8px 6px}
+.side .sub{font-size:12px;color:#71717a;padding:2px 8px;margin-bottom:6px}
+.ni{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:#18181b;font-size:14px}
+.ni.on{background:#f4f4f5;font-weight:500}
+.grow{flex:1}.ver{font-size:11px;color:#a1a1aa;padding:8px;line-height:1.35}
+.main{flex:1;padding:32px 40px;min-width:0}
+.foot{height:57px;border-top:1px solid #e4e4e7;display:flex;align-items:center;justify-content:space-between;padding:0 24px;color:#71717a;font-size:13px;background:#fafafa}
+.foot a{margin-left:20px}
+.h1{font-size:26px;font-weight:700;margin:0}.h2{font-size:18px;font-weight:600;margin:0 0 2px}
+.sub{color:#71717a;font-size:14px;margin:6px 0 0}.crumb{color:#71717a;font-size:13px}.muted{color:#71717a}
+.card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;margin-bottom:20px}
+.card .ch{padding:15px 20px;border-bottom:1px solid #e4e4e7;font-weight:600;font-size:15px;display:flex;align-items:center;justify-content:space-between}
+.card .cb{padding:20px}
+.bd{display:inline-flex;align-items:center;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:600;line-height:1.5}
+.btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 15px;border-radius:8px;font-size:14px;font-weight:500;border:1px solid transparent;white-space:nowrap}
+.btn.pri{background:#0d9488;color:#fff}.btn.soft{background:#ccfbf1;color:#0f766e}
+.btn.out{background:#fff;border-color:#d4d4d8;color:#18181b}.btn.dng{background:#fee2e2;color:#dc2626}
+.btn.sm{height:30px;padding:0 11px;font-size:13px}.btn.wide{width:100%;justify-content:center}
+.field{margin-bottom:16px}.lb{display:block;font-size:14px;margin-bottom:6px}.req{color:#dc2626}
+.inp{width:100%;height:38px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:0 12px;color:#a1a1aa;font-size:14px;display:flex;align-items:center}
+.inp.ta{height:auto;min-height:88px;padding:10px 12px;align-items:flex-start}
+.sel{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;height:38px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:0 12px;font-size:14px}
+.banner{border-radius:12px;padding:13px 18px;font-size:14px;margin-bottom:20px}
+.hero{border:1px solid #e4e4e7;border-radius:16px;padding:40px 44px;background:linear-gradient(135deg,#effefb 0%,#fafafa 60%);margin-bottom:30px}
+.repocard{border:1px solid #e4e4e7;border-radius:12px;padding:18px 20px;background:#fff}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.rowb{display:flex;align-items:center;justify-content:space-between}
+.tabs{display:flex;background:#f4f4f5;border-radius:10px;padding:4px;gap:4px;max-width:660px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:8px;font-size:14px;color:#71717a}
+.tab.on{background:#0d9488;color:#fff;font-weight:500}
+.chk{width:16px;height:16px;border:1.5px solid #d4d4d8;border-radius:4px;display:inline-block;vertical-align:-3px;margin-right:8px}
+.bar{height:8px;border-radius:5px;background:#e4e4e7;overflow:hidden}.bar>i{display:block;height:100%;background:#0d9488}
+.auth{max-width:420px;margin:0 auto}
+.kv{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #e4e4e7}
+.divider{height:1px;background:#e4e4e7;margin:8px 0}
+.slabel{font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:.04em;margin:2px 0 10px}
+.diff{border:1px solid #e4e4e7;border-radius:10px;overflow:hidden;font-family:'JetBrains Mono',monospace;font-size:13px}
+.diff .fh{background:#fafafa;padding:8px 14px;color:#71717a}
+.diff .ln{display:flex}.diff .g{width:44px;text-align:right;padding:2px 10px;color:#a1a1aa;background:#fbfbfb;border-right:1px solid #e4e4e7}
+.diff .t{padding:2px 12px;flex:1}
+</style>
+</helmet>
+<div class="wrap">
+<div class="topbar"><span style="color:#71717a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></span><div class="brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2"/><path d="M18 11.4c0 3-2.5 3.6-5.5 4.2C10 16 8.4 16.6 8.4 18"/></svg> OpenGitBase</div><nav class="nav"><span class="">Home</span><span class="">Explore</span><span class="">Docs</span><span class="">Community</span><span class="">System status</span></nav><div class="spacer"></div><div class="tr"><span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg></span><span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="usermenu">demo-user <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 9l6 6 6-6"/></svg></span></div></div><div class="body"><aside class="side"><div class="cap" style="margin-top:2px">Account settings</div><div class="ni on "><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg> <span>Profile</span></div><div class="ni  "><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="7.5" cy="15.5" r="4"/><path d="M10.5 12.5L20 3M16 7l3 3M14 9l2 2"/></svg> <span>Access tokens</span></div><div class="grow"></div><div class="ver">v1.0.0<br>wireframe-mock</div></aside><div class="main">
+<div class="slabel">Profile — /settings</div>
+<div class="rowb" style="align-items:flex-start;margin-bottom:24px"><div><h1 class="h1">Account settings</h1><p class="sub">Manage your profile, security, and SSH keys.</p></div></div>
+<div class="card"><div class="ch"><span>Profile</span></div><div class="cb"><div class="kv"><span class="muted">Username</span><b>demo-user</b></div><div class="kv" style="border:none"><span class="muted">Email status</span><span class="bd" style="background:#dcfce7;color:#15803d">Verified</span></div><div style="margin-top:12px"><span class="btn soft sm">Access tokens</span></div><p class="muted" style="font-size:13px;margin:12px 0 0">This instance uses HTTPS and personal access tokens for Git.</p></div></div>
+<div class="card"><div class="ch"><span>Change password</span></div><div class="cb"><div class="field"><label class="lb">Current password <span class="req">*</span></label><div class="inp" style="max-width:340px"></div></div><div class="field"><label class="lb">New password <span class="req">*</span></label><div class="inp" style="max-width:340px"></div></div><span class="btn pri">Update password</span></div></div>
+<div class="card"><div class="ch"><span><span style="color:#dc2626">Delete account</span></span></div><div class="cb"><p class="muted" style="margin:0 0 14px">Permanently delete your account and all associated data. This cannot be undone.</p><span class="btn dng">Delete account</span></div></div>
+<div class="slabel" style="margin-top:24px">Access tokens — /settings/access-tokens</div>
+<div class="card"><div class="ch"><span>New token</span></div><div class="cb"><div class="field"><label class="lb">Token name <span class="req">*</span></label><div class="inp" style="max-width:340px"></div></div><label class="lb">Scope</label><span class="sel" style="min-width:240px">Read (clone, fetch, pull) <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M6 9l6 6 6-6"/></svg></span><div style="margin:14px 0"><span class="chk"></span>Never expires</div><span class="btn pri">Create token</span></div></div>
+<div class="slabel" style="margin-top:12px">SSH keys — /settings/ssh-keys (when SSH enabled)</div>
+<div class="card"><div class="ch"><span>Add SSH key</span></div><div class="cb"><div class="field"><label class="lb">Title <span class="req">*</span></label><div class="inp" style="max-width:340px"></div></div><label class="lb">Public key</label><div class="inp ta mono" style="color:#a1a1aa">ssh-ed25519 AAAA…</div><div style="margin-top:14px"><span class="btn pri">Add key</span></div></div></div>
+</div></div><div class="foot"><span>OpenGitBase — self-hosted Git forge</span><span><a>Documentation</a><a>System status</a></span></div></div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body>
+</html>

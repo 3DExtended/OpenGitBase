@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;font-family:'Inter',ui-sans-serif,system-ui,sans-serif;background:#fafafa;color:#18181b;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+.wrap{width:1280px;min-height:100%;background:#fafafa;overflow:hidden}
+.topbar{height:56px;background:#fff;border-bottom:1px solid #e4e4e7;display:flex;align-items:center;gap:20px;padding:0 24px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+.nav{display:flex;gap:22px;color:#71717a;font-size:14px}.nav .on{color:#18181b;font-weight:500}
+.spacer{flex:1}.tr{display:flex;align-items:center;gap:16px;color:#71717a}
+.usermenu{display:flex;align-items:center;gap:6px;color:#18181b}
+.body{display:flex;align-items:stretch}
+.side{width:256px;background:#fff;border-right:1px solid #e4e4e7;padding:14px 12px;display:flex;flex-direction:column;gap:1px;flex:none}
+.side .cap{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#a1a1aa;font-weight:600;margin:16px 8px 6px}
+.side .sub{font-size:12px;color:#71717a;padding:2px 8px;margin-bottom:6px}
+.ni{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:#18181b;font-size:14px}
+.ni.on{background:#f4f4f5;font-weight:500}
+.grow{flex:1}.ver{font-size:11px;color:#a1a1aa;padding:8px;line-height:1.35}
+.main{flex:1;padding:32px 40px;min-width:0}
+.foot{height:57px;border-top:1px solid #e4e4e7;display:flex;align-items:center;justify-content:space-between;padding:0 24px;color:#71717a;font-size:13px;background:#fafafa}
+.foot a{margin-left:20px}
+.h1{font-size:26px;font-weight:700;margin:0}.h2{font-size:18px;font-weight:600;margin:0 0 2px}
+.sub{color:#71717a;font-size:14px;margin:6px 0 0}.crumb{color:#71717a;font-size:13px}.muted{color:#71717a}
+.card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;margin-bottom:20px}
+.card .ch{padding:15px 20px;border-bottom:1px solid #e4e4e7;font-weight:600;font-size:15px;display:flex;align-items:center;justify-content:space-between}
+.card .cb{padding:20px}
+.bd{display:inline-flex;align-items:center;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:600;line-height:1.5}
+.btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 15px;border-radius:8px;font-size:14px;font-weight:500;border:1px solid transparent;white-space:nowrap}
+.btn.pri{background:#0d9488;color:#fff}.btn.soft{background:#ccfbf1;color:#0f766e}
+.btn.out{background:#fff;border-color:#d4d4d8;color:#18181b}.btn.dng{background:#fee2e2;color:#dc2626}
+.btn.sm{height:30px;padding:0 11px;font-size:13px}.btn.wide{width:100%;justify-content:center}
+.field{margin-bottom:16px}.lb{display:block;font-size:14px;margin-bottom:6px}.req{color:#dc2626}
+.inp{width:100%;height:38px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:0 12px;color:#a1a1aa;font-size:14px;display:flex;align-items:center}
+.inp.ta{height:auto;min-height:88px;padding:10px 12px;align-items:flex-start}
+.sel{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;height:38px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:0 12px;font-size:14px}
+.banner{border-radius:12px;padding:13px 18px;font-size:14px;margin-bottom:20px}
+.hero{border:1px solid #e4e4e7;border-radius:16px;padding:40px 44px;background:linear-gradient(135deg,#effefb 0%,#fafafa 60%);margin-bottom:30px}
+.repocard{border:1px solid #e4e4e7;border-radius:12px;padding:18px 20px;background:#fff}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.rowb{display:flex;align-items:center;justify-content:space-between}
+.tabs{display:flex;background:#f4f4f5;border-radius:10px;padding:4px;gap:4px;max-width:660px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:8px;font-size:14px;color:#71717a}
+.tab.on{background:#0d9488;color:#fff;font-weight:500}
+.chk{width:16px;height:16px;border:1.5px solid #d4d4d8;border-radius:4px;display:inline-block;vertical-align:-3px;margin-right:8px}
+.bar{height:8px;border-radius:5px;background:#e4e4e7;overflow:hidden}.bar>i{display:block;height:100%;background:#0d9488}
+.auth{max-width:420px;margin:0 auto}
+.kv{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #e4e4e7}
+.divider{height:1px;background:#e4e4e7;margin:8px 0}
+.slabel{font-size:12px;font-weight:600;color:#71717a;text-transform:uppercase;letter-spacing:.04em;margin:2px 0 10px}
+.diff{border:1px solid #e4e4e7;border-radius:10px;overflow:hidden;font-family:'JetBrains Mono',monospace;font-size:13px}
+.diff .fh{background:#fafafa;padding:8px 14px;color:#71717a}
+.diff .ln{display:flex}.diff .g{width:44px;text-align:right;padding:2px 10px;color:#a1a1aa;background:#fbfbfb;border-right:1px solid #e4e4e7}
+.diff .t{padding:2px 12px;flex:1}
+</style>
+</helmet>
+<div class="wrap" style="padding:36px 48px">
+<div class="slabel">Auth layout — centered card, no app chrome (sign-in / sign-up / password / verify / CLI)</div>
+<div style="display:flex;gap:28px;flex-wrap:wrap">
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Sign in</div><p class="sub" style="margin:4px 0 0">Welcome back. Enter your credentials to continue.</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="field"><label class="lb">Username <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><div class="field"><label class="lb">Password <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><span class="btn pri wide">Sign in</span></div><div style="border-top:1px solid #e4e4e7;padding:16px 20px"><a>Forgot your password?</a><div style="margin-top:10px;font-size:13px">Don't have an account? <a>Sign up</a></div></div></div>
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Create your account</div><p class="sub" style="margin:4px 0 0">Register to start hosting repositories.</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="field"><label class="lb">Username <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><div class="field"><label class="lb">Email <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><div class="field"><label class="lb">Password <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><span class="btn pri wide">Sign up</span></div><div style="border-top:1px solid #e4e4e7;padding:16px 20px">Already have an account? <a>Sign in</a></div></div>
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Forgot password</div><p class="sub" style="margin:4px 0 0">Enter your email and we will send a reset link.</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="field"><label class="lb">Email <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><span class="btn pri wide">Send reset link</span></div></div>
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Reset password</div><p class="sub" style="margin:4px 0 0">Choose a new password for your account.</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="field"><label class="lb">New password <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><div class="field"><label class="lb">Confirm password <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><span class="btn pri wide">Update password</span></div></div>
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Verify your email</div><p class="sub" style="margin:4px 0 0">Confirm your address to unlock all features.</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="banner" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8">Verifying your email address…</div><span class="btn out">Back to sign in</span></div></div>
+<div class="card" style="width:420px;margin:0"><div class="cb"><div style="font-weight:600;font-size:17px">Sign in for CLI</div><p class="sub" style="margin:4px 0 0">Authenticating against http://localhost:3200</p></div><div style="border-top:1px solid #e4e4e7;padding:20px"><div class="banner" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8">Use an existing account — the ogb CLI supplies port &amp; state parameters.</div><div class="field"><label class="lb">Username <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><div class="field"><label class="lb">Password <span class="req">*</span></label><div class="inp" style="max-width:100%"></div></div><span class="btn pri wide">Authorize CLI</span></div></div>
+</div></div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body>
+</html>
