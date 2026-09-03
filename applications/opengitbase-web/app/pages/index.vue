@@ -143,7 +143,7 @@ onMounted(async () => {
             <br>
           </template>
         </i18n-t>
-        <p class="relative mt-5 max-w-xl text-lg text-[var(--ogb-text-muted)]">
+        <p class="relative mt-5 max-w-[40rem] text-lg text-[var(--ogb-text-muted)]">
           {{ t('home.heroSubtitle') }}
         </p>
         <div class="relative mt-7 flex flex-wrap gap-3">
