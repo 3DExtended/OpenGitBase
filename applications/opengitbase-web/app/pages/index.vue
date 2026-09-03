@@ -40,10 +40,12 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl space-y-8">
-    <EmailVerificationBanner v-if="auth.isAuthenticated" />
-
-    <template v-if="auth.isAuthenticated">
+  <div>
+    <div
+      v-if="auth.isAuthenticated"
+      class="mx-auto max-w-5xl space-y-8"
+    >
+      <EmailVerificationBanner />
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-2xl font-semibold tracking-tight">
@@ -119,10 +121,13 @@ onMounted(async () => {
           />
         </div>
       </section>
-    </template>
+    </div>
 
-    <template v-else>
-      <section class="relative overflow-hidden pb-10 pt-4">
+    <div
+      v-else
+      class="max-w-7xl space-y-12"
+    >
+      <section class="relative overflow-hidden pb-6 pt-6 sm:pt-10">
         <div
           class="pointer-events-none absolute -top-24 right-0 h-80 w-[32rem] rounded-full"
           style="background: radial-gradient(circle, color-mix(in srgb, var(--ogb-accent) 16%, transparent), transparent 68%);"
@@ -210,6 +215,6 @@ onMounted(async () => {
           />
         </div>
       </section>
-    </template>
+    </div>
   </div>
 </template>
