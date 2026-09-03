@@ -287,6 +287,9 @@ public class Startup
         if (!Environment.IsEnvironment("E2ETest"))
         {
             services.AddHostedService<ApiFleetComponentRegistrationService>();
+            // Ensure the Kafka application topics exist before the consumer subscribes.
+            // Registered ahead of the consumer so its StartAsync completes first.
+            services.AddHostedService<KafkaTopicEnsureService>();
             services.AddHostedService<GitPushReceivedConsumer>();
             services.AddHostedService<GitPushOutboxWorker>();
             services.AddHostedService<JobDispatchCoordinator>();
