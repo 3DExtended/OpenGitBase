@@ -366,7 +366,7 @@ services:
     restart: "no"
 
   kafka-1:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_1
     hostname: kafka-1
     restart: unless-stopped
@@ -394,7 +394,7 @@ services:
       <<: *kafka-healthcheck
 
   kafka-2:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_2
     hostname: kafka-2
     restart: unless-stopped
@@ -414,7 +414,7 @@ services:
       <<: *kafka-healthcheck
 
   kafka-3:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_3
     hostname: kafka-3
     restart: unless-stopped
@@ -434,7 +434,7 @@ services:
       <<: *kafka-healthcheck
 
   kafka-init:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_init
     depends_on:
       kafka-1:
