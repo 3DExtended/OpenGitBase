@@ -79,6 +79,7 @@
 :root {
   --ogb-bg: #ffffff;
   --ogb-surface: #ffffff;
+  --ogb-raised: #f4f4f5;
   --ogb-border: var(--color-neutral-200);
   --ogb-text: var(--color-neutral-900);
   --ogb-text-muted: var(--color-neutral-400);
@@ -92,6 +93,7 @@
 .dark {
   --ogb-bg: #0b0f10;
   --ogb-surface: #12181a;
+  --ogb-raised: #161d1f;
   --ogb-border: #232b2d;
   --ogb-text: #e6edf0;
   --ogb-text-muted: #8b979c;

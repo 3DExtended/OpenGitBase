@@ -60,7 +60,7 @@ function closeMobileDrawer() {
         />
         <aside
           class="absolute left-0 top-0 flex h-full w-[min(var(--ogb-sidebar-width),85vw)] flex-col border-r shadow-xl"
-          style="border-color: var(--ogb-border); background-color: var(--ogb-surface); padding-top: var(--ogb-header-height);"
+          style="border-color: var(--ogb-border); background-color: var(--ogb-bg); padding-top: var(--ogb-header-height);"
           role="dialog"
           aria-modal="true"
           :aria-label="t('nav.toggleSidebar')"

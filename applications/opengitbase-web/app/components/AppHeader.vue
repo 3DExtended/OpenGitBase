@@ -43,7 +43,7 @@ const userMenuItems = computed(() => {
 <template>
   <header
     class="sticky top-0 z-50 border-b backdrop-blur-md"
-    style="border-color: var(--ogb-border); background-color: color-mix(in srgb, var(--ogb-surface) 85%, transparent); height: var(--ogb-header-height);"
+    style="border-color: var(--ogb-border); background-color: color-mix(in srgb, var(--ogb-bg) 85%, transparent); height: var(--ogb-header-height);"
   >
     <div class="mx-auto flex h-full max-w-screen-2xl items-center gap-3 px-4 md:px-6">
       <UButton

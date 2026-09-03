@@ -182,7 +182,9 @@ function repoOwnerSlug(repo: { ownerSlug?: string, ownerUserId: string }): strin
 }
 
 function navButtonClass(active: boolean): string {
-  return active ? 'bg-[var(--ogb-bg)]' : ''
+  return active
+    ? 'bg-[var(--ogb-raised)] ring-1 ring-inset ring-[var(--ogb-border)] !text-[var(--ogb-accent)]'
+    : ''
 }
 </script>
 
