@@ -357,12 +357,15 @@ services:
   kafka-vol-init:
     image: busybox:1.36
     container_name: opengitbase_kafka_vol_init
-    # Named volumes are root-owned on first create; apache/kafka runs as uid 1000.
+    # Kafka data lives on the SSD cache pool, not the array-backed docker.img:
+    # the KRaft metadata log fsyncs on every append, and ~273ms array fsyncs blow
+    # the 2s controller.quorum.request.timeout.ms, causing perpetual election churn
+    # (see #232). Bind-mount dirs are root-owned on first create; kafka runs as uid 1000.
     command: ["sh", "-c", "chown -R 1000:1000 /kafka1 /kafka2 /kafka3"]
     volumes:
-      - kafka1_data:/kafka1
-      - kafka2_data:/kafka2
-      - kafka3_data:/kafka3
+      - /mnt/cache/appdata/opengitbase/kafka1:/kafka1
+      - /mnt/cache/appdata/opengitbase/kafka2:/kafka2
+      - /mnt/cache/appdata/opengitbase/kafka3:/kafka3
     restart: "no"
 
   kafka-1:
@@ -388,7 +391,7 @@ services:
     ports:
       - "9092:9092"
     volumes:
-      - kafka1_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka1:/var/lib/kafka/data
       - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
@@ -408,7 +411,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://kafka-2:29092,CONTROLLER://kafka-2:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
     volumes:
-      - kafka2_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka2:/var/lib/kafka/data
       - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
@@ -428,7 +431,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://kafka-3:29092,CONTROLLER://kafka-3:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
     volumes:
-      - kafka3_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka3:/var/lib/kafka/data
       - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
@@ -563,9 +566,6 @@ services:
 volumes:
   opengitbase_pgdata:
   opengitbase_minio_data:
-  kafka1_data:
-  kafka2_data:
-  kafka3_data:
   opengitbase_storage1_repos:
   opengitbase_storage2_repos:
   opengitbase_storage3_repos:
