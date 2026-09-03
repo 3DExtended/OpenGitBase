@@ -15,6 +15,12 @@ useHead({
   title: instanceName,
 })
 
+const features = computed(() => [
+  { icon: 'i-lucide-code', title: t('home.features.repositories.title'), body: t('home.features.repositories.body') },
+  { icon: 'i-lucide-workflow', title: t('home.features.ci.title'), body: t('home.features.ci.body') },
+  { icon: 'i-lucide-server', title: t('home.features.storage.title'), body: t('home.features.storage.body') },
+])
+
 onMounted(async () => {
   loading.value = true
   if (auth.isAuthenticated) {
@@ -116,42 +122,69 @@ onMounted(async () => {
     </template>
 
     <template v-else>
-      <section
-        class="rounded-2xl border px-6 py-10 sm:px-10"
-        style="border-color: var(--ogb-border); background: linear-gradient(135deg, color-mix(in srgb, var(--ogb-accent) 8%, var(--ogb-surface)), var(--ogb-surface));"
-      >
-        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">
-          {{ t('home.welcome', { instanceName }) }}
-        </h1>
-        <p class="mt-3 max-w-2xl text-[var(--ogb-text-muted)]">
-          {{ t('home.description') }}
+      <section class="relative overflow-hidden pb-10 pt-4">
+        <div
+          class="pointer-events-none absolute -top-24 right-0 h-80 w-[32rem] rounded-full"
+          style="background: radial-gradient(circle, color-mix(in srgb, var(--ogb-accent) 16%, transparent), transparent 68%);"
+          aria-hidden="true"
+        />
+        <p class="relative font-mono text-sm text-[var(--ogb-accent)]">
+          {{ t('home.heroPrompt') }}
         </p>
-        <div class="mt-6 flex flex-wrap gap-3">
+        <i18n-t
+          keypath="home.heroTitle"
+          tag="h1"
+          class="relative mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl"
+        >
+          <template #accent>
+            <span class="text-[var(--ogb-accent)]">{{ t('home.heroTitleAccent') }}</span>
+          </template>
+        </i18n-t>
+        <p class="relative mt-5 max-w-xl text-lg text-[var(--ogb-text-muted)]">
+          {{ t('home.heroSubtitle') }}
+        </p>
+        <div class="relative mt-7 flex flex-wrap gap-3">
           <UButton
             to="/sign-up"
             size="lg"
+            icon="i-lucide-arrow-right"
           >
             {{ t('home.getStarted') }}
           </UButton>
           <UButton
-            to="/explore"
-            size="lg"
-            variant="soft"
-          >
-            {{ t('nav.explore') }}
-          </UButton>
-          <UButton
-            to="/pitch"
+            to="/docs"
             size="lg"
             variant="outline"
-            icon="i-lucide-presentation"
           >
-            {{ t('home.communityPitch') }}
+            {{ t('home.readDocs') }}
           </UButton>
+        </div>
+        <p class="relative mt-4 font-mono text-xs text-[var(--ogb-text-muted)]">
+          {{ t('home.heroInstall') }} · {{ t('home.heroInstallNote') }}
+        </p>
+      </section>
+
+      <section class="grid gap-4 sm:grid-cols-3">
+        <div
+          v-for="feature in features"
+          :key="feature.title"
+          class="rounded-xl border p-5"
+          style="border-color: var(--ogb-border); background: var(--ogb-surface);"
+        >
+          <UIcon
+            :name="feature.icon"
+            class="size-6 text-[var(--ogb-accent)]"
+          />
+          <h3 class="mt-3 font-semibold">
+            {{ feature.title }}
+          </h3>
+          <p class="mt-1.5 text-sm text-[var(--ogb-text-muted)]">
+            {{ feature.body }}
+          </p>
         </div>
       </section>
 
-      <section>
+      <section v-if="!loading && recentPublic.length">
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-semibold">
             {{ t('home.recentPublic') }}
@@ -165,24 +198,7 @@ onMounted(async () => {
           </UButton>
         </div>
 
-        <div
-          v-if="loading"
-          class="text-sm text-[var(--ogb-text-muted)]"
-        >
-          {{ t('common.loading') }}
-        </div>
-
-        <p
-          v-else-if="!recentPublic.length"
-          class="text-sm text-[var(--ogb-text-muted)]"
-        >
-          {{ t('home.noPublicRepos') }}
-        </p>
-
-        <div
-          v-else
-          class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-        >
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <RepoCard
             v-for="repo in recentPublic"
             :key="repo.id"

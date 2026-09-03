@@ -130,7 +130,28 @@
     "communityPitch": "Community pitch",
     "recentPublic": "Recently updated public repositories",
     "viewAll": "View all",
-    "noPublicRepos": "No public repositories yet."
+    "noPublicRepos": "No public repositories yet.",
+    "heroPrompt": "$ ogb init --self-hosted",
+    "heroTitle": "Git that runs on {accent} metal.",
+    "heroTitleAccent": "your",
+    "heroSubtitle": "Self-hosted repositories, merge requests, CI in Firecracker MicroVMs, and a storage fleet you control. Source-open, privacy-first, no black boxes.",
+    "readDocs": "Read the docs",
+    "heroInstall": "$ curl -fsSL ogb.sh | sh",
+    "heroInstallNote": "self-host in ~2 min",
+    "features": {
+      "repositories": {
+        "title": "Repositories",
+        "body": "Full Git over HTTP & SSH, branch protection, merge requests, and per-repo access control."
+      },
+      "ci": {
+        "title": "CI in MicroVMs",
+        "body": "Pipelines run in isolated Firecracker VMs — reproducible, sandboxed, fast to spin up."
+      },
+      "storage": {
+        "title": "Storage fleet",
+        "body": "Encrypted, quorum-replicated object storage you own and watch, node by node."
+      }
+    }
   },
   "auth": {
     "fields": {
