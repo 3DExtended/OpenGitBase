@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head>
+<body><x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;font-family:'Space Grotesk',system-ui,sans-serif;background:#0b0f10;color:#e6edf0;font-size:15px;line-height:1.5}
+.wrap{width:1180px;min-height:100%;background:#0b0f10;background-image:radial-gradient(#232b2d 1px,transparent 1px);background-size:26px 26px;padding:56px 60px}
+.mono{font-family:'JetBrains Mono',monospace}
+.k{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#8b979c}
+h1{font-size:42px;font-weight:700;letter-spacing:-.02em;margin:12px 0 12px}
+.lede{font-size:18px;color:#8b979c;max-width:760px;margin:0 0 20px}
+.was{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b979c;border:1px solid #232b2d;border-radius:8px;padding:7px 12px;margin-bottom:38px}
+.was s{color:#f5b350}
+.row{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.opt{border:1px solid #232b2d;border-radius:16px;overflow:hidden;background:#12181a}
+.cap{height:92px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #232b2d;position:relative}
+.sw{width:34px;height:34px;border-radius:9px}
+.optb{padding:18px 20px}
+.line{color:#aeb8bd;font-size:13.5px}
+.mini{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;padding:8px 12px;border-radius:7px}
+.mini.g{border:1px solid #232b2d;color:#e6edf0}
+.note{margin-top:34px;color:#8b979c;font-size:13.5px}</style>
+</helmet>
+<div class="wrap">
+<div class="k">Terminal · accent study</div>
+<h1>Same system, three primaries</h1>
+<p class="lede">You liked Terminal but not the amber. Everything else stays exactly as it was — dark charcoal, dotted grid, Space Grotesk + JetBrains Mono, the full layout. Only the primary accent changes. Each board applies its accent across buttons, links, active nav, refs, progress, and a live pipeline so you can judge it in context, not as a swatch.</p>
+<div class="was">was <s>amber #ffb454</s> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M13 6l6 6-6 6"/></svg> replaced below</div>
+<div class="row">
+<div class="opt">
+<div class="cap" style="background:linear-gradient(135deg,#0b0f10,#161c1e)"><span class="mono" style="color:#5ef08a;font-size:22px;font-weight:700">Phosphor</span><span class="sw" style="background:#5ef08a"></span></div>
+<div class="optb"><div class="mono" style="font-size:12px;color:#5ef08a;margin-bottom:8px">#5ef08a</div><div class="line">Classic CRT terminal green. Monochrome-leaning — accent doubles as the success color. Most "developer-native", unmistakably a tool.</div>
+<div style="display:flex;gap:8px;margin-top:14px"><span class="mini" style="background:#5ef08a;color:#08120c">Get started</span><span class="mini g">Ghost</span></div></div>
+</div>
+<div class="opt">
+<div class="cap" style="background:linear-gradient(135deg,#0b0f10,#161c1e)"><span class="mono" style="color:#38e0e6;font-size:22px;font-weight:700">Ice</span><span class="sw" style="background:#38e0e6"></span></div>
+<div class="optb"><div class="mono" style="font-size:12px;color:#38e0e6;margin-bottom:8px">#38e0e6</div><div class="line">Electric cyan. Cool, clinical, modern. Reads as precise and infrastructural; furthest from the old teal while staying calm.</div>
+<div style="display:flex;gap:8px;margin-top:14px"><span class="mini" style="background:#38e0e6;color:#08120c">Get started</span><span class="mini g">Ghost</span></div></div>
+</div>
+<div class="opt">
+<div class="cap" style="background:linear-gradient(135deg,#0b0f10,#161c1e)"><span class="mono" style="color:#a78bff;font-size:22px;font-weight:700">Ultraviolet</span><span class="sw" style="background:#a78bff"></span></div>
+<div class="optb"><div class="mono" style="font-size:12px;color:#a78bff;margin-bottom:8px">#a78bff</div><div class="line">Soft violet. Premium and distinctive, least common in dev tools. Warmer personality without going warm-hued.</div>
+<div style="display:flex;gap:8px;margin-top:14px"><span class="mini" style="background:#a78bff;color:#08120c">Get started</span><span class="mini g">Ghost</span></div></div>
+</div>
+</div>
+<div class="note">→ Three full boards beside this one — pick one, or tell me a hue and I'll dial it in.</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1180,"height":640}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body></html>

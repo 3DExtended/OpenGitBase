@@ -1,0 +1,87 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head>
+<body><x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;font-family:'Space Grotesk',system-ui,sans-serif;background:#0b0f10;color:#e6edf0;font-size:14px;line-height:1.5}
+.wrap{width:1360px;min-height:100%;background:#0b0f10;background-image:radial-gradient(#232b2d 1px,transparent 1px);background-size:26px 26px}
+.mono{font-family:'JetBrains Mono',monospace}
+.band{padding:14px 40px;border-bottom:1px solid #232b2d;display:flex;justify-content:space-between;align-items:center;background:#0b0f10}
+.tag{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#a78bff}
+.hero{padding:52px 40px 46px;border-bottom:1px solid #232b2d;position:relative;overflow:hidden}
+.glow{position:absolute;top:-140px;right:-80px;width:460px;height:340px;background:radial-gradient(circle,rgba(167,139,255,.22),transparent 68%);pointer-events:none}
+.prompt{font-family:'JetBrains Mono',monospace;color:#a78bff;font-size:14px;margin-bottom:16px;position:relative}
+.h1{font-size:56px;font-weight:700;letter-spacing:-.02em;line-height:1.02;margin:0;max-width:900px;position:relative}
+.h1 em{color:#a78bff;font-style:normal}
+.sub{color:#8b979c;font-size:18px;margin:20px 0 26px;max-width:640px;position:relative}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:14px;padding:12px 18px;border-radius:8px}
+.btn.p{background:#a78bff;color:#0d0724}.btn.g{border:1px solid #232b2d;color:#e6edf0}
+.win{margin:38px 40px 0;border:1px solid #232b2d;border-radius:12px;overflow:hidden;background:#12181a}
+.winbar{height:40px;background:#161d1f;border-bottom:1px solid #232b2d;display:flex;align-items:center;gap:8px;padding:0 14px}
+.dot{width:11px;height:11px;border-radius:50%}
+.winurl{font-family:'JetBrains Mono',monospace;color:#8b979c;font-size:12px;margin-left:10px}
+.wbody{display:flex}
+.wside{width:230px;border-right:1px solid #232b2d;padding:16px 12px}
+.wnav{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#8b979c}
+.wnav.on{background:#161d1f;color:#a78bff;border:1px solid #232b2d}
+.wmain{flex:1;padding:26px 30px}
+.badge{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;padding:3px 9px;border-radius:5px;border:1px solid}
+.card{border:1px solid #232b2d;border-radius:10px;padding:16px 18px;background:#161d1f;margin-bottom:14px}
+.dual{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px 40px 0}
+.panel{border:1px solid #232b2d;border-radius:12px;padding:20px 22px;background:#12181a}
+.pt{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8b979c;margin-bottom:16px}
+.mr{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #232b2d}
+.mr:first-of-type{border-top:0}
+.stage{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:7px 0}
+.log{font-family:'JetBrains Mono',monospace;font-size:12px;color:#8b979c;line-height:1.7;border-top:1px solid #232b2d;margin-top:12px;padding-top:12px}
+.log b{color:#a78bff;font-weight:500}
+.sysrow{display:grid;grid-template-columns:1.1fr 1fr 1.4fr;gap:18px;padding:20px 40px 44px}
+</style>
+</helmet>
+<div class="wrap">
+<div class="band"><span style="display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-weight:700"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2"/><path d="M18 11.4c0 3-2.5 3.6-5.5 4.2C10 16 8.4 16.6 8.4 18"/></svg> opengitbase</span><span class="tag">Terminal — Ultraviolet</span></div>
+<div class="hero"><div class="glow"></div>
+<div class="prompt">$ ogb init --self-hosted</div>
+<h1 class="h1">Git that runs<br>on <em>your</em> metal.</h1>
+<p class="sub">Self-hosted repositories, merge requests, CI in Firecracker MicroVMs, and a storage fleet you control. No black boxes.</p>
+<div style="display:flex;gap:12px"><span class="btn p"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0d0724" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Get started</span><span class="btn g">Read the docs</span></div>
+</div>
+<div class="win">
+<div class="winbar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span class="winurl">demo-user/hello-world</span></div>
+<div class="wbody">
+<div class="wside"><div class="mono" style="color:#8b979c;font-size:11px;padding:2px 10px 10px">demo-user/hello-world</div>
+<div class="wnav on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 18l4-6-4-6M8 6l-4 6 4 6"/></svg> code</div><div class="wnav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg> discussions</div><div class="wnav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg> merge_requests</div><div class="wnav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="13" width="7" height="7" rx="1.5"/><path d="M6.5 11v3a3 3 0 0 0 3 3H14"/></svg> pipelines</div></div>
+<div class="wmain">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px"><div><div class="mono" style="color:#8b979c;font-size:12px">demo-user / hello-world</div><div style="font-size:26px;font-weight:700;margin-top:4px">Hello World</div></div><span class="badge" style="color:#7ee787;border-color:#7ee787">● public</span></div>
+<div class="card" style="display:flex;align-items:center;gap:16px"><span class="mono" style="color:#8b979c;font-size:12px">ref</span><span class="badge" style="color:#e6edf0;border-color:#232b2d">main ▾</span><span class="mono" style="color:#a78bff">abc123</span><span style="flex:1"></span><span class="mono" style="color:#8b979c;font-size:12px">2 branches · 3 tags</span></div>
+<div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0"><div style="display:flex;justify-content:space-between;flex:1;margin-right:8px"><span class="mono" style="font-size:12px;color:#8b979c">storage</span><span class="mono" style="font-size:12px;color:#a78bff">500M / 1.0G · 49%</span></div></div>
+<div style="height:8px;border-radius:5px;background:#232b2d;overflow:hidden;margin-top:10px"><i style="display:block;height:100%;width:49%;background:#a78bff"></i></div>
+</div></div></div>
+<div class="dual">
+<div class="panel"><div class="pt" style="display:flex;justify-content:space-between"><span>Merge requests</span><span style="color:#a78bff">3 open</span></div>
+<div class="mr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg><div style="flex:1"><div style="font-weight:500">Refactor branch policy editor</div><div class="mono" style="color:#8b979c;font-size:11.5px;margin-top:2px">!7 · feature/branch-rules → main</div></div><span class="badge" style="color:#a78bff;border-color:#a78bff">open</span></div>
+<div class="mr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg><div style="flex:1"><div style="font-weight:500">Add quorum replication heal</div><div class="mono" style="color:#8b979c;font-size:11.5px;margin-top:2px">!6 · storage/heal → main</div></div><span class="badge" style="color:#8b979c;border-color:#232b2d">draft</span></div>
+<div class="mr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg><div style="flex:1"><div style="font-weight:500">Persist encrypted-artifact store</div><div class="mono" style="color:#8b979c;font-size:11.5px;margin-top:2px">!5 · storage/persist → main</div></div><span class="badge" style="color:#7ee787;border-color:#7ee787">merged</span></div>
+</div>
+<div class="panel"><div class="pt" style="display:flex;justify-content:space-between"><span>Pipeline #42</span><span style="color:#a78bff">running</span></div>
+<div class="stage" style="color:#e6edf0"><span style="width:8px;height:8px;border-radius:50%;background:#7ee787"></span>checkout <span style="flex:1"></span><span style="color:#8b979c">4s</span></div>
+<div class="stage" style="color:#e6edf0"><span style="width:8px;height:8px;border-radius:50%;background:#7ee787"></span>build <span style="flex:1"></span><span style="color:#8b979c">1m 12s</span></div>
+<div class="stage" style="color:#a78bff"><span style="width:8px;height:8px;border-radius:50%;background:#a78bff;box-shadow:0 0 8px #a78bff"></span>test <span style="flex:1"></span><span style="color:#8b979c">0:41…</span></div>
+<div style="height:6px;border-radius:4px;background:#232b2d;overflow:hidden;margin:6px 0 2px"><i style="display:block;height:100%;width:64%;background:#a78bff"></i></div>
+<div class="log">$ ogb ci run --stage test<br><b>›</b> spawning microVM ogb-hosted-3<br><b>›</b> 128 passed · <span style="color:#8b979c">2 running</span></div>
+</div>
+</div>
+<div class="sysrow">
+<div class="panel"><div class="pt">Palette</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#a78bff"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">accent</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#7ee787"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">passed</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#e6edf0"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">fg</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#8b979c"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">muted</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#12181a"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">surface</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#161d1f"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">raised</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#232b2d"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">border</div></div><div><div style="height:40px;border-radius:7px;border:1px solid #232b2d;background:#0b0f10"></div><div class="mono" style="font-size:10px;color:#8b979c;margin-top:5px">bg</div></div></div>
+<div class="mono" style="font-size:11px;color:#8b979c;margin-top:12px">accent #a78bff</div></div>
+<div class="panel"><div class="pt">Type</div><div style="font-size:30px;font-weight:700">Space Grotesk</div><div class="mono" style="color:#8b979c;font-size:12px;margin:6px 0 14px">display · UI</div><div class="mono" style="font-size:14px;border-top:1px solid #232b2d;padding-top:12px;color:#e6edf0">JetBrains Mono — code, refs, labels, metrics</div></div>
+<div class="panel"><div class="pt">Components</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><span class="btn p">Primary</span><span class="btn g">Ghost</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge" style="color:#a78bff;border-color:#a78bff">accent</span><span class="badge" style="color:#7ee787;border-color:#7ee787">passed</span><span class="badge" style="color:#f5b350;border-color:#f5b350">degraded</span><span class="badge" style="color:#ff6b6b;border-color:#ff6b6b">failed</span><span class="badge" style="color:#8b979c;border-color:#232b2d">private</span></div></div>
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":1600}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body></html>

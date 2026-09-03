@@ -7,6 +7,7 @@ Mid-fidelity wireframes of every implemented screen in `applications/opengitbase
 - Wireframes (34 screens, 7 pages): https://claude.ai/code/artifact/aae68f66-028c-4cae-a2b1-7027b60ac43f
 - Look & feel showcase (one board): https://claude.ai/code/artifact/84ba3cee-0f11-4b70-bcfe-e2b9d3518b25
 - Design directions (3 aesthetics): https://claude.ai/code/artifact/af0b084f-6bbc-41dd-a722-e66928cc32fa
+- Terminal accent variations (3): https://claude.ai/code/artifact/a47796e2-104e-4f9d-8125-6a5fbec52e62
 
 Both are editable in place (click-to-select, properties panel, inline text, Save).
 These source files are what the canvases are generated from — edit them to drive the next
@@ -34,6 +35,19 @@ design-language strip) so the difference is felt, not described:
 
 Regenerate with `node directions/directions.mjs`, then measure + seed + publish
 `directions/` to the directions URL above.
+
+Terminal was chosen. `directions/terminal/` explores it in three primary accents —
+everything else held identical (dark charcoal, dotted grid, Space Grotesk / JetBrains
+Mono, layout), only the accent swapped, applied across buttons, links, nav, refs,
+progress bars, a merge-request list and a live pipeline:
+
+- **Phosphor** `#5ef08a` — classic CRT green, monochrome-leaning (accent doubles as success).
+- **Ice** `#38e0e6` — electric cyan, cool/clinical, furthest from the old teal.
+- **Ultraviolet** `#a78bff` — soft violet, premium and least common in dev tools.
+
+Regenerate with `node directions/terminal/terminal-variations.mjs`, then
+`node directions/terminal/measure-h.mjs` (from a dir where `@playwright/test` resolves),
+seed + publish `directions/terminal/` to the terminal-variations URL above.
 
 ## What's here
 
