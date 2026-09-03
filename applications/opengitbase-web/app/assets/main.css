@@ -2,42 +2,86 @@
 @import "@nuxt/ui";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
 
-  /* Neutral palette */
-  --color-neutral-50: #fafafa;
-  --color-neutral-100: #f4f4f5;
-  --color-neutral-200: #e4e4e7;
-  --color-neutral-300: #d4d4d8;
-  --color-neutral-400: #a1a1aa;
-  --color-neutral-500: #71717a;
-  --color-neutral-600: #52525b;
-  --color-neutral-700: #3f3f46;
-  --color-neutral-800: #27272a;
-  --color-neutral-900: #18181b;
-  --color-neutral-950: #09090b;
+  /* Neutral palette — Terminal charcoal (dark-first) */
+  --color-neutral-50: #e6edf0;
+  --color-neutral-100: #c7d0d4;
+  --color-neutral-200: #aeb8bd;
+  --color-neutral-300: #8b979c;
+  --color-neutral-400: #5f6a6e;
+  --color-neutral-500: #3d474a;
+  --color-neutral-600: #2c3538;
+  --color-neutral-700: #232b2d;
+  --color-neutral-800: #161d1f;
+  --color-neutral-900: #12181a;
+  --color-neutral-950: #0b0f10;
 
-  /* Brand accent — teal */
-  --color-accent-50: #f0fdfa;
-  --color-accent-100: #ccfbf1;
-  --color-accent-200: #99f6e4;
-  --color-accent-300: #5eead4;
-  --color-accent-400: #2dd4bf;
-  --color-accent-500: #14b8a6;
-  --color-accent-600: #0d9488;
-  --color-accent-700: #0f766e;
-  --color-accent-800: #115e59;
-  --color-accent-900: #134e4a;
-  --color-accent-950: #042f2e;
+  /* Brand accent — Ice (cyan) */
+  --color-accent-50: #ecfeff;
+  --color-accent-100: #d0fbfd;
+  --color-accent-200: #a6f4f8;
+  --color-accent-300: #6ae9f0;
+  --color-accent-400: #38e0e6;
+  --color-accent-500: #1cc9d1;
+  --color-accent-600: #12a6b0;
+  --color-accent-700: #15848c;
+  --color-accent-800: #176970;
+  --color-accent-900: #17575e;
+  --color-accent-950: #073b40;
+
+  /* Ice ramp exposed to @nuxt/ui as the `ice` color */
+  --color-ice-50: #ecfeff;
+  --color-ice-100: #d0fbfd;
+  --color-ice-200: #a6f4f8;
+  --color-ice-300: #6ae9f0;
+  --color-ice-400: #38e0e6;
+  --color-ice-500: #1cc9d1;
+  --color-ice-600: #12a6b0;
+  --color-ice-700: #15848c;
+  --color-ice-800: #176970;
+  --color-ice-900: #17575e;
+  --color-ice-950: #073b40;
+}
+
+/* ---- @nuxt/ui semantic tokens ---- */
+:root,
+.light {
+  --ui-primary: var(--color-ice-600);
+  --ui-radius: 0.5rem;
+}
+
+.dark {
+  /* Ice primary — bright on dark */
+  --ui-primary: #38e0e6;
+
+  /* Charcoal surfaces (override the neutral-ramp mapping for precise spacing) */
+  --ui-bg: #0b0f10;
+  --ui-bg-muted: #12181a;
+  --ui-bg-elevated: #161d1f;
+  --ui-bg-accented: #1b2325;
+  --ui-bg-inverted: #e6edf0;
+
+  --ui-border: #232b2d;
+  --ui-border-muted: #1b2325;
+  --ui-border-accented: #2c3538;
+  --ui-border-inverted: #e6edf0;
+
+  --ui-text-dimmed: #5f6a6e;
+  --ui-text-muted: #8b979c;
+  --ui-text-toned: #aeb8bd;
+  --ui-text: #e6edf0;
+  --ui-text-highlighted: #ffffff;
+  --ui-text-inverted: #0b0f10;
 }
 
 :root {
-  --ogb-bg: var(--color-neutral-50);
+  --ogb-bg: #ffffff;
   --ogb-surface: #ffffff;
   --ogb-border: var(--color-neutral-200);
   --ogb-text: var(--color-neutral-900);
-  --ogb-text-muted: var(--color-neutral-500);
+  --ogb-text-muted: var(--color-neutral-400);
   --ogb-accent: var(--color-accent-600);
   --ogb-accent-hover: var(--color-accent-700);
   --ogb-header-height: 3.5rem;
@@ -46,19 +90,25 @@
 }
 
 .dark {
-  --ogb-bg: var(--color-neutral-950);
-  --ogb-surface: var(--color-neutral-900);
-  --ogb-border: var(--color-neutral-800);
-  --ogb-text: var(--color-neutral-50);
-  --ogb-text-muted: var(--color-neutral-400);
-  --ogb-accent: var(--color-accent-400);
-  --ogb-accent-hover: var(--color-accent-300);
+  --ogb-bg: #0b0f10;
+  --ogb-surface: #12181a;
+  --ogb-border: #232b2d;
+  --ogb-text: #e6edf0;
+  --ogb-text-muted: #8b979c;
+  --ogb-accent: #38e0e6;
+  --ogb-accent-hover: #6ae9f0;
 }
 
 body {
   background-color: var(--ogb-bg);
   color: var(--ogb-text);
   font-family: var(--font-sans);
+}
+
+/* Terminal dotted-grid backdrop (dark only) */
+.dark body {
+  background-image: radial-gradient(var(--color-neutral-700) 1px, transparent 1px);
+  background-size: 26px 26px;
 }
 
 .font-mono {
