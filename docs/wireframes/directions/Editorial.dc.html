@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head>
+<body><x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap">
+<style>*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;font-family:'Inter',system-ui,sans-serif;background:#f4ece0;color:#211d18;font-size:15px;line-height:1.55}
+.wrap{width:1360px;min-height:100%;background:#f4ece0;padding:0}
+.serif{font-family:'Instrument Serif',Georgia,serif;font-weight:400}
+.band{padding:22px 56px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2d7c6}
+.rule{font-family:'Inter';font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#6b6156}
+.hero{padding:64px 56px 52px;display:grid;grid-template-columns:1.5fr 1fr;gap:48px;align-items:end;border-bottom:1px solid #e2d7c6}
+.h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:80px;line-height:.98;letter-spacing:-.01em;margin:0}
+.h1 em{color:#c0562f;font-style:italic}
+.sub{font-size:19px;color:#6b6156;max-width:440px;margin:22px 0 0}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:15px;padding:12px 22px;border-radius:999px}
+.btn.p{background:#211d18;color:#f4ece0}.btn.g{border:1px solid #211d18;color:#211d18}
+.drop{font-family:'Instrument Serif',serif;font-size:15px;color:#6b6156;border-left:2px solid #c0562f;padding-left:16px;line-height:1.6}
+.win{margin:48px 56px;border:1px solid #e2d7c6;border-radius:6px;overflow:hidden;background:#fffdf9;box-shadow:0 24px 60px -30px rgba(33,29,24,.4)}
+.winbar{height:44px;background:#fffdf9;border-bottom:1px solid #e2d7c6;display:flex;align-items:center;gap:8px;padding:0 16px}
+.dot{width:10px;height:10px;border-radius:50%;border:1px solid #e2d7c6}
+.winurl{color:#6b6156;font-size:12.5px;margin-left:10px}
+.wbody{display:flex}
+.wside{width:230px;border-right:1px solid #e2d7c6;padding:22px 16px}
+.wnav{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;font-size:14.5px;color:#6b6156}
+.wnav.on{background:#f4ece0;color:#211d18;font-weight:500}
+.wmain{flex:1;padding:32px 36px}
+.badge{font-size:12px;font-weight:500;padding:3px 11px;border-radius:999px}
+.card{border:1px solid #e2d7c6;border-radius:10px;padding:18px 20px;margin-bottom:16px;background:#fffdf9}
+.sysrow{display:grid;grid-template-columns:1.1fr 1fr 1.4fr;gap:22px;padding:0 56px 52px}
+.panel{border:1px solid #e2d7c6;border-radius:6px;padding:26px;background:#fffdf9}
+.pt{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#6b6156;margin-bottom:18px}
+</style>
+</helmet>
+<div class="wrap">
+<div class="band"><span class="serif" style="font-size:24px;display:flex;align-items:center;gap:10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c0562f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2"/><path d="M18 11.4c0 3-2.5 3.6-5.5 4.2C10 16 8.4 16.6 8.4 18"/></svg> OpenGitBase</span><span class="rule">Direction B — Editorial</span></div>
+<div class="hero">
+<div><div class="rule" style="margin-bottom:18px">The self-hosted forge</div>
+<h1 class="h1">Git that's<br>yours to <em>design.</em></h1>
+<p class="sub">Source-open, privacy-first, transparent by default. A place for your code that feels considered — because where it lives matters.</p>
+<div style="display:flex;gap:12px;margin-top:30px"><span class="btn p">Get started <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f4ece0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="btn g">Read the pitch</span></div></div>
+<div class="drop">"Your code, your infra, your rules." A community-first project, built in the open — not another anonymous SaaS dashboard.</div>
+</div>
+<div class="win">
+<div class="winbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="winurl">demo-user / hello-world</span></div>
+<div class="wbody">
+<div class="wside"><div style="color:#6b6156;font-size:12.5px;padding:2px 10px 12px">demo-user / hello-world</div>
+<div class="wnav on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#211d18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 18l4-6-4-6M8 6l-4 6 4 6"/></svg> Code</div><div class="wnav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6156" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg> Discussions</div><div class="wnav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6156" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg> Merge requests</div><div class="wnav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6156" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="13" width="7" height="7" rx="1.5"/><path d="M6.5 11v3a3 3 0 0 0 3 3H14"/></svg> Pipelines</div></div>
+<div class="wmain">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px"><div><div style="color:#6b6156;font-size:13px">demo-user / hello-world</div><div class="serif" style="font-size:40px;margin-top:2px">Hello World</div></div><span class="badge" style="background:#211d18;color:#f4ece0">Public</span></div>
+<div class="card" style="display:flex;align-items:center;gap:16px"><span style="color:#6b6156;font-size:13px">Ref</span><span class="badge" style="border:1px solid #e2d7c6;color:#211d18">main ▾</span><span style="color:#c0562f;font-weight:500">abc123</span><span style="flex:1"></span><span style="color:#6b6156;font-size:13px">Updated 2 months ago</span></div>
+<div class="card" style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d3a5f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg><div><div style="font-weight:500">Refactor branch policy editor</div><div style="color:#6b6156;font-size:13px;margin-top:2px">!7 · feature/branch-rules → main</div></div></div><span class="badge" style="background:#dbe7f2;color:#1d3a5f">Open</span></div>
+<div class="card" style="margin-bottom:0"><div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13.5px"><span>Storage usage</span><span style="color:#6b6156">500 MB / 1.00 GB · 49%</span></div><div style="height:8px;border-radius:5px;background:#e2d7c6;overflow:hidden"><i style="display:block;height:100%;width:49%;background:#c0562f"></i></div></div>
+</div></div></div>
+<div class="sysrow">
+<div class="panel"><div class="pt">Palette</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px"><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#c0562f"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">terracotta</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#1d3a5f"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">ink blue</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#211d18"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">ink</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#6b6156"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">muted</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#fffdf9"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">paper</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#f4ece0"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">cream</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#e2d7c6"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">rule</div></div><div><div style="height:42px;border-radius:6px;border:1px solid #e2d7c6;background:#dbe7f2"></div><div style="font-size:10.5px;color:#6b6156;margin-top:5px">wash</div></div></div></div>
+<div class="panel"><div class="pt">Type</div><div class="serif" style="font-size:44px;line-height:1">Instrument<br><em style="color:#c0562f;font-style:italic">Serif</em></div><div style="color:#6b6156;font-size:12.5px;margin:12px 0 0;border-top:1px solid #e2d7c6;padding-top:12px">Inter — body, UI, labels &amp; metrics</div></div>
+<div class="panel"><div class="pt">Components</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><span class="btn p">Primary</span><span class="btn g">Outline</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge" style="background:#211d18;color:#f4ece0">Public</span><span class="badge" style="background:#dbe7f2;color:#1d3a5f">Open</span><span class="badge" style="background:#f6e0d6;color:#c0562f">Degraded</span><span class="badge" style="border:1px solid #e2d7c6;color:#6b6156">Private</span></div></div>
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":1600}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body></html>

@@ -6,6 +6,7 @@ Mid-fidelity wireframes of every implemented screen in `applications/opengitbase
 **Live canvases (Claude Design):**
 - Wireframes (34 screens, 7 pages): https://claude.ai/code/artifact/aae68f66-028c-4cae-a2b1-7027b60ac43f
 - Look & feel showcase (one board): https://claude.ai/code/artifact/84ba3cee-0f11-4b70-bcfe-e2b9d3518b25
+- Design directions (3 aesthetics): https://claude.ai/code/artifact/af0b084f-6bbc-41dd-a722-e66928cc32fa
 
 Both are editable in place (click-to-select, properties panel, inline text, Save).
 These source files are what the canvases are generated from — edit them to drive the next
@@ -16,6 +17,23 @@ poster: gradient masthead + wordmark, three browser-framed signature screens (da
 merge request, status), the design language (color / type / components), and six feature
 pillars. Regenerate it with `node showcase/showcase.mjs`, then seed + publish `showcase/`
 to the showcase URL above.
+
+The directions board (`directions/`) explores three genuinely different aesthetic
+directions — a response to "the app feels vibecoded / 0815". Each commits to a distinct
+personality and is applied to the same real screens (masthead + repository view +
+design-language strip) so the difference is felt, not described:
+
+- **A · Terminal** — dark charcoal + amber, Space Grotesk / JetBrains Mono, dense and
+  developer-native. Best for an engineer audience; dark-first can read as niche.
+- **B · Editorial** — warm cream paper + terracotta, Instrument Serif display + Inter,
+  generous space and a clear voice. Feels crafted/community-first; needs discipline to
+  stay dense.
+- **C · Bold** — neo-brutalist off-white, ultra-violet + acid accent, Archivo Black +
+  Space Grotesk, hard black borders and offset shadows. Memorable/loud; high energy can
+  tire on long sessions.
+
+Regenerate with `node directions/directions.mjs`, then measure + seed + publish
+`directions/` to the directions URL above.
 
 ## What's here
 
