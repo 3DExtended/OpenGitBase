@@ -8,6 +8,7 @@ Mid-fidelity wireframes of every implemented screen in `applications/opengitbase
 - Look & feel showcase (one board): https://claude.ai/code/artifact/84ba3cee-0f11-4b70-bcfe-e2b9d3518b25
 - Design directions (3 aesthetics): https://claude.ai/code/artifact/af0b084f-6bbc-41dd-a722-e66928cc32fa
 - Terminal accent variations (3): https://claude.ai/code/artifact/a47796e2-104e-4f9d-8125-6a5fbec52e62
+- Ice full screen set (9 screens): https://claude.ai/code/artifact/3268cc35-0938-472c-ab7e-de5f1b01ae73
 
 Both are editable in place (click-to-select, properties panel, inline text, Save).
 These source files are what the canvases are generated from — edit them to drive the next
@@ -48,6 +49,17 @@ progress bars, a merge-request list and a live pipeline:
 Regenerate with `node directions/terminal/terminal-variations.mjs`, then
 `node directions/terminal/measure-h.mjs` (from a dir where `@playwright/test` resolves),
 seed + publish `directions/terminal/` to the terminal-variations URL above.
+
+**Ice** `#38e0e6` was chosen. `directions/terminal/ice/` applies it across nine real
+screens in full app chrome (topbar + contextual sidebar, not just a marketing view):
+Home, Dashboard, RepoOverview, RepoFiles (code + blob), MergeRequest (diff + checks),
+Pipeline (live CI), Discussion, AdminStorage (fleet ops), Settings (branch protection +
+danger zone). It carries a full Terminal/Ice component kit — topbar, sidebars, cards,
+badges, buttons, tabs, meters, syntax-tinted code — with tokens defined once at the top
+of `ice.mjs` (accent in a single `ac` token). Regenerate with
+`node directions/terminal/ice/ice.mjs`, measure, seed + publish `directions/terminal/ice/`
+to the Ice URL above. This kit is the reference for migrating the real app
+(`applications/opengitbase-web/app/assets/main.css` + `app/app.config.ts`).
 
 ## What's here
 

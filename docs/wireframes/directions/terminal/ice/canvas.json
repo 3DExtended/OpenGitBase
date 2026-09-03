@@ -1,0 +1,77 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 655
+    },
+    {
+      "file": "Home.dc.html",
+      "x": 0,
+      "y": 940,
+      "w": 1360,
+      "h": 801
+    },
+    {
+      "file": "Dashboard.dc.html",
+      "x": 1460,
+      "y": 940,
+      "w": 1360,
+      "h": 729
+    },
+    {
+      "file": "RepoOverview.dc.html",
+      "x": 2920,
+      "y": 940,
+      "w": 1360,
+      "h": 713
+    },
+    {
+      "file": "RepoFiles.dc.html",
+      "x": 0,
+      "y": 2720,
+      "w": 1360,
+      "h": 680
+    },
+    {
+      "file": "MergeRequest.dc.html",
+      "x": 1460,
+      "y": 2720,
+      "w": 1360,
+      "h": 743
+    },
+    {
+      "file": "Pipeline.dc.html",
+      "x": 2920,
+      "y": 2720,
+      "w": 1360,
+      "h": 680
+    },
+    {
+      "file": "Discussion.dc.html",
+      "x": 0,
+      "y": 4500,
+      "w": 1360,
+      "h": 800
+    },
+    {
+      "file": "AdminStorage.dc.html",
+      "x": 1460,
+      "y": 4500,
+      "w": 1360,
+      "h": 826
+    },
+    {
+      "file": "Settings.dc.html",
+      "x": 2920,
+      "y": 4500,
+      "w": 1360,
+      "h": 1103
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

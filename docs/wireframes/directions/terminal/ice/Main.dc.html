@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head>
+<body><x-dc>
+<helmet><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap"><style>*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;font-family:'Space Grotesk',system-ui,sans-serif;background:#0b0f10;color:#e6edf0;font-size:14px;line-height:1.5}
+.wrap{width:1360px;min-height:100%;background:#0b0f10}
+.mono{font-family:'JetBrains Mono',monospace}
+kbd{font-family:'JetBrains Mono',monospace;font-size:10px;border:1px solid #2c3538;border-radius:4px;padding:1px 5px;color:#8b979c}
+h2{font-size:22px;font-weight:700;margin:0}
+a{text-decoration:none;color:inherit}
+.badge{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:7px;font-weight:500;font-size:13px;padding:9px 15px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.btn.p{background:#38e0e6;color:#03181b}
+.btn.g{border:1px solid #2c3538;color:#e6edf0}
+.btn.d{border:1px solid #ff6b6b;color:#ff6b6b}
+.card{border:1px solid #232b2d;border-radius:12px;background:#12181a}
+.meter{height:8px;border-radius:5px;background:#232b2d;overflow:hidden}.meter i{display:block;height:100%}
+/* topbar */
+.top{height:56px;border-bottom:1px solid #232b2d;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0b0f10;position:sticky;top:0}
+.tl{display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
+.crumb{font-size:13px;padding-left:18px;border-left:1px solid #232b2d}
+.tr{display:flex;align-items:center;gap:14px}
+.tsearch{display:flex;align-items:center;gap:9px;background:#12181a;border:1px solid #232b2d;border-radius:8px;padding:7px 12px;font-size:12px;width:280px}
+.tibtn{width:34px;height:34px;border:1px solid #232b2d;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#12181a}
+/* body + side */
+.body{display:flex;align-items:flex-start}
+.side{width:236px;flex:none;border-right:1px solid #232b2d;padding:16px 12px;min-height:600px}
+.sidehdr{font-size:11px;color:#8b979c;padding:4px 10px 12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:13px;color:#8b979c;margin-bottom:3px}
+.nav.on{background:#161d1f;color:#38e0e6;border:1px solid #232b2d}
+.main{flex:1;padding:26px 32px;min-width:0}
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid #232b2d;margin-bottom:22px}
+.tab{padding:10px 14px;font-size:13px;color:#8b979c;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px}
+.tab.on{color:#38e0e6;border-bottom-color:#38e0e6}
+/* misc */
+.row{display:flex;align-items:center}
+.muted{color:#8b979c}
+.dim{color:#5f6a6e}
+.h1big{font-size:26px;font-weight:700}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:22px}
+.list>*{border-top:1px solid #232b2d;padding:14px 0}.list>*:first-child{border-top:0}
+.codeln{font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.85;white-space:pre}
+.ln{display:inline-block;width:34px;color:#5f6a6e;text-align:right;margin-right:16px;user-select:none}
+.kw{color:#a78bff}.str{color:#7ee787}.fn{color:#38e0e6}.cm{color:#5f6a6e}
+
+.cwrap{padding:52px 56px;background-image:radial-gradient(#232b2d 1px,transparent 1px);background-size:26px 26px;min-height:100%}
+.k{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#8b979c}
+.ctitle{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:12px 0 14px}
+.clede{font-size:17px;color:#8b979c;max-width:780px;margin:0 0 34px}
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.cchip{display:flex;gap:13px;align-items:center;border:1px solid #232b2d;border-radius:12px;background:#12181a;padding:16px 18px}</style></helmet>
+<div class="wrap"><div class="cwrap">
+<div class="mono k">Terminal · Ice · applied</div>
+<h1 class="ctitle">The Ice direction, across the app</h1>
+<p class="clede">Your pick — Terminal with the Ice cyan accent <span class="mono" style="color:#38e0e6">#38e0e6</span> — applied to nine real screens in full app chrome: marketing, dashboard, repository, code, merge request, CI, discussions, admin, and settings. This is the look end to end, before any code changes. Approve it, or point at anything to adjust.</p>
+<div class="cgrid">
+<div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">01</span><div><div style="font-weight:600;font-size:13px">Home</div><div class="muted mono" style="font-size:11px">marketing / masthead</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">02</span><div><div style="font-weight:600;font-size:13px">Dashboard</div><div class="muted mono" style="font-size:11px">logged-in home</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">03</span><div><div style="font-weight:600;font-size:13px">RepoOverview</div><div class="muted mono" style="font-size:11px">repository code tab</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">04</span><div><div style="font-weight:600;font-size:13px">RepoFiles</div><div class="muted mono" style="font-size:11px">code browser + blob</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">05</span><div><div style="font-weight:600;font-size:13px">MergeRequest</div><div class="muted mono" style="font-size:11px">review + diff + checks</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">06</span><div><div style="font-weight:600;font-size:13px">Pipeline</div><div class="muted mono" style="font-size:11px">live CI run + logs</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">07</span><div><div style="font-weight:600;font-size:13px">Discussion</div><div class="muted mono" style="font-size:11px">issue thread</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">08</span><div><div style="font-weight:600;font-size:13px">AdminStorage</div><div class="muted mono" style="font-size:11px">storage fleet ops</div></div></div><div class="cchip"><span class="mono" style="color:#38e0e6;font-size:12px">09</span><div><div style="font-weight:600;font-size:13px">Settings</div><div class="muted mono" style="font-size:11px">config + danger zone</div></div></div>
+</div>
+<div class="mono dim" style="margin-top:30px;font-size:12.5px">→ Nine boards beside this one. Accent lives in one token — say the word to nudge the hue, spacing, or any screen.</div>
+</div></div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1180,"height":1600}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body></html>

@@ -1,0 +1,93 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><script src="./support.js"></script></head>
+<body><x-dc>
+<helmet><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap"><style>*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;font-family:'Space Grotesk',system-ui,sans-serif;background:#0b0f10;color:#e6edf0;font-size:14px;line-height:1.5}
+.wrap{width:1360px;min-height:100%;background:#0b0f10}
+.mono{font-family:'JetBrains Mono',monospace}
+kbd{font-family:'JetBrains Mono',monospace;font-size:10px;border:1px solid #2c3538;border-radius:4px;padding:1px 5px;color:#8b979c}
+h2{font-size:22px;font-weight:700;margin:0}
+a{text-decoration:none;color:inherit}
+.badge{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;padding:3px 9px;border-radius:5px;border:1px solid;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:7px;font-weight:500;font-size:13px;padding:9px 15px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.btn.p{background:#38e0e6;color:#03181b}
+.btn.g{border:1px solid #2c3538;color:#e6edf0}
+.btn.d{border:1px solid #ff6b6b;color:#ff6b6b}
+.card{border:1px solid #232b2d;border-radius:12px;background:#12181a}
+.meter{height:8px;border-radius:5px;background:#232b2d;overflow:hidden}.meter i{display:block;height:100%}
+/* topbar */
+.top{height:56px;border-bottom:1px solid #232b2d;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0b0f10;position:sticky;top:0}
+.tl{display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
+.crumb{font-size:13px;padding-left:18px;border-left:1px solid #232b2d}
+.tr{display:flex;align-items:center;gap:14px}
+.tsearch{display:flex;align-items:center;gap:9px;background:#12181a;border:1px solid #232b2d;border-radius:8px;padding:7px 12px;font-size:12px;width:280px}
+.tibtn{width:34px;height:34px;border:1px solid #232b2d;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#12181a}
+/* body + side */
+.body{display:flex;align-items:flex-start}
+.side{width:236px;flex:none;border-right:1px solid #232b2d;padding:16px 12px;min-height:600px}
+.sidehdr{font-size:11px;color:#8b979c;padding:4px 10px 12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:13px;color:#8b979c;margin-bottom:3px}
+.nav.on{background:#161d1f;color:#38e0e6;border:1px solid #232b2d}
+.main{flex:1;padding:26px 32px;min-width:0}
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid #232b2d;margin-bottom:22px}
+.tab{padding:10px 14px;font-size:13px;color:#8b979c;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px}
+.tab.on{color:#38e0e6;border-bottom-color:#38e0e6}
+/* misc */
+.row{display:flex;align-items:center}
+.muted{color:#8b979c}
+.dim{color:#5f6a6e}
+.h1big{font-size:26px;font-weight:700}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:22px}
+.list>*{border-top:1px solid #232b2d;padding:14px 0}.list>*:first-child{border-top:0}
+.codeln{font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.85;white-space:pre}
+.ln{display:inline-block;width:34px;color:#5f6a6e;text-align:right;margin-right:16px;user-select:none}
+.kw{color:#a78bff}.str{color:#7ee787}.fn{color:#38e0e6}.cm{color:#5f6a6e}
+</style></helmet>
+<div class="wrap"><div class="top">
+  <div class="tl">
+    <span class="brand mono"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38e0e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2"/><path d="M18 11.4c0 3-2.5 3.6-5.5 4.2C10 16 8.4 16.6 8.4 18"/></svg> <b>opengitbase</b></span>
+    <span class="crumb mono"><span style="color:#8b979c">demo-user</span> / <span style="color:#e6edf0">hello-world</span></span>
+  </div>
+  <div class="tr">
+    <span class="tsearch mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg> <span style="color:#5f6a6e">search or jump to…</span> <kbd>⌘K</kbd></span>
+    <span class="tibtn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+    <span class="tibtn"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 5v14M5 12h14"/></svg></span>
+    <span style="width:28px;height:28px;border-radius:6px;flex:none;background:linear-gradient(135deg,#0e3b40,#1b2325);border:1px solid #232b2d;display:inline-block"></span>
+  </div>
+  </div><div class="body"><div class="side">
+    <div class="sidehdr mono"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 18l4-6-4-6M8 6l-4 6 4 6"/></svg> demo-user / <b style="color:#e6edf0">hello-world</b></div>
+    <a class="nav  mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 18l4-6-4-6M8 6l-4 6 4 6"/></svg> Code</a>
+    <a class="nav on mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38e0e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg> Discussions</a>
+    <a class="nav  mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="15" r="2.4"/><path d="M6 8.4v7.2M6 9a6 6 0 0 0 6 6h3.6"/></svg> Merge requests</a>
+    <a class="nav  mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="13" width="7" height="7" rx="1.5"/><path d="M6.5 11v3a3 3 0 0 0 3 3H14"/></svg> Pipelines</a>
+    <a class="nav  mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="8" r="3.2"/><path d="M22 20v-1a4 4 0 0 0-3-3.8"/></svg> Members</a>
+    <a class="nav  mono"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H2.9a2 2 0 0 1 0-4H3a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 3V2.9a2 2 0 0 1 4 0V3a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 9h.1a2 2 0 0 1 0 4H21a1.6 1.6 0 0 0-1.6 2z"/></svg> Settings</a>
+  </div><div class="main">
+<div class="row" style="gap:11px;margin-bottom:6px"><span class="badge mono" style="color:#7ee787;border-color:#7ee787">Open</span><span class="mono dim" style="font-size:12px">#12</span></div>
+<div class="h1big" style="margin-bottom:6px">Reconciler trusts DB watermark on artifact loss</div>
+<div class="mono muted" style="font-size:12.5px;margin-bottom:20px"><span style="width:18px;height:18px;border-radius:6px;flex:none;background:linear-gradient(135deg,#0e3b40,#1b2325);border:1px solid #232b2d;display:inline-block"></span> opened by demo-user · 5h ago · 4 comments</div>
+<div class="grid2">
+  <div>
+    <div class="card" style="padding:0;margin-bottom:14px"><div class="row" style="gap:10px;padding:11px 16px;border-bottom:1px solid #232b2d;background:#161d1f"><span style="width:24px;height:24px;border-radius:6px;flex:none;background:linear-gradient(135deg,#0e3b40,#1b2325);border:1px solid #232b2d;display:inline-block"></span><span style="font-weight:600;font-size:13px">demo-user</span><span class="badge mono" style="color:#38e0e6;border-color:#38e0e6">author</span><span style="flex:1"></span><span class="mono dim" style="font-size:11.5px">5h ago</span></div><div style="padding:14px 16px;font-size:13.5px" class="muted">When on-disk encrypted artifacts are lost but the DB watermark is intact, the reconciler reports the repo as healthy and never re-heals. Repro + logs attached.</div></div>
+    <div class="card" style="padding:0;margin-bottom:14px"><div class="row" style="gap:10px;padding:11px 16px;border-bottom:1px solid #232b2d;background:#161d1f"><span style="width:24px;height:24px;border-radius:6px;flex:none;background:linear-gradient(135deg,#3a2c12,#1b2325);border:1px solid #232b2d;display:inline-block"></span><span style="font-weight:600;font-size:13px">maintainer</span><span style="flex:1"></span><span class="mono dim" style="font-size:11.5px">3h ago</span></div><div style="padding:14px 16px;font-size:13.5px" class="muted">Confirmed. The watermark check short-circuits before the on-disk scan. We should verify artifact presence, not just the watermark, in the healthy path.</div></div>
+    <div class="card" style="padding:0;margin-bottom:14px"><div class="row" style="gap:10px;padding:11px 16px;border-bottom:1px solid #232b2d;background:#161d1f"><span style="width:24px;height:24px;border-radius:6px;flex:none;background:linear-gradient(135deg,#0e3b40,#1b2325);border:1px solid #232b2d;display:inline-block"></span><span style="font-weight:600;font-size:13px">demo-user</span><span style="flex:1"></span><span class="mono dim" style="font-size:11.5px">1h ago</span></div><div style="padding:14px 16px;font-size:13.5px" class="muted">Agreed — I will add a presence probe to <span class="mono" style="color:#38e0e6">healAll()</span> and open an MR.</div></div>
+    <div class="card" style="padding:16px"><div class="mono dim" style="font-size:12px;margin-bottom:10px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b979c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg> write a comment</div><div style="height:60px;border:1px solid #232b2d;border-radius:8px;background:#0b0f10"></div><div class="row" style="justify-content:flex-end;margin-top:12px"><span class="btn p mono">Comment</span></div></div>
+  </div>
+  <div>
+    <div class="card" style="padding:16px"><div style="font-weight:600;font-size:13px;margin-bottom:12px">Details</div>
+    <div class="list" style="font-size:13px">
+    <div class="row" style="justify-content:space-between"><span class="muted">Assignee</span><span class="row" style="gap:7px"><span style="width:20px;height:20px;border-radius:6px;flex:none;background:linear-gradient(135deg,#3a2c12,#1b2325);border:1px solid #232b2d;display:inline-block"></span>maintainer</span></div>
+    <div class="row" style="justify-content:space-between"><span class="muted">Labels</span><span class="row" style="gap:6px"><span class="badge mono" style="color:#ff6b6b;border-color:#ff6b6b">bug</span><span class="badge mono" style="color:#38e0e6;border-color:#38e0e6">storage</span></span></div>
+    <div class="row" style="justify-content:space-between"><span class="muted">Milestone</span><span class="mono" style="font-size:12px">v0.4 hardening</span></div>
+    <div class="row" style="justify-content:space-between"><span class="muted">Linked MR</span><span class="mono" style="color:#38e0e6;font-size:12px">!8</span></div>
+    </div></div>
+  </div>
+</div></div></div></div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":1600}}'>
+class Component extends DCLogic { renderVals(){ return {} } }
+</script>
+</body></html>
