@@ -132,7 +132,7 @@
     "viewAll": "View all",
     "noPublicRepos": "No public repositories yet.",
     "heroPrompt": "$ ogb init --self-hosted",
-    "heroTitle": "Git that runs on {accent} metal.",
+    "heroTitle": "Git that runs{linebreak}on {accent} metal.",
     "heroTitleAccent": "your",
     "heroSubtitle": "Self-hosted repositories, merge requests, CI in Firecracker MicroVMs, and a storage fleet you control. Source-open, privacy-first, no black boxes.",
     "readDocs": "Read the docs",

@@ -134,10 +134,13 @@ onMounted(async () => {
         <i18n-t
           keypath="home.heroTitle"
           tag="h1"
-          class="relative mt-4 max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl"
+          class="relative mt-4 max-w-2xl text-4xl font-bold leading-[1.02] tracking-tight sm:text-[4rem]"
         >
           <template #accent>
             <span class="text-[var(--ogb-accent)]">{{ t('home.heroTitleAccent') }}</span>
+          </template>
+          <template #linebreak>
+            <br>
           </template>
         </i18n-t>
         <p class="relative mt-5 max-w-xl text-lg text-[var(--ogb-text-muted)]">
