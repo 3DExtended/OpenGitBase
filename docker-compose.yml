@@ -23,12 +23,16 @@ x-kafka-broker-env: &kafka-broker-env
   KAFKA_BROKER_REGISTRATION_TIMEOUT_MS: 180000
   KAFKA_INITIAL_BROKER_REGISTRATION_TIMEOUT_MS: 300000
 
+# Verifies the KRaft controller WRITE path (quorum has an elected leader), not just
+# read liveness — api-versions succeeds even when the controller quorum is deadlocked
+# and every metadata write hangs (issue #231). start_period covers fresh-cluster quorum
+# formation; retries absorb transient leader elections.
 x-kafka-healthcheck: &kafka-healthcheck
-  test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-1:29092,kafka-2:29092,kafka-3:29092 >/dev/null 2>&1"]
+  test: ["CMD", "bash", "/healthcheck.sh"]
   interval: 10s
-  timeout: 15s
+  timeout: 20s
   retries: 18
-  start_period: 90s
+  start_period: 120s
 
 x-api-environment: &api-environment
   ASPNETCORE_ENVIRONMENT: Development
@@ -385,6 +389,7 @@ services:
       - "9092:9092"
     volumes:
       - kafka1_data:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -404,6 +409,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
     volumes:
       - kafka2_data:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
@@ -423,6 +429,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
     volumes:
       - kafka3_data:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
