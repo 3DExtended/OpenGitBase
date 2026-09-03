@@ -3,11 +3,19 @@
 Mid-fidelity wireframes of every implemented screen in `applications/opengitbase-web`
 (logged-out and logged-in), grouped into 7 pages on a single pan/zoom canvas.
 
-**Live canvas (Claude Design):** https://claude.ai/code/artifact/aae68f66-028c-4cae-a2b1-7027b60ac43f
+**Live canvases (Claude Design):**
+- Wireframes (34 screens, 7 pages): https://claude.ai/code/artifact/aae68f66-028c-4cae-a2b1-7027b60ac43f
+- Look & feel showcase (one board): https://claude.ai/code/artifact/84ba3cee-0f11-4b70-bcfe-e2b9d3518b25
 
-The canvas is editable in place (click-to-select, properties panel, inline text, Save).
-These source files are what the canvas is generated from — edit them to drive the next
+Both are editable in place (click-to-select, properties panel, inline text, Save).
+These source files are what the canvases are generated from — edit them to drive the next
 iteration, then re-seed and re-publish to the **same** URL.
+
+The showcase board (`showcase/`) is a single curated "what the whole app looks like"
+poster: gradient masthead + wordmark, three browser-framed signature screens (dashboard,
+merge request, status), the design language (color / type / components), and six feature
+pillars. Regenerate it with `node showcase/showcase.mjs`, then seed + publish `showcase/`
+to the showcase URL above.
 
 ## What's here
 
