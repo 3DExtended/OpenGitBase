@@ -23,12 +23,16 @@ x-kafka-broker-env: &kafka-broker-env
   KAFKA_BROKER_REGISTRATION_TIMEOUT_MS: 180000
   KAFKA_INITIAL_BROKER_REGISTRATION_TIMEOUT_MS: 300000
 
+# Verifies the KRaft controller WRITE path (quorum has an elected leader), not just
+# read liveness — api-versions succeeds even when the controller quorum is deadlocked
+# and every metadata write hangs (issue #231). start_period covers fresh-cluster quorum
+# formation; retries absorb transient leader elections.
 x-kafka-healthcheck: &kafka-healthcheck
-  test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka-1:29092,kafka-2:29092,kafka-3:29092 >/dev/null 2>&1"]
+  test: ["CMD", "bash", "/healthcheck.sh"]
   interval: 10s
-  timeout: 15s
+  timeout: 20s
   retries: 18
-  start_period: 90s
+  start_period: 120s
 
 x-api-environment: &api-environment
   ASPNETCORE_ENVIRONMENT: Development
@@ -353,16 +357,19 @@ services:
   kafka-vol-init:
     image: busybox:1.36
     container_name: opengitbase_kafka_vol_init
-    # Named volumes are root-owned on first create; apache/kafka runs as uid 1000.
+    # Kafka data lives on the SSD cache pool, not the array-backed docker.img:
+    # the KRaft metadata log fsyncs on every append, and ~273ms array fsyncs blow
+    # the 2s controller.quorum.request.timeout.ms, causing perpetual election churn
+    # (see #232). Bind-mount dirs are root-owned on first create; kafka runs as uid 1000.
     command: ["sh", "-c", "chown -R 1000:1000 /kafka1 /kafka2 /kafka3"]
     volumes:
-      - kafka1_data:/kafka1
-      - kafka2_data:/kafka2
-      - kafka3_data:/kafka3
+      - /mnt/cache/appdata/opengitbase/kafka1:/kafka1
+      - /mnt/cache/appdata/opengitbase/kafka2:/kafka2
+      - /mnt/cache/appdata/opengitbase/kafka3:/kafka3
     restart: "no"
 
   kafka-1:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_1
     hostname: kafka-1
     restart: unless-stopped
@@ -384,12 +391,13 @@ services:
     ports:
       - "9092:9092"
     volumes:
-      - kafka1_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka1:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
   kafka-2:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_2
     hostname: kafka-2
     restart: unless-stopped
@@ -403,12 +411,13 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://kafka-2:29092,CONTROLLER://kafka-2:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092
     volumes:
-      - kafka2_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka2:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
   kafka-3:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_3
     hostname: kafka-3
     restart: unless-stopped
@@ -422,12 +431,13 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://kafka-3:29092,CONTROLLER://kafka-3:29093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092
     volumes:
-      - kafka3_data:/var/lib/kafka/data
+      - /mnt/cache/appdata/opengitbase/kafka3:/var/lib/kafka/data
+      - ./docker/kafka/healthcheck.sh:/healthcheck.sh:ro
     healthcheck:
       <<: *kafka-healthcheck
 
   kafka-init:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:4.3.1
     container_name: opengitbase_kafka_init
     depends_on:
       kafka-1:
@@ -556,9 +566,6 @@ services:
 volumes:
   opengitbase_pgdata:
   opengitbase_minio_data:
-  kafka1_data:
-  kafka2_data:
-  kafka3_data:
   opengitbase_storage1_repos:
   opengitbase_storage2_repos:
   opengitbase_storage3_repos:

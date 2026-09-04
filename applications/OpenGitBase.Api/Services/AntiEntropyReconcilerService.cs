@@ -35,6 +35,9 @@ public sealed class AntiEntropyReconcilerService
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        await VerifyEncryptedArtifactPresenceAsync(context, cancellationToken).ConfigureAwait(false);
+
         var lagging = await context
             .Set<RepositoryEntity>()
             .Include(repository => repository.Replicas)
@@ -73,6 +76,100 @@ public sealed class AntiEntropyReconcilerService
         if (degraded > 0)
         {
             await _backfillService.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Corrects false-healthy encrypted replicas. An EncryptedReplica whose DB
+    /// <see cref="RepositoryReplicaEntity.ArtifactWatermark"/> claims it is caught up but whose
+    /// on-disk artifacts are actually gone (e.g. the node was recreated without a persistent
+    /// artifact volume) is otherwise invisible to the lagging query and never repaired. We probe
+    /// each such node for its true on-disk artifact watermark and, when it is behind the stored
+    /// value, lower the stored value so the normal repair pass re-uploads the artifact to the
+    /// current <c>PrimaryWatermark</c> (no watermark inflation). Only ever corrects downward; an
+    /// unavailable or failed probe is left untouched so a transient outage never marks a healthy
+    /// replica as lagging.
+    /// </summary>
+    private async Task VerifyEncryptedArtifactPresenceAsync(
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var candidates = await context
+            .Set<RepositoryEntity>()
+            .Include(repository => repository.Replicas)
+            .Where(repository =>
+                repository.PrimaryWatermark > 0
+                && repository.Replicas.Any(replica =>
+                    replica.Role == RepositoryReplicaRole.EncryptedReplica
+                    && replica.ArtifactWatermark != null
+                )
+            )
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var nodes = await _queryProcessor
+            .RunQueryAsync(new ListHealthyStorageNodesQuery(), cancellationToken)
+            .ConfigureAwait(false);
+        if (nodes.IsNone)
+        {
+            return;
+        }
+
+        var nodeById = nodes.Get().ToDictionary(node => node.Id.Value);
+        var changed = false;
+
+        foreach (var repository in candidates)
+        {
+            foreach (var replica in repository.Replicas)
+            {
+                if (
+                    replica.Role != RepositoryReplicaRole.EncryptedReplica
+                    || replica.ArtifactWatermark is null
+                )
+                {
+                    continue;
+                }
+
+                if (!nodeById.TryGetValue(replica.StorageNodeId, out var node))
+                {
+                    continue;
+                }
+
+                var token = await GetApiTokenAsync(node.Id, cancellationToken).ConfigureAwait(false);
+                if (token is null)
+                {
+                    continue;
+                }
+
+                var status = await _storageProvisionerClient
+                    .TryGetArtifactWatermarkStatusAsync(
+                        node,
+                        token,
+                        repository.Id,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (status is null || !status.Success)
+                {
+                    continue;
+                }
+
+                if ((status.ArtifactWatermark ?? -1) < replica.ArtifactWatermark.Value)
+                {
+                    replica.ArtifactWatermark = status.ArtifactWatermark;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
