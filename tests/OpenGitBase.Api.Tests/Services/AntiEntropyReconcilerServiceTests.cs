@@ -227,6 +227,120 @@ public class AntiEntropyReconcilerServiceTests
     }
 
     [Fact]
+    public async Task RunOnceAsync_WhenEncryptedReplicaLostOnDiskArtifacts_DetectsAndRepairs()
+    {
+        // Both encrypted replicas report DB ArtifactWatermark == PrimaryWatermark (47), i.e. the
+        // control plane believes they are healthy. But encB's on-disk artifacts are gone (probe
+        // reports no artifact present). The reconciler must detect the drift from the measured
+        // on-disk watermark and repair encB back to 47 -- without a manual watermark bump.
+        var repositoryId = Guid.NewGuid();
+        var primaryNodeId = Guid.NewGuid();
+        var encAId = Guid.NewGuid();
+        var encBId = Guid.NewGuid();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+
+        provisioner
+            .TryGetArtifactWatermarkStatusAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == encAId),
+                Arg.Any<string>(),
+                repositoryId,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ArtifactWatermarkStatusResult.Ok(47));
+        provisioner
+            .TryGetArtifactWatermarkStatusAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == encBId),
+                Arg.Any<string>(),
+                repositoryId,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ArtifactWatermarkStatusResult.Ok(null));
+
+        provisioner
+            .TryGetReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == encAId),
+                Arg.Any<string>(),
+                repositoryId,
+                47,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                ReplicationArtifactFetchResult.Ok(
+                    "{\"epoch\":0,\"watermark\":47,\"bundleSha256\":\"ABC\",\"keyVersion\":1}",
+                    [9, 8, 7]
+                )
+            );
+        provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+
+        var (service, provider) = await CreateRf4ServiceAsync(
+            repositoryId,
+            primaryNodeId,
+            encAId,
+            encBId,
+            primaryWatermark: 47,
+            provisioner,
+            Substitute.For<IRepositoryKeyService>(),
+            encAArtifactWatermark: 47,
+            encBArtifactWatermark: 47
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            var contextFactory = provider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var encB = await context
+                .Set<RepositoryReplicaEntity>()
+                .SingleAsync(entity => entity.StorageNodeId == encBId);
+            var encA = await context
+                .Set<RepositoryReplicaEntity>()
+                .SingleAsync(entity => entity.StorageNodeId == encAId);
+
+            // encB is repaired back to the current watermark; encA (still on disk) is untouched.
+            Assert.Equal(47, encB.ArtifactWatermark);
+            Assert.Equal(47, encA.ArtifactWatermark);
+            await provisioner
+                .Received(1)
+                .UploadReplicationArtifactAsync(
+                    Arg.Is<StorageNodeDto>(node => node.Id.Value == encBId),
+                    Arg.Any<string>(),
+                    repositoryId,
+                    47,
+                    Arg.Any<string>(),
+                    Arg.Any<byte[]>(),
+                    Arg.Any<CancellationToken>()
+                );
+            // Repaired by copying from the healthy peer, never by re-creating from primary.
+            await provisioner
+                .DidNotReceive()
+                .CreateReplicationArtifactAsync(
+                    Arg.Any<StorageNodeDto>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<Guid>(),
+                    Arg.Any<long>(),
+                    Arg.Any<long>(),
+                    Arg.Any<string>(),
+                    Arg.Any<int>(),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+    }
+
+    [Fact]
     public async Task RunOnceAsync_WhenPrimaryWatermarkIsZero_MarksEncryptedInSyncWithoutCreate()
     {
         var repositoryId = Guid.NewGuid();

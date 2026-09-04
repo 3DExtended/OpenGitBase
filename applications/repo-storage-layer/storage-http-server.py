@@ -44,6 +44,9 @@ REPOS_ROOT = Path("/srv/git")
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
 )
+ARTIFACT_STATUS_PATH_PATTERN = re.compile(
+    r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts$"
+)
 CA_CERT = Path("/etc/opengitbase/ca.crt")
 NODE_CERT = Path("/etc/opengitbase/node.crt")
 NODE_KEY = Path("/etc/opengitbase/node.key")
@@ -162,6 +165,25 @@ def fetch_replication_artifact(repository_id: str, watermark: int) -> tuple[dict
         raise FileNotFoundError(f"Artifact not found for {repository_id} at watermark {watermark}.")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     return manifest, bundle_path.read_bytes()
+
+
+def on_disk_artifact_watermark(repository_id: str) -> int | None:
+    """Return the highest watermark for which a *complete* artifact (both manifest.json and
+    bundle.aead) is present on disk, or None if no complete artifact exists. This is the true,
+    measured artifact state of the node — the control plane uses it to detect replicas whose
+    stored ArtifactWatermark is ahead of what is actually on disk (false-healthy)."""
+    repo_dir = ARTIFACT_ROOT / repository_id
+    if not repo_dir.is_dir():
+        return None
+    best: int | None = None
+    for entry in repo_dir.iterdir():
+        if not entry.is_dir() or not entry.name.isdigit():
+            continue
+        if (entry / "manifest.json").is_file() and (entry / "bundle.aead").is_file():
+            value = int(entry.name)
+            if best is None or value > best:
+                best = value
+    return best
 
 
 def create_replication_artifact(
@@ -429,6 +451,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/internal/repos/usage":
             self._handle_disk_usage()
+            return
+
+        artifact_status_match = ARTIFACT_STATUS_PATH_PATTERN.match(parsed.path)
+        if artifact_status_match:
+            self._handle_get_artifact_status(
+                artifact_status_match.group("repository_id")
+            )
             return
 
         artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
@@ -757,6 +786,15 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         self._handle_put_artifact(
             artifact_match.group("repository_id"),
             int(artifact_match.group("watermark")),
+        )
+
+    def _handle_get_artifact_status(self, repository_id: str) -> None:
+        self._send_json(
+            200,
+            {
+                "repositoryId": repository_id,
+                "artifactWatermark": on_disk_artifact_watermark(repository_id),
+            },
         )
 
     def _handle_get_artifact(self, repository_id: str, watermark: int) -> None:

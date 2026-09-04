@@ -154,6 +154,50 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         return ParseArtifactResponse(body);
     }
 
+    public async Task<ArtifactWatermarkStatusResult> TryGetArtifactWatermarkStatusAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return ArtifactWatermarkStatusResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/{repositoryId:D}/artifacts";
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if ((int)response.StatusCode != 200)
+        {
+            return ArtifactWatermarkStatusResult.Fail(
+                (int)response.StatusCode,
+                string.IsNullOrWhiteSpace(body)
+                    ? $"Artifact status fetch failed with status {(int)response.StatusCode}."
+                    : body
+            );
+        }
+
+        using var document = JsonDocument.Parse(body);
+        if (
+            document.RootElement.TryGetProperty("artifactWatermark", out var watermarkElement)
+            && watermarkElement.ValueKind == JsonValueKind.Number
+        )
+        {
+            return ArtifactWatermarkStatusResult.Ok(watermarkElement.GetInt64());
+        }
+
+        return ArtifactWatermarkStatusResult.Ok(null);
+    }
+
     public async Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,

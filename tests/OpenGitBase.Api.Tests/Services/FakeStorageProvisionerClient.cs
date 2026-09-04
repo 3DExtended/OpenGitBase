@@ -52,6 +52,13 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
             ReplicationArtifactFetchResult.Ok("{\"epoch\":0,\"watermark\":0,\"bundleSha256\":\"ABC\",\"keyVersion\":1}", [])
         );
 
+    public Task<ArtifactWatermarkStatusResult> TryGetArtifactWatermarkStatusAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        CancellationToken cancellationToken = default
+    ) => Task.FromResult(ArtifactWatermarkStatusResult.Fail(501, "Not implemented in fake."));
+
     public Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,

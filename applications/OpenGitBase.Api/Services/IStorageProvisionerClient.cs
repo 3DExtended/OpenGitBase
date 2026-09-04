@@ -48,6 +48,18 @@ public interface IStorageProvisionerClient
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// Ask an encrypted-replica storage node for its true on-disk artifact watermark (the highest
+    /// watermark with a complete artifact present), used to detect false-healthy replicas whose DB
+    /// <c>ArtifactWatermark</c> is ahead of what is actually stored.
+    /// </summary>
+    Task<ArtifactWatermarkStatusResult> TryGetArtifactWatermarkStatusAsync(
+        StorageNodeDto node,
+        string apiToken,
+        Guid repositoryId,
+        CancellationToken cancellationToken = default
+    );
+
     Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,

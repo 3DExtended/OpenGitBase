@@ -50,6 +50,32 @@ class StorageHttpServerTests(unittest.TestCase):
         self.assertEqual(manifest, fetched_manifest)
         self.assertEqual(bundle, fetched_bundle)
 
+    def test_on_disk_artifact_watermark_none_when_no_artifacts(self) -> None:
+        repository_id = "33333333-3333-3333-3333-333333333333"
+        self.assertIsNone(storage_http_server.on_disk_artifact_watermark(repository_id))
+
+    def test_on_disk_artifact_watermark_returns_highest_complete(self) -> None:
+        repository_id = "44444444-4444-4444-4444-444444444444"
+        manifest = {"epoch": 1, "watermark": 1, "bundleSha256": "abc", "keyVersion": 1}
+        storage_http_server.store_replication_artifact(repository_id, 2, manifest, b"x")
+        storage_http_server.store_replication_artifact(repository_id, 5, manifest, b"y")
+        storage_http_server.store_replication_artifact(repository_id, 3, manifest, b"z")
+
+        self.assertEqual(5, storage_http_server.on_disk_artifact_watermark(repository_id))
+
+    def test_on_disk_artifact_watermark_ignores_incomplete_and_nondigit(self) -> None:
+        repository_id = "55555555-5555-5555-5555-555555555555"
+        manifest = {"epoch": 1, "watermark": 1, "bundleSha256": "abc", "keyVersion": 1}
+        storage_http_server.store_replication_artifact(repository_id, 4, manifest, b"complete")
+        # A half-written artifact (manifest present, bundle missing) must not count.
+        incomplete = self.artifact_root / repository_id / "9"
+        incomplete.mkdir(parents=True)
+        (incomplete / "manifest.json").write_text("{}", encoding="utf-8")
+        # A stray non-numeric directory must be ignored.
+        (self.artifact_root / repository_id / "tmp").mkdir()
+
+        self.assertEqual(4, storage_http_server.on_disk_artifact_watermark(repository_id))
+
     def test_is_encrypted_replica_reflects_written_role(self) -> None:
         repository_id = "22222222-2222-2222-2222-222222222222"
         storage_http_server._write_repo_role(repository_id, "EncryptedReplica")
