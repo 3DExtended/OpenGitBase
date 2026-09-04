@@ -491,7 +491,14 @@
       "deleteWarning": "Deleting a repository is permanent and cannot be undone.",
       "deleteButton": "Delete repository",
       "deleteConfirmTitle": "Delete repository?",
-      "deleteConfirmDescription": "This will permanently delete the repository and all its data."
+      "deleteConfirmDescription": "This will permanently delete the repository and all its data.",
+      "nav": {
+        "general": "General",
+        "branches": "Branch protection",
+        "discussions": "Discussions",
+        "storage": "Storage",
+        "danger": "Danger zone"
+      }
     },
     "members": {
       "title": "Members",

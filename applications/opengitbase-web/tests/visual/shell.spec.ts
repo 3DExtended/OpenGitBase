@@ -1,5 +1,26 @@
 import { test, expect } from '@playwright/test'
 
+const MOCK_USER = {
+  userId: '22222222-2222-2222-2222-222222222222',
+  username: 'demo-user',
+  emailVerified: true,
+  isAdmin: false,
+}
+
+// The auth store's fetchMe() runs from a startup plugin, before the MSW service
+// worker controls the page on first load, so it would otherwise hit the real dev
+// server and resolve as logged-out. Force /api/account/me at the network layer so
+// auth-gated pages render authenticated instead of redirecting to sign-in.
+async function authenticate(page: import('@playwright/test').Page) {
+  await page.route('**/api/account/me', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(MOCK_USER),
+    }),
+  )
+}
+
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.goto('/__visual__/?msw=1')
   await page.waitForLoadState('networkidle')
@@ -106,6 +127,7 @@ test.describe('Auth screens', () => {
 
 test.describe('Settings screens', () => {
   test('settings', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/settings?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('settings.png', {
@@ -114,6 +136,7 @@ test.describe('Settings screens', () => {
   })
 
   test('ssh-keys', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/settings/ssh-keys?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('ssh-keys.png', {
@@ -151,6 +174,7 @@ test.describe('Discovery screens', () => {
 
 test.describe('Repository screens', () => {
   test('dashboard', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('dashboard.png', {
@@ -167,6 +191,7 @@ test.describe('Repository screens', () => {
   })
 
   test('repo settings', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/demo-user/hello-world/settings?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('repo-settings.png', {
@@ -175,6 +200,7 @@ test.describe('Repository screens', () => {
   })
 
   test('repo members', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/demo-user/hello-world/members?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('repo-members.png', {
@@ -183,6 +209,7 @@ test.describe('Repository screens', () => {
   })
 
   test('new repo', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/repos/new?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('repo-new.png', {
@@ -191,6 +218,7 @@ test.describe('Repository screens', () => {
   })
 
   test('new org', async ({ page }) => {
+    await authenticate(page)
     await page.goto('/orgs/new?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('org-new.png', {
