@@ -5,6 +5,8 @@ namespace OpenGitBase.Api.Tests.Services;
 
 internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
 {
+    public Func<StorageNodeDto, StorageInventoryResult>? InventoryProvider { get; set; }
+
     public Task<StorageProvisionerResult> ProvisionRepositoryAsync(
         StorageNodeDto node,
         string apiToken,
@@ -84,6 +86,15 @@ internal sealed class FakeStorageProvisionerClient : IStorageProvisionerClient
         long watermark,
         CancellationToken cancellationToken = default
     ) => Task.FromResult(StorageProvisionerResult.Ok(200));
+
+    public Task<StorageInventoryResult> TryGetInventoryAsync(
+        StorageNodeDto node,
+        string apiToken,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult(
+            InventoryProvider?.Invoke(node) ?? StorageInventoryResult.Ok([], [])
+        );
 
     public Task<StorageProvisionerResult> ImportRepositoryBundleAsync(
         StorageNodeDto node,

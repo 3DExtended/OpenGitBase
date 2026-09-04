@@ -34,6 +34,26 @@ public sealed class AdminFleetController : ControllerBase
         return Ok(result.Get());
     }
 
+    [HttpGet("drift")]
+    public async Task<ActionResult<FleetDriftReportDto>> GetDriftReport(
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _queryProcessor.RunQueryAsync(
+            new GetFleetDriftReportQuery(),
+            cancellationToken
+        );
+        if (result.IsNone)
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "Drift report generation failed." }
+            );
+        }
+
+        return Ok(result.Get());
+    }
+
     [HttpGet("dispatcher-ssh-public-key")]
     public async Task<ActionResult<string>> GetDispatcherSshPublicKey(
         CancellationToken cancellationToken

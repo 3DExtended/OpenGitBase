@@ -76,6 +76,43 @@ class StorageHttpServerTests(unittest.TestCase):
 
         self.assertEqual(4, storage_http_server.on_disk_artifact_watermark(repository_id))
 
+    def test_on_disk_inventory_reports_guid_plaintext_repos_only(self) -> None:
+        # setUp already created a non-GUID "sample.git" repo, which must be ignored.
+        guid_repo = "66666666-6666-6666-6666-666666666666"
+        (self.repos_root / f"{guid_repo}.git").mkdir()
+        (self.repos_root / "not-a-repo").mkdir()  # no .git suffix -> ignored
+
+        inventory = storage_http_server.on_disk_inventory()
+
+        self.assertEqual([guid_repo], inventory["plaintextRepositories"])
+
+    def test_on_disk_inventory_reports_artifact_repos_with_watermark(self) -> None:
+        repository_id = "77777777-7777-7777-7777-777777777777"
+        manifest = {"epoch": 1, "watermark": 1, "bundleSha256": "abc", "keyVersion": 1}
+        storage_http_server.store_replication_artifact(repository_id, 2, manifest, b"x")
+        storage_http_server.store_replication_artifact(repository_id, 6, manifest, b"y")
+
+        inventory = storage_http_server.on_disk_inventory()
+
+        self.assertIn(
+            {"repositoryId": repository_id, "artifactWatermark": 6},
+            inventory["artifactRepositories"],
+        )
+
+    def test_on_disk_inventory_excludes_artifact_repo_with_no_complete_set(self) -> None:
+        repository_id = "88888888-8888-8888-8888-888888888888"
+        # A directory with only a half-written artifact contributes no artifact watermark.
+        incomplete = self.artifact_root / repository_id / "3"
+        incomplete.mkdir(parents=True)
+        (incomplete / "manifest.json").write_text("{}", encoding="utf-8")
+
+        inventory = storage_http_server.on_disk_inventory()
+
+        self.assertNotIn(
+            repository_id,
+            [entry["repositoryId"] for entry in inventory["artifactRepositories"]],
+        )
+
     def test_is_encrypted_replica_reflects_written_role(self) -> None:
         repository_id = "22222222-2222-2222-2222-222222222222"
         storage_http_server._write_repo_role(repository_id, "EncryptedReplica")

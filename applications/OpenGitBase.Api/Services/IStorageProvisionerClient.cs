@@ -80,6 +80,12 @@ public interface IStorageProvisionerClient
         CancellationToken cancellationToken = default
     );
 
+    Task<StorageInventoryResult> TryGetInventoryAsync(
+        StorageNodeDto node,
+        string apiToken,
+        CancellationToken cancellationToken = default
+    );
+
     Task<StorageProvisionerResult> ImportRepositoryBundleAsync(
         StorageNodeDto node,
         string apiToken,

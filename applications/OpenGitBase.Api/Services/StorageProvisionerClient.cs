@@ -198,6 +198,43 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         return ArtifactWatermarkStatusResult.Ok(null);
     }
 
+    public async Task<StorageInventoryResult> TryGetInventoryAsync(
+        StorageNodeDto node,
+        string apiToken,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(apiToken))
+        {
+            return StorageInventoryResult.Fail(401, "Storage node API token is missing.");
+        }
+
+        var requestUri =
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/inventory";
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+        using var response = await _httpClient
+            .SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if ((int)response.StatusCode != 200)
+        {
+            return StorageInventoryResult.Fail(
+                (int)response.StatusCode,
+                string.IsNullOrWhiteSpace(body)
+                    ? $"Inventory fetch failed with status {(int)response.StatusCode}."
+                    : body
+            );
+        }
+
+        using var document = JsonDocument.Parse(body);
+        var plaintext = ReadRepositoryIds(document.RootElement, "plaintextRepositories");
+        var artifacts = ReadArtifactRepositoryIds(document.RootElement, "artifactRepositories");
+        return StorageInventoryResult.Ok(plaintext, artifacts);
+    }
+
     public async Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(
         StorageNodeDto node,
         string apiToken,
@@ -345,6 +382,54 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         }
 
         return ReplicationArtifactFetchResult.Ok(manifestJson, Convert.FromHexString(bundleHex));
+    }
+
+    private static List<Guid> ReadRepositoryIds(JsonElement root, string propertyName)
+    {
+        var ids = new List<Guid>();
+        if (
+            root.TryGetProperty(propertyName, out var array)
+            && array.ValueKind == JsonValueKind.Array
+        )
+        {
+            foreach (var element in array.EnumerateArray())
+            {
+                if (
+                    element.ValueKind == JsonValueKind.String
+                    && Guid.TryParse(element.GetString(), out var id)
+                )
+                {
+                    ids.Add(id);
+                }
+            }
+        }
+
+        return ids;
+    }
+
+    private static List<Guid> ReadArtifactRepositoryIds(JsonElement root, string propertyName)
+    {
+        var ids = new List<Guid>();
+        if (
+            root.TryGetProperty(propertyName, out var array)
+            && array.ValueKind == JsonValueKind.Array
+        )
+        {
+            foreach (var element in array.EnumerateArray())
+            {
+                if (
+                    element.ValueKind == JsonValueKind.Object
+                    && element.TryGetProperty("repositoryId", out var idElement)
+                    && idElement.ValueKind == JsonValueKind.String
+                    && Guid.TryParse(idElement.GetString(), out var id)
+                )
+                {
+                    ids.Add(id);
+                }
+            }
+        }
+
+        return ids;
     }
 
     private async Task<StorageProvisionerResult> SendSyncFromAsync(

@@ -342,6 +342,10 @@ public class Startup
             GetFleetDispatcherSshPublicKeyQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<GetFleetDriftReportQuery, FleetDriftReportDto>,
+            GetFleetDriftReportQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<GetFleetDispatcherSshPrivateKeyQuery, string>,
             GetFleetDispatcherSshPrivateKeyQueryHandler
         >();

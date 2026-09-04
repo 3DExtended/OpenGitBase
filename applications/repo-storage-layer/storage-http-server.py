@@ -47,6 +47,7 @@ ARTIFACT_PATH_PATTERN = re.compile(
 ARTIFACT_STATUS_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts$"
 )
+REPOSITORY_ID_PATTERN = re.compile(r"^[0-9a-fA-F-]{36}$")
 CA_CERT = Path("/etc/opengitbase/ca.crt")
 NODE_CERT = Path("/etc/opengitbase/node.crt")
 NODE_KEY = Path("/etc/opengitbase/node.key")
@@ -184,6 +185,37 @@ def on_disk_artifact_watermark(repository_id: str) -> int | None:
             if best is None or value > best:
                 best = value
     return best
+
+
+def on_disk_inventory() -> dict[str, Any]:
+    """Enumerate the repositories physically present on this node so the control plane can
+    cross-reference against its RepositoryReplica records and detect storage/DB drift in both
+    directions: plaintext bare repos under /srv/git and encrypted artifact sets under
+    ARTIFACT_ROOT. Only GUID-shaped names are reported; unrelated directories are ignored."""
+    plaintext: list[str] = []
+    if REPOS_ROOT.is_dir():
+        for entry in REPOS_ROOT.iterdir():
+            if not entry.is_dir() or not entry.name.endswith(".git"):
+                continue
+            repository_id = entry.name[:-4]
+            if REPOSITORY_ID_PATTERN.match(repository_id):
+                plaintext.append(repository_id)
+
+    artifacts: list[dict[str, Any]] = []
+    if ARTIFACT_ROOT.is_dir():
+        for entry in ARTIFACT_ROOT.iterdir():
+            if not entry.is_dir() or not REPOSITORY_ID_PATTERN.match(entry.name):
+                continue
+            watermark = on_disk_artifact_watermark(entry.name)
+            if watermark is not None:
+                artifacts.append(
+                    {"repositoryId": entry.name, "artifactWatermark": watermark}
+                )
+
+    return {
+        "plaintextRepositories": sorted(plaintext),
+        "artifactRepositories": sorted(artifacts, key=lambda a: a["repositoryId"]),
+    }
 
 
 def create_replication_artifact(
@@ -451,6 +483,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/internal/repos/usage":
             self._handle_disk_usage()
+            return
+        if parsed.path == "/internal/repos/inventory":
+            self._handle_get_inventory()
             return
 
         artifact_status_match = ARTIFACT_STATUS_PATH_PATTERN.match(parsed.path)
@@ -787,6 +822,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             artifact_match.group("repository_id"),
             int(artifact_match.group("watermark")),
         )
+
+    def _handle_get_inventory(self) -> None:
+        self._send_json(200, on_disk_inventory())
 
     def _handle_get_artifact_status(self, repository_id: str) -> None:
         self._send_json(
