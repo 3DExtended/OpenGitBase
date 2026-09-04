@@ -399,6 +399,36 @@ public class AntiEntropyReconcilerServiceTests
         }
     }
 
+    [Fact]
+    public async Task RunOnceAsync_WhenDegradedRepoIsFullyInSyncOnHealthyNodes_ClearsLatchToRf3Healthy()
+    {
+        var repositoryId = Guid.NewGuid();
+        var n1 = Guid.NewGuid();
+        var n2 = Guid.NewGuid();
+        var n3 = Guid.NewGuid();
+        var (service, provider) = await CreateDegradedRf3ServiceAsync(
+            repositoryId,
+            n1,
+            n2,
+            n3,
+            watermark: 6
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            var contextFactory = provider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .SingleAsync(entity => entity.Id == repositoryId);
+            Assert.Equal(ReplicationState.Rf3Healthy, repository.ReplicationState);
+        }
+    }
+
     private static async Task<(AntiEntropyReconcilerService Service, ServiceProvider Provider)>
         CreateRf3ServiceAsync(
             Guid repositoryId,
@@ -627,6 +657,123 @@ public class AntiEntropyReconcilerServiceTests
                             AppliedWatermark = primaryWatermark,
                             ArtifactWatermark = encBArtifactWatermark,
                             LastSyncedAt = DateTimeOffset.Parse("2026-07-10T20:27:19Z"),
+                        },
+                    ],
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        return (provider.GetRequiredService<AntiEntropyReconcilerService>(), provider);
+    }
+
+    private static async Task<(AntiEntropyReconcilerService Service, ServiceProvider Provider)>
+        CreateDegradedRf3ServiceAsync(
+            Guid repositoryId,
+            Guid nodeId1,
+            Guid nodeId2,
+            Guid nodeId3,
+            long watermark
+        )
+    {
+        var connection = SqliteTestConnection.OpenInMemory();
+        var nodeIds = new[] { nodeId1, nodeId2, nodeId3 };
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListHealthyStorageNodesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From<IReadOnlyList<StorageNodeDto>>(nodeIds.Select(CreateNode).ToList())
+            );
+        foreach (var nodeId in nodeIds)
+        {
+            var storageNodeId = StorageNodeId.From(nodeId);
+            queryProcessor
+                .RunQueryAsync(
+                    Arg.Is<GetStorageNodeApiTokenQuery>(query =>
+                        query.StorageNodeId == storageNodeId
+                    ),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(Option.From("token"));
+        }
+
+        var services = new ServiceCollection();
+        services.AddSingleton(connection);
+        services.AddSingleton(queryProcessor);
+        services.AddSingleton<IStorageProvisionerClient, FakeStorageProvisionerClient>();
+        services.AddSingleton(Substitute.For<IRepositoryKeyService>());
+        services.AddSingleton<IFeatureAssemblyProvider>(
+            new FeatureAssemblyProvider(
+                [
+                    typeof(RepositoryMapsterConfig).Assembly,
+                    typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
+                ]
+            )
+        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        var mapsterConfig = new TypeAdapterConfig();
+        new RepositoryMapsterConfig().Register(mapsterConfig);
+        services.AddSingleton(mapsterConfig);
+        services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
+        services.AddSingleton<Rf1BackfillService>();
+        services.AddSingleton<AntiEntropyReconcilerService>();
+
+        var provider = services.BuildServiceProvider();
+        var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+            foreach (var nodeId in nodeIds)
+            {
+                context.Set<StorageNodeEntity>().Add(
+                    new StorageNodeEntity
+                    {
+                        Id = nodeId,
+                        NodeId = nodeId.ToString(),
+                        InternalHost = nodeId.ToString(),
+                        InternalHttpPort = 8081,
+                        IsHealthy = true,
+                        RegisteredAt = DateTimeOffset.UtcNow,
+                    }
+                );
+            }
+
+            // A repo latched Degraded even though all three replicas are caught up on healthy nodes.
+            context.Set<RepositoryEntity>().Add(
+                new RepositoryEntity
+                {
+                    Id = repositoryId,
+                    Name = "repo",
+                    Slug = "repo",
+                    OwnerUserId = Guid.NewGuid(),
+                    PhysicalPath = $"/srv/git/{repositoryId}.git",
+                    StorageNodeId = nodeId1,
+                    PrimaryStorageNodeId = nodeId1,
+                    PrimaryWatermark = watermark,
+                    ReplicationState = ReplicationState.Degraded,
+                    Replicas =
+                    [
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = nodeId1,
+                            Role = RepositoryReplicaRole.Primary,
+                            AppliedWatermark = watermark,
+                        },
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = nodeId2,
+                            Role = RepositoryReplicaRole.Replica,
+                            AppliedWatermark = watermark,
+                        },
+                        new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = nodeId3,
+                            Role = RepositoryReplicaRole.Replica,
+                            AppliedWatermark = watermark,
                         },
                     ],
                 }

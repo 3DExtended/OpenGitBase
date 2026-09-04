@@ -63,6 +63,8 @@ public sealed class AntiEntropyReconcilerService
                 .ConfigureAwait(false);
         }
 
+        await HealRecoveredDegradedAsync(context, cancellationToken).ConfigureAwait(false);
+
         var degraded = await context
             .Set<RepositoryEntity>()
             .CountAsync(
@@ -76,6 +78,59 @@ public sealed class AntiEntropyReconcilerService
         if (degraded > 0)
         {
             await _backfillService.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Clears the <see cref="ReplicationState.Degraded"/> latch on repositories that have actually
+    /// recovered. The membership-changing services (<c>Rf1BackfillService</c>,
+    /// <c>RebalanceService</c>) only return a repo to a healthy state as a side effect of adding or
+    /// replacing a replica; a repo that was already at full membership and merely caught back up
+    /// otherwise stays Degraded forever. This pass re-evaluates each Degraded repo against the
+    /// replication target on healthy nodes and promotes it to Rf3/Rf4 Healthy once it qualifies.
+    /// </summary>
+    private async Task HealRecoveredDegradedAsync(
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var degraded = await context
+            .Set<RepositoryEntity>()
+            .Include(repository => repository.Replicas)
+            .Where(repository => repository.ReplicationState == ReplicationState.Degraded)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (degraded.Count == 0)
+        {
+            return;
+        }
+
+        var nodes = await _queryProcessor
+            .RunQueryAsync(new ListHealthyStorageNodesQuery(), cancellationToken)
+            .ConfigureAwait(false);
+        if (nodes.IsNone)
+        {
+            return;
+        }
+
+        var healthyNodeIds = nodes.Get().Select(node => node.Id.Value).ToHashSet();
+        var changed = false;
+        foreach (var repository in degraded)
+        {
+            var recovered = ReplicationStateEvaluator.RecoveredStateOrNull(
+                repository,
+                healthyNodeIds
+            );
+            if (recovered is not null)
+            {
+                repository.ReplicationState = recovered.Value;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
