@@ -11,13 +11,6 @@ public interface IClusterChaos
 
 public sealed class ClusterChaos : IClusterChaos
 {
-    private static readonly Dictionary<string, string> ServiceToContainer = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["storage-1"] = "opengitbase_storage_1",
-        ["storage-2"] = "opengitbase_storage_2",
-        ["storage-3"] = "opengitbase_storage_3",
-    };
-
     private readonly IOperationTranscript _transcript;
     private readonly HashSet<string> _stoppedServices = new(StringComparer.OrdinalIgnoreCase);
 
@@ -57,9 +50,7 @@ public sealed class ClusterChaos : IClusterChaos
     }
 
     private static string ResolveContainer(string serviceName) =>
-        ServiceToContainer.TryGetValue(serviceName, out var container)
-            ? container
-            : serviceName;
+        E2eEnvironment.ContainerName(serviceName);
 
     private static async Task RunDockerAsync(string[] args, CancellationToken cancellationToken)
     {

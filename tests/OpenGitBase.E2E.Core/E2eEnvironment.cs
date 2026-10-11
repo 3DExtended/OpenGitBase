@@ -2,7 +2,27 @@ namespace OpenGitBase.E2E.Core;
 
 public static class E2eEnvironment
 {
-    public const int GitHttpPort = 8089;
+    /// <summary>Host port of the compose stack's HAProxy frontend (API + Git Smart HTTP).</summary>
+    public const int DefaultGitHttpPort = 8089;
+
+    /// <summary>Container names are <c>{prefix}{service with '-' as '_'}</c>, as in docker-compose.yml.</summary>
+    public const string DefaultContainerPrefix = "opengitbase_";
+
+    /// <summary>
+    /// <see cref="DefaultGitHttpPort"/> unless <c>OPENGITBASE_E2E_HTTP_PORT</c> names another one, for a
+    /// stack that cannot publish 8089 on this machine. Baselines always record the default port
+    /// (<see cref="BaselineNormalizer"/>).
+    /// </summary>
+    public static int GitHttpPort { get; } = ReadPort("OPENGITBASE_E2E_HTTP_PORT", DefaultGitHttpPort);
+
+    /// <summary>
+    /// <see cref="DefaultContainerPrefix"/> unless <c>OPENGITBASE_E2E_CONTAINER_PREFIX</c> names another
+    /// one, for a stack run under its own container names next to another compose project.
+    /// </summary>
+    public static string ContainerPrefix { get; } =
+        Environment.GetEnvironmentVariable("OPENGITBASE_E2E_CONTAINER_PREFIX") is { Length: > 0 } prefix
+            ? prefix
+            : DefaultContainerPrefix;
 
     public static string RepoRoot { get; } = FindRepoRoot();
 
@@ -23,6 +43,15 @@ public static class E2eEnvironment
 
     public static string BuildPatRemoteUrl(string username, string repoSlug, string pat) =>
         $"http://git:{Uri.EscapeDataString(pat)}@127.0.0.1:{GitHttpPort}/{username}/{repoSlug}.git";
+
+    /// <summary>The container of compose service <paramref name="serviceName"/>, e.g. storage-2.</summary>
+    public static string ContainerName(string serviceName) =>
+        ContainerPrefix + serviceName.Replace('-', '_');
+
+    private static int ReadPort(string variable, int fallback) =>
+        int.TryParse(Environment.GetEnvironmentVariable(variable), out var port) && port is > 0 and < 65536
+            ? port
+            : fallback;
 
     private static string FindRepoRoot()
     {

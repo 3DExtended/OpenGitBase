@@ -23,7 +23,7 @@ public sealed class BaselineNormalizer
             return string.Empty;
         }
 
-        var result = input;
+        var result = CanonicalizeHostPort(input);
         foreach (var (name, value) in _tokens)
         {
             if (!string.IsNullOrEmpty(value))
@@ -49,5 +49,21 @@ public sealed class BaselineNormalizer
             string.Empty);
         result = Regex.Replace(result, @"verify\?token=[^""\s&]+", "verify?token={{VERIFY_TOKEN}}");
         return result;
+    }
+
+    /// <summary>
+    /// A stack published on another host port (OPENGITBASE_E2E_HTTP_PORT) records the default one, so
+    /// its baselines match everybody else's.
+    /// </summary>
+    private static string CanonicalizeHostPort(string input)
+    {
+        if (E2eEnvironment.GitHttpPort == E2eEnvironment.DefaultGitHttpPort)
+        {
+            return input;
+        }
+
+        return input
+            .Replace($"localhost:{E2eEnvironment.GitHttpPort}", $"localhost:{E2eEnvironment.DefaultGitHttpPort}", StringComparison.Ordinal)
+            .Replace($"127.0.0.1:{E2eEnvironment.GitHttpPort}", $"127.0.0.1:{E2eEnvironment.DefaultGitHttpPort}", StringComparison.Ordinal);
     }
 }

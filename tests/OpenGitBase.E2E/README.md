@@ -59,6 +59,13 @@ dotnet run --project tests/OpenGitBase.E2E.Runner -- --skip-compose --feature Di
 dotnet run --project tests/OpenGitBase.E2E.Runner -- --tier 4 --feature Discussion --tag Regression --no-open-report
 ```
 
+### Environment
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `OPENGITBASE_E2E_HTTP_PORT` | `8089` | Host port of the stack's HAProxy frontend, for a machine where 8089 is taken. Baselines still record `8089`. Use it with `--skip-compose`: `docker-compose.yml` publishes 8089, so a stack on another port is started by hand (with a compose overlay that remaps the port). |
+| `OPENGITBASE_E2E_CONTAINER_PREFIX` | `opengitbase_` | Prefix of the stack's container names (`<prefix>storage_1`), for a stack run under its own names next to another compose project. Used by `ClusterChaos` and tests that `docker exec` into storage nodes. |
+
 ## Compose profiles
 
 | Profile | Flag | Use |
