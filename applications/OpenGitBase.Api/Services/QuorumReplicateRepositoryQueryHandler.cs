@@ -84,20 +84,76 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             );
         }
 
+        if (query.ExpectedPrimaryLastSyncedAt is null)
+        {
+            // A push is replicating now: the reconciler leaves this repository alone meanwhile,
+            // and a reconciler run that claimed it stops before its next upload, sync or commit.
+            await MarkPrimaryReplicatingAsync(context.RepositoryId, query.StorageNodeId.Value, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Option<QuorumReplicateRepositoryResult> result;
         if (string.Equals(context.ReplicationState, nameof(ReplicationState.Rf4Healthy), StringComparison.Ordinal))
         {
-            return query.CreateArtifact
+            result = query.CreateArtifact
                 ? await RunRf4CreateArtifactQuorumAsync(query, context, cancellationToken).ConfigureAwait(false)
                 : await RunRf4QuorumAsync(query, context, cancellationToken).ConfigureAwait(false);
         }
+        else
+        {
+            result = await RunRf3QuorumAsync(query, context, cancellationToken).ConfigureAwait(false);
+        }
 
-        return await RunRf3QuorumAsync(query, context, cancellationToken).ConfigureAwait(false);
+        return await StaleIfCommittedMeanwhileAsync(query, result, cancellationToken).ConfigureAwait(false);
     }
 
     private static string Describe(int statusCode, string? error)
     {
         var detail = string.IsNullOrWhiteSpace(error) ? "no detail" : error.Trim();
         return statusCode > 0 ? $"HTTP {statusCode}: {detail}" : detail;
+    }
+
+    private static QuorumReplicateRepositoryResult LeftToThePush() =>
+        QuorumReplicateRepositoryResult.Failed("A push started replicating this repository; left to the push.");
+
+    /// <summary>
+    /// Any failure, however it came about (lost compare-and-set, failed create or upload, a claim
+    /// a push took over), is reported as stale once the watermark has been committed by someone
+    /// else meanwhile (another push, or the reconciler on either API instance). That commit may
+    /// not hold the caller's push, and the caller's watermark file now equals PrimaryWatermark, so
+    /// nothing would pick the push up: stale makes the hook retry with the next watermark.
+    /// </summary>
+    private async Task<Option<QuorumReplicateRepositoryResult>> StaleIfCommittedMeanwhileAsync(
+        QuorumReplicateRepositoryQuery query,
+        Option<QuorumReplicateRepositoryResult> result,
+        CancellationToken cancellationToken
+    )
+    {
+        if (result.IsSome && (result.Get().Success || result.Get().Stale))
+        {
+            return result;
+        }
+
+        var current = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryReplicationContextQuery
+                {
+                    RepositoryId = query.RepositoryId,
+                    StorageNodeId = query.StorageNodeId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (current.IsSome && current.Get().PrimaryWatermark >= query.AppliedWatermark)
+        {
+            return Option.From(
+                QuorumReplicateRepositoryResult.StaleWatermark(
+                    $"Watermark {query.AppliedWatermark} was committed concurrently."
+                )
+            );
+        }
+
+        return result;
     }
 
     private async Task<Option<QuorumReplicateRepositoryResult>> RunRf4QuorumAsync(
@@ -292,13 +348,6 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             return Option.From(QuorumReplicateRepositoryResult.Failed("Primary storage node is unknown."));
         }
 
-        if (query.ExpectedPrimaryLastSyncedAt is null)
-        {
-            // A push is replicating now: keep the reconciler off this repository meanwhile.
-            await MarkPrimaryReplicatingAsync(context.RepositoryId, query.StorageNodeId.Value, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         var artifact = await _artifactPublisher
             .CreateOnPrimaryAsync(
                 primaryNode,
@@ -328,11 +377,7 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                 // A push started replicating since the reconciler claimed this repository. Its
                 // artifact is newer than ours, so ours must not land after it under the same
                 // watermark: stop here and leave the repository to the push.
-                return Option.From(
-                    QuorumReplicateRepositoryResult.Failed(
-                        "A push started replicating this repository; left to the push."
-                    )
-                );
+                return Option.From(LeftToThePush());
             }
 
             uploads = whileClaimed;
@@ -369,6 +414,11 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             );
         }
 
+        if (!await StillClaimedAsync(query, cancellationToken).ConfigureAwait(false))
+        {
+            return Option.From(LeftToThePush());
+        }
+
         var commitResult = await _queryProcessor
             .RunQueryAsync(
                 new CommitReplicationWatermarkQuery
@@ -385,7 +435,9 @@ public sealed class QuorumReplicateRepositoryQueryHandler
         if (commitResult.IsNone || !commitResult.Get().Success)
         {
             return Option.From(
-                await CommitFailureAsync(query, commitResult, cancellationToken).ConfigureAwait(false)
+                QuorumReplicateRepositoryResult.Failed(
+                    commitResult.IsSome ? commitResult.Get().Error ?? "Watermark commit failed." : "Watermark commit failed."
+                )
             );
         }
 
@@ -474,36 +526,16 @@ public sealed class QuorumReplicateRepositoryQueryHandler
     }
 
     /// <summary>
-    /// A failed commit is stale when the watermark has meanwhile been committed by someone else
-    /// (another push, or the reconciler on either API instance): the caller should retry with the
-    /// next watermark, because the winning commit may not contain its push.
+    /// True for a push, and for a reconciler run while no push has marked the primary since its
+    /// claim.
     /// </summary>
-    private async Task<QuorumReplicateRepositoryResult> CommitFailureAsync(
+    private async Task<bool> StillClaimedAsync(
         QuorumReplicateRepositoryQuery query,
-        Option<CommitReplicationWatermarkResult> commitResult,
         CancellationToken cancellationToken
-    )
-    {
-        var error = commitResult.IsSome ? commitResult.Get().Error : null;
-        var current = await _queryProcessor
-            .RunQueryAsync(
-                new GetRepositoryReplicationContextQuery
-                {
-                    RepositoryId = query.RepositoryId,
-                    StorageNodeId = query.StorageNodeId,
-                },
-                cancellationToken
-            )
+    ) =>
+        query.ExpectedPrimaryLastSyncedAt is not { } claimed
+        || await PrimaryStillClaimedAsync(query.RepositoryId.Value, query.StorageNodeId.Value, claimed, cancellationToken)
             .ConfigureAwait(false);
-        if (current.IsSome && current.Get().PrimaryWatermark >= query.AppliedWatermark)
-        {
-            return QuorumReplicateRepositoryResult.StaleWatermark(
-                $"Watermark {query.AppliedWatermark} was committed concurrently."
-            );
-        }
-
-        return QuorumReplicateRepositoryResult.Failed(error ?? "Watermark commit failed.");
-    }
 
     private async Task MarkPrimaryReplicatingAsync(
         Guid repositoryId,
@@ -590,6 +622,11 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                 continue;
             }
 
+            if (!await StillClaimedAsync(query, cancellationToken).ConfigureAwait(false))
+            {
+                return Option.From(LeftToThePush());
+            }
+
             var replicaNode = await LoadStorageNodeAsync(replicaNodeId, cancellationToken)
                 .ConfigureAwait(false);
             if (replicaNode is null)
@@ -650,6 +687,11 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                     "Write quorum unavailable: could not replicate to a second node."
                 )
             );
+        }
+
+        if (!await StillClaimedAsync(query, cancellationToken).ConfigureAwait(false))
+        {
+            return Option.From(LeftToThePush());
         }
 
         var commitResult = await _queryProcessor

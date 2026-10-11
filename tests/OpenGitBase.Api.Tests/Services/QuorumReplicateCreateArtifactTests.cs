@@ -452,6 +452,140 @@ public class QuorumReplicateCreateArtifactTests
     }
 
     [Fact]
+    public async Task CreateArtifact_ForAReconcilerClaim_DoesNotCommitOnceAPushTookOverDuringTheLastUpload()
+    {
+        // The push marked the primary after the reconciler's last claim check. If the reconciler
+        // committed now, an old hook (which rolls its watermark file back on a lost commit) would
+        // leave its push in no artifact; the new hook would only have to retry. The push commits.
+        var claim = DateTimeOffset.UtcNow.AddSeconds(-5);
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, primaryLastSyncedAt: claim);
+        fixture.CommitSucceeds();
+        var uploads = 0;
+        fixture.Provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                if (++uploads == 2)
+                {
+                    fixture.SetPrimaryLastSyncedAt(DateTimeOffset.UtcNow);
+                }
+
+                return StorageProvisionerResult.Ok(201);
+            });
+
+        var result = await fixture.RunAsync(
+            appliedWatermark: 6,
+            createArtifact: true,
+            expectedPrimaryLastSyncedAt: fixture.ReadPrimaryLastSyncedAt()
+        );
+
+        Assert.False(result.Success);
+        Assert.Equal(2, uploads);
+        Assert.Empty(fixture.Commits);
+    }
+
+    [Fact]
+    public async Task CreateArtifact_WhenTheWatermarkIsCommittedWhileThisAttemptFails_ReportsStale()
+    {
+        // The reconciler committed 6 from an artifact built before this push while this push's
+        // own attempt failed: 6 may not hold the push, and the hook's file now equals
+        // PrimaryWatermark, so nothing would ever pick it up. Stale makes the hook try 7.
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5);
+        fixture.CommitSucceeds();
+        fixture.Provisioner
+            .CreateReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                fixture.SomeoneElseCommits(6);
+                return ReplicationArtifactFetchResult.Fail(500, "git bundle create failed");
+            });
+
+        var result = await fixture.RunAsync(appliedWatermark: 6, createArtifact: true);
+
+        Assert.False(result.Success);
+        Assert.True(result.Stale);
+    }
+
+    [Fact]
+    public async Task Rf3_WhenAnotherCommitWinsTheRace_ReportsStale()
+    {
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, rf3: true);
+        fixture.CommitFailsBecauseSomeoneElseCommitted();
+
+        var result = await fixture.RunAsync(appliedWatermark: 6, createArtifact: true);
+
+        Assert.False(result.Success);
+        Assert.True(result.Stale);
+    }
+
+    [Fact]
+    public async Task Rf3_FromThePushHook_MarksThePrimaryAsReplicatingBeforeSyncing()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddDays(-2),
+            rf3: true
+        );
+        fixture.CommitSucceeds();
+        DateTimeOffset? lastSyncedAtDuringSync = null;
+        fixture.OnSync = () => lastSyncedAtDuringSync ??= fixture.ReadPrimaryLastSyncedAt();
+
+        var result = await fixture.RunAsync(appliedWatermark: 6, createArtifact: true);
+
+        Assert.True(result.Success, result.Error);
+        Assert.NotNull(lastSyncedAtDuringSync);
+        Assert.True(lastSyncedAtDuringSync > DateTimeOffset.UtcNow.AddMinutes(-1));
+    }
+
+    [Fact]
+    public async Task Rf3_ForAReconcilerClaim_LeavesTheRepositoryToAPushThatTookOver()
+    {
+        var claim = DateTimeOffset.UtcNow.AddSeconds(-5);
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, primaryLastSyncedAt: claim, rf3: true);
+        fixture.CommitSucceeds();
+        var expected = fixture.ReadPrimaryLastSyncedAt();
+        fixture.SetPrimaryLastSyncedAt(DateTimeOffset.UtcNow);
+
+        var result = await fixture.RunAsync(
+            appliedWatermark: 6,
+            createArtifact: true,
+            expectedPrimaryLastSyncedAt: expected
+        );
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.Commits);
+        await fixture.Provisioner
+            .DidNotReceive()
+            .SyncRepositoryFromPeerAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task WithoutCreateArtifact_KeepsTheRelayPathAndItsConfirmDownload()
     {
         await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5);
@@ -539,13 +673,21 @@ public class QuorumReplicateCreateArtifactTests
 
         public Action? OnCreate { get; set; }
 
+        public Action? OnSync { get; set; }
+
         private long PrimaryWatermark { get; set; }
+
+        /// <summary>RF3 instead of RF4: the two other members are plaintext replicas.</summary>
+        private bool Rf3 { get; init; }
+
+        private RepositoryReplicaRole OtherRole => Rf3 ? RepositoryReplicaRole.Replica : RepositoryReplicaRole.EncryptedReplica;
 
         public static async Task<Fixture> CreateAsync(
             long primaryWatermark,
             DateTimeOffset? primaryLastSyncedAt = null,
             bool requestScoped = false,
-            int uploadTimeoutSeconds = 120
+            int uploadTimeoutSeconds = 120,
+            bool rf3 = false
         )
         {
             var connection = SqliteTestConnection.OpenInMemory();
@@ -584,7 +726,7 @@ public class QuorumReplicateCreateArtifactTests
                 )
             );
             services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
-            var fixture = new Fixture(services.BuildServiceProvider()) { PrimaryWatermark = primaryWatermark };
+            var fixture = new Fixture(services.BuildServiceProvider()) { PrimaryWatermark = primaryWatermark, Rf3 = rf3 };
             fixtureHolder[0] = fixture;
 
             repositoryKeyService
@@ -605,6 +747,9 @@ public class QuorumReplicateCreateArtifactTests
                     PrimaryWatermark = query.NewWatermark;
                     return Option.From(CommitReplicationWatermarkResult.Committed(query.NewWatermark));
                 });
+
+        /// <summary>Another push or the reconciler commits <paramref name="watermark"/> meanwhile.</summary>
+        public void SomeoneElseCommits(long watermark) => PrimaryWatermark = watermark;
 
         public void CommitFailsBecauseSomeoneElseCommitted() =>
             QueryProcessor
@@ -750,7 +895,7 @@ public class QuorumReplicateCreateArtifactTests
                     ReadReplicaStorageNodeId = PrimaryId,
                     PrimaryWatermark = primaryWatermark,
                     ReplicationEpoch = 1,
-                    ReplicationState = ReplicationState.Rf4Healthy,
+                    ReplicationState = Rf3 ? ReplicationState.Rf3Healthy : ReplicationState.Rf4Healthy,
                     Replicas =
                     [
                         new RepositoryReplicaEntity
@@ -765,15 +910,17 @@ public class QuorumReplicateCreateArtifactTests
                         {
                             RepositoryId = RepositoryId,
                             StorageNodeId = EncAId,
-                            Role = RepositoryReplicaRole.EncryptedReplica,
-                            ArtifactWatermark = primaryWatermark,
+                            Role = OtherRole,
+                            ArtifactWatermark = Rf3 ? null : primaryWatermark,
+                            AppliedWatermark = Rf3 ? primaryWatermark : 0,
                         },
                         new RepositoryReplicaEntity
                         {
                             RepositoryId = RepositoryId,
                             StorageNodeId = EncBId,
-                            Role = RepositoryReplicaRole.EncryptedReplica,
-                            ArtifactWatermark = primaryWatermark,
+                            Role = OtherRole,
+                            ArtifactWatermark = Rf3 ? null : primaryWatermark,
+                            AppliedWatermark = Rf3 ? primaryWatermark : 0,
                         },
                     ],
                 }
@@ -830,6 +977,21 @@ public class QuorumReplicateCreateArtifactTests
                     Arg.Any<CancellationToken>()
                 )
                 .Returns(StorageProvisionerResult.Ok(201));
+            Provisioner
+                .SyncRepositoryFromPeerAsync(
+                    Arg.Any<StorageNodeDto>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<int>(),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(_ =>
+                {
+                    OnSync?.Invoke();
+                    return StorageProvisionerResult.Ok(200);
+                });
         }
 
         private RepositoryReplicationContextDto BuildContext() =>
@@ -840,12 +1002,12 @@ public class QuorumReplicateCreateArtifactTests
                 PrimaryWatermark = PrimaryWatermark,
                 IsPrimary = true,
                 PhysicalPath = PhysicalPath,
-                ReplicationState = nameof(ReplicationState.Rf4Healthy),
+                ReplicationState = Rf3 ? nameof(ReplicationState.Rf3Healthy) : nameof(ReplicationState.Rf4Healthy),
                 Peers =
                 [
                     Peer(PrimaryId, RepositoryReplicaRole.Primary),
-                    Peer(EncAId, RepositoryReplicaRole.EncryptedReplica),
-                    Peer(EncBId, RepositoryReplicaRole.EncryptedReplica),
+                    Peer(EncAId, OtherRole),
+                    Peer(EncBId, OtherRole),
                 ],
             };
     }

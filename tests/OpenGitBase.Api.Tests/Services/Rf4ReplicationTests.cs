@@ -597,11 +597,13 @@ public class Rf4ReplicationTests
         services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
         var provider = services.BuildServiceProvider();
 
+        // The schema always exists: quorum-replicate records on the primary's replica row that a
+        // push is replicating, whether or not a test seeds the rows.
+        var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        await context.Database.EnsureCreatedAsync();
         if (seedReplicas is not null)
         {
-            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
-            await using var context = await contextFactory.CreateDbContextAsync();
-            await context.Database.EnsureCreatedAsync();
             var replicas = new List<RepositoryReplicaEntity>
             {
                 Replica(repositoryId, primaryId, RepositoryReplicaRole.Primary),
