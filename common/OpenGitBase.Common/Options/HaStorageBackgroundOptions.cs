@@ -19,4 +19,13 @@ public sealed class HaStorageBackgroundOptions
     /// reconciler replicates it itself.
     /// </summary>
     public int PrimaryAheadGraceSeconds { get; set; } = 600;
+
+    /// <summary>
+    /// How long one upload of an encrypted replication artifact to one encrypted replica may
+    /// take before that replica counts as having refused it (push path and reconciler). Well
+    /// below HAProxy's 5-minute server timeout, which a push's quorum-replicate call runs under,
+    /// so a replica that accepts connections but never answers cannot fail a push that another
+    /// replica has already stored.
+    /// </summary>
+    public int ArtifactUploadTimeoutSeconds { get; set; } = 120;
 }

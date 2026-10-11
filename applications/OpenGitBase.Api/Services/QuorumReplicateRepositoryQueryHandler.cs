@@ -318,26 +318,16 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             );
         }
 
-        var quorumNodeIds = new List<StorageNodeId> { query.StorageNodeId };
-        var refusedPeers = new List<RepositoryReplicationPeerDto>();
-        string? firstUploadError = null;
-        foreach (var peer in encryptedPeers)
+        IReadOnlyList<PeerUpload> uploads;
+        if (query.ExpectedPrimaryLastSyncedAt is { } claimed)
         {
-            if (
-                query.ExpectedPrimaryLastSyncedAt is { } claimed
-                && !await PrimaryStillClaimedAsync(
-                        context.RepositoryId,
-                        query.StorageNodeId.Value,
-                        claimed,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false)
-            )
+            var whileClaimed = await UploadWhileClaimedAsync(query, context, encryptedPeers, artifact, claimed, cancellationToken)
+                .ConfigureAwait(false);
+            if (whileClaimed is null)
             {
                 // A push started replicating since the reconciler claimed this repository. Its
                 // artifact is newer than ours, so ours must not land after it under the same
-                // watermark: stop here and leave the repository to the push. Checked before
-                // every upload, so only one upload can be in flight when a push starts.
+                // watermark: stop here and leave the repository to the push.
                 return Option.From(
                     QuorumReplicateRepositoryResult.Failed(
                         "A push started replicating this repository; left to the push."
@@ -345,27 +335,30 @@ public sealed class QuorumReplicateRepositoryQueryHandler
                 );
             }
 
-            var node = await LoadStorageNodeAsync(StorageNodeId.From(peer.StorageNodeId), cancellationToken)
-                .ConfigureAwait(false);
-            if (node is null)
-            {
-                refusedPeers.Add(peer);
-                continue;
-            }
-
-            var upload = await _artifactPublisher
-                .UploadAsync(node, context.RepositoryId, query.AppliedWatermark, artifact, cancellationToken)
-                .ConfigureAwait(false);
-            if (upload.Success)
-            {
-                quorumNodeIds.Add(node.Id);
-            }
-            else
-            {
-                refusedPeers.Add(peer);
-                firstUploadError ??= $"{node.NodeId}: {Describe(upload.StatusCode, upload.Error)}";
-            }
+            uploads = whileClaimed;
         }
+        else
+        {
+            // A push: every replica at once, each one time-boxed by the publisher, so one replica
+            // that does not answer neither delays the others nor runs this request into
+            // HAProxy's timeout.
+            uploads = await Task.WhenAll(
+                    encryptedPeers.Select(peer =>
+                        UploadToPeerAsync(peer, context.RepositoryId, query.AppliedWatermark, artifact, cancellationToken)
+                    )
+                )
+                .ConfigureAwait(false);
+        }
+
+        var quorumNodeIds = new List<StorageNodeId> { query.StorageNodeId };
+        quorumNodeIds.AddRange(
+            uploads.Where(upload => upload.Result.Success).Select(upload => StorageNodeId.From(upload.Peer.StorageNodeId))
+        );
+        var refusedPeers = uploads.Where(upload => !upload.Result.Success).Select(upload => upload.Peer).ToList();
+        var firstUploadError = uploads
+            .Where(upload => !upload.Result.Success)
+            .Select(upload => $"{upload.NodeName}: {Describe(upload.Result.StatusCode, upload.Result.Error)}")
+            .FirstOrDefault();
 
         if (quorumNodeIds.Count < 2)
         {
@@ -423,6 +416,61 @@ public sealed class QuorumReplicateRepositoryQueryHandler
         return Option.From(
             QuorumReplicateRepositoryResult.Replicated(commitResult.Get().PrimaryWatermark)
         );
+    }
+
+    /// <summary>
+    /// Reconciler path: one replica after the other, and before each one a check that no push
+    /// has marked the primary since the claim, so at most one upload of the reconciler's (older)
+    /// artifact can be in flight when a push starts. Null when a push took over.
+    /// </summary>
+    private async Task<IReadOnlyList<PeerUpload>?> UploadWhileClaimedAsync(
+        QuorumReplicateRepositoryQuery query,
+        RepositoryReplicationContextDto context,
+        IReadOnlyList<RepositoryReplicationPeerDto> encryptedPeers,
+        ReplicationArtifactFetchResult artifact,
+        DateTimeOffset claimed,
+        CancellationToken cancellationToken
+    )
+    {
+        var uploads = new List<PeerUpload>();
+        foreach (var peer in encryptedPeers)
+        {
+            if (
+                !await PrimaryStillClaimedAsync(context.RepositoryId, query.StorageNodeId.Value, claimed, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                return null;
+            }
+
+            uploads.Add(
+                await UploadToPeerAsync(peer, context.RepositoryId, query.AppliedWatermark, artifact, cancellationToken)
+                    .ConfigureAwait(false)
+            );
+        }
+
+        return uploads;
+    }
+
+    private async Task<PeerUpload> UploadToPeerAsync(
+        RepositoryReplicationPeerDto peer,
+        Guid repositoryId,
+        long watermark,
+        ReplicationArtifactFetchResult artifact,
+        CancellationToken cancellationToken
+    )
+    {
+        var node = await LoadStorageNodeAsync(StorageNodeId.From(peer.StorageNodeId), cancellationToken)
+            .ConfigureAwait(false);
+        if (node is null)
+        {
+            return new PeerUpload(peer, peer.StorageNodeId.ToString(), StorageProvisionerResult.Fail(404, "unknown storage node"));
+        }
+
+        var result = await _artifactPublisher
+            .UploadAsync(node, repositoryId, watermark, artifact, cancellationToken)
+            .ConfigureAwait(false);
+        return new PeerUpload(peer, node.NodeId, result);
     }
 
     /// <summary>
@@ -675,4 +723,6 @@ public sealed class QuorumReplicateRepositoryQueryHandler
 
         return result.IsSome ? result.Get() : null;
     }
+
+    private sealed record PeerUpload(RepositoryReplicationPeerDto Peer, string NodeName, StorageProvisionerResult Result);
 }

@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository;
@@ -150,6 +152,71 @@ public class QuorumReplicateCreateArtifactTests
 
         Assert.True(result.Success, result.Error);
         Assert.Equal(6, await fixture.WaitForArtifactWatermarkAsync(fixture.EncBId, 6));
+    }
+
+    [Fact]
+    public async Task CreateArtifact_AReplicaThatDoesNotAnswer_NeitherHoldsUpTheOtherNorFailsThePush()
+    {
+        // storage-3 accepts the connection but never answers while its agent keeps it "healthy".
+        // The push must not wait for it past HAProxy's 5 minutes (the hook would then report a
+        // write that storage-2 already holds as failed), and must not wait for it before
+        // uploading to storage-2 either.
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, uploadTimeoutSeconds: 1);
+        fixture.CommitSucceeds();
+        var encAInFlight = 0;
+        var encBStartedWhileEncAWasInFlight = false;
+        fixture.Provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncAId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(async callInfo =>
+            {
+                Interlocked.Increment(ref encAInFlight);
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, callInfo.Arg<CancellationToken>());
+                    return StorageProvisionerResult.Ok(201);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref encAInFlight);
+                }
+            });
+        fixture.Provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncBId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(async _ =>
+            {
+                // Give a parallel upload to storage-2 the moment to start first.
+                await Task.Delay(100);
+                encBStartedWhileEncAWasInFlight |= Volatile.Read(ref encAInFlight) > 0;
+                return StorageProvisionerResult.Ok(201);
+            });
+
+        var result = await fixture
+            .RunAsync(appliedWatermark: 6, createArtifact: true)
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        Assert.True(result.Success, result.Error);
+        var commit = Assert.Single(fixture.Commits);
+        Assert.Equal(
+            new[] { fixture.PrimaryId, fixture.EncBId }.OrderBy(id => id),
+            commit.QuorumNodeIds.Select(id => id.Value).OrderBy(id => id)
+        );
+        Assert.True(encBStartedWhileEncAWasInFlight);
     }
 
     [Fact]
@@ -477,7 +544,8 @@ public class QuorumReplicateCreateArtifactTests
         public static async Task<Fixture> CreateAsync(
             long primaryWatermark,
             DateTimeOffset? primaryLastSyncedAt = null,
-            bool requestScoped = false
+            bool requestScoped = false,
+            int uploadTimeoutSeconds = 120
         )
         {
             var connection = SqliteTestConnection.OpenInMemory();
@@ -486,6 +554,9 @@ public class QuorumReplicateCreateArtifactTests
             var fixtureHolder = new Fixture[1];
             services.AddSingleton(connection);
             services.AddLogging();
+            services.AddSingleton(
+                Options.Create(new HaStorageBackgroundOptions { ArtifactUploadTimeoutSeconds = uploadTimeoutSeconds })
+            );
             if (requestScoped)
             {
                 // Like AddCqrs: the query processor belongs to a scope and stops working with it.

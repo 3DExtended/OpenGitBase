@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.StorageNode.Contracts;
 
@@ -15,7 +17,10 @@ namespace OpenGitBase.Api.Services;
 /// </para>
 /// <para>
 /// Transport failures (node down, timeout) come back as failed results instead of exceptions, so
-/// one unreachable node never aborts a caller that is working through several repositories.
+/// one unreachable node never aborts a caller that is working through several repositories. An
+/// upload that takes longer than <see cref="HaStorageBackgroundOptions.ArtifactUploadTimeoutSeconds"/>
+/// counts as refused, so a replica that accepts connections but never answers cannot hold a
+/// caller until HAProxy or the HttpClient gives up.
 /// </para>
 /// </summary>
 public sealed class ReplicationArtifactPublisher
@@ -23,16 +28,19 @@ public sealed class ReplicationArtifactPublisher
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly IRepositoryKeyService _repositoryKeyService;
+    private readonly TimeSpan _uploadTimeout;
 
     public ReplicationArtifactPublisher(
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
-        IRepositoryKeyService repositoryKeyService
+        IRepositoryKeyService repositoryKeyService,
+        IOptions<HaStorageBackgroundOptions> options
     )
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
         _repositoryKeyService = repositoryKeyService;
+        _uploadTimeout = TimeSpan.FromSeconds(Math.Max(1, options.Value.ArtifactUploadTimeoutSeconds));
     }
 
     /// <summary>
@@ -109,6 +117,8 @@ public sealed class ReplicationArtifactPublisher
             );
         }
 
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_uploadTimeout);
         try
         {
             return await _storageProvisionerClient
@@ -119,9 +129,16 @@ public sealed class ReplicationArtifactPublisher
                     watermark,
                     artifact.ManifestJson,
                     artifact.BundlePayload,
-                    cancellationToken
+                    timeout.Token
                 )
                 .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return StorageProvisionerResult.Fail(
+                504,
+                $"{targetNode.NodeId} did not store the artifact within {_uploadTimeout.TotalSeconds:0} s"
+            );
         }
         catch (Exception ex) when (IsTransportFailure(ex, cancellationToken))
         {
