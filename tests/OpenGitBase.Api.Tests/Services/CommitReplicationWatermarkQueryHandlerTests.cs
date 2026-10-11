@@ -4,6 +4,7 @@ using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
@@ -220,6 +221,107 @@ public class CommitReplicationWatermarkQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenCancelledAfterTheWatermarkMoved_LeavesNothingHalfCommitted()
+    {
+        // The request can be aborted (HAProxy timeout, API shutdown) between moving
+        // PrimaryWatermark and recording which replicas hold the artifact. Both must move
+        // together or not at all: a PrimaryWatermark of 5 next to replicas still at 4 makes
+        // cold recovery restore the older artifact.
+        var repositoryId = Guid.NewGuid();
+        var primaryNodeId = Guid.NewGuid();
+        var replicaNodeId = Guid.NewGuid();
+        using var cancellation = new CancellationTokenSource();
+        var cancelAfterCas = new CancelAfterWatermarkUpdateInterceptor(cancellation);
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            primaryNodeId,
+            replicaNodeId,
+            epoch: 1,
+            primaryWatermark: 4,
+            interceptor: cancelAfterCas
+        );
+        await using (provider)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                handler.RunQueryAsync(
+                    new CommitReplicationWatermarkQuery
+                    {
+                        RepositoryId = RepositoryId.From(repositoryId),
+                        StorageNodeId = StorageNodeId.From(primaryNodeId),
+                        ReplicationEpoch = 1,
+                        NewWatermark = 5,
+                        QuorumNodeIds =
+                        [
+                            StorageNodeId.From(primaryNodeId),
+                            StorageNodeId.From(replicaNodeId),
+                        ],
+                    },
+                    cancellation.Token
+                )
+            );
+
+            Assert.True(cancelAfterCas.Fired);
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .AsNoTracking()
+                .Include(entity => entity.Replicas)
+                .SingleAsync(entity => entity.Id == repositoryId);
+            Assert.Equal(4, repository.PrimaryWatermark);
+            Assert.Equal(0, repository.Replicas.Single(replica => replica.StorageNodeId == replicaNodeId).AppliedWatermark);
+            Assert.Equal(4, repository.Replicas.Single(replica => replica.StorageNodeId == primaryNodeId).AppliedWatermark);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WorksUnderARetryingExecutionStrategy()
+    {
+        // Production runs Npgsql with EnableRetryOnFailure, which rejects a transaction the
+        // handler opens itself unless it runs inside the execution strategy.
+        var repositoryId = Guid.NewGuid();
+        var primaryNodeId = Guid.NewGuid();
+        var replicaNodeId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            primaryNodeId,
+            replicaNodeId,
+            epoch: 1,
+            primaryWatermark: 4,
+            retryingExecutionStrategy: true
+        );
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new CommitReplicationWatermarkQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                    StorageNodeId = StorageNodeId.From(primaryNodeId),
+                    ReplicationEpoch = 1,
+                    NewWatermark = 5,
+                    QuorumNodeIds =
+                    [
+                        StorageNodeId.From(primaryNodeId),
+                        StorageNodeId.From(replicaNodeId),
+                    ],
+                },
+                CancellationToken.None
+            );
+
+            Assert.True(result.Get().Success, result.Get().Error);
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var repository = await context
+                .Set<RepositoryEntity>()
+                .AsNoTracking()
+                .Include(entity => entity.Replicas)
+                .SingleAsync(entity => entity.Id == repositoryId);
+            Assert.Equal(5, repository.PrimaryWatermark);
+            Assert.Equal(5, repository.Replicas.Single(replica => replica.StorageNodeId == replicaNodeId).AppliedWatermark);
+        }
+    }
+
     private static async Task<(
         CommitReplicationWatermarkQueryHandler Handler,
         ServiceProvider Provider
@@ -230,7 +332,8 @@ public class CommitReplicationWatermarkQueryHandlerTests
         long epoch,
         long primaryWatermark,
         long? primaryAppliedWatermark = null,
-        IInterceptor? interceptor = null
+        IInterceptor? interceptor = null,
+        bool retryingExecutionStrategy = false
     )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -242,7 +345,18 @@ public class CommitReplicationWatermarkQueryHandlerTests
         );
         services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
         {
-            options.UseSqlite(connection).EnableServiceProviderCaching(false);
+            options
+                .UseSqlite(
+                    connection,
+                    sqlite =>
+                    {
+                        if (retryingExecutionStrategy)
+                        {
+                            sqlite.ExecutionStrategy(dependencies => new RetryingTestExecutionStrategy(dependencies));
+                        }
+                    }
+                )
+                .EnableServiceProviderCaching(false);
             if (interceptor is not null)
             {
                 options.AddInterceptors(interceptor);
@@ -296,8 +410,8 @@ public class CommitReplicationWatermarkQueryHandlerTests
     }
 
     /// <summary>
-    /// Simulates a second writer committing between the handler's read and its write: just before
-    /// the first UPDATE of the Repository row runs, it moves PrimaryWatermark itself.
+    /// Simulates a second writer committing between the handler's read and its write: as soon as
+    /// the handler has read the Repository row, it moves PrimaryWatermark itself.
     /// </summary>
     private sealed class ConcurrentCommitInterceptor : DbCommandInterceptor
     {
@@ -310,49 +424,64 @@ public class CommitReplicationWatermarkQueryHandlerTests
 
         public bool Fired { get; private set; }
 
-        public override InterceptionResult<DbDataReader> ReaderExecuting(
+        public override InterceptionResult DataReaderDisposing(
             DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<DbDataReader> result
+            DataReaderDisposingEventData eventData,
+            InterceptionResult result
         )
         {
-            Bump(command);
-            return base.ReaderExecuting(command, eventData, result);
+            if (
+                !Fired
+                && command.Transaction is null
+                && command.CommandText.Contains("FROM \"Repository\"", StringComparison.Ordinal)
+            )
+            {
+                Fired = true;
+                using var bump = command.Connection!.CreateCommand();
+                bump.CommandText =
+                    $"UPDATE \"Repository\" SET \"PrimaryWatermark\" = {_bumpPrimaryWatermarkTo}";
+                bump.ExecuteNonQuery();
+            }
+
+            return base.DataReaderDisposing(command, eventData, result);
+        }
+    }
+
+    /// <summary>Cancels the request right after the PrimaryWatermark compare-and-set has run.</summary>
+    private sealed class CancelAfterWatermarkUpdateInterceptor : DbCommandInterceptor
+    {
+        private readonly CancellationTokenSource _cancellation;
+
+        public CancelAfterWatermarkUpdateInterceptor(CancellationTokenSource cancellation)
+        {
+            _cancellation = cancellation;
         }
 
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+        public bool Fired { get; private set; }
+
+        public override ValueTask<int> NonQueryExecutedAsync(
             DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<DbDataReader> result,
+            CommandExecutedEventData eventData,
+            int result,
             CancellationToken cancellationToken = default
         )
         {
-            Bump(command);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+            Cancel(command);
+            return base.NonQueryExecutedAsync(command, eventData, result, cancellationToken);
         }
 
-        public override InterceptionResult<int> NonQueryExecuting(
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(
             DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<int> result
-        )
-        {
-            Bump(command);
-            return base.NonQueryExecuting(command, eventData, result);
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<int> result,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
             CancellationToken cancellationToken = default
         )
         {
-            Bump(command);
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+            Cancel(command);
+            return base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
         }
 
-        private void Bump(DbCommand command)
+        private void Cancel(DbCommand command)
         {
             if (Fired || !command.CommandText.Contains("UPDATE \"Repository\"", StringComparison.Ordinal))
             {
@@ -360,11 +489,18 @@ public class CommitReplicationWatermarkQueryHandlerTests
             }
 
             Fired = true;
-            using var bump = command.Connection!.CreateCommand();
-            bump.Transaction = command.Transaction;
-            bump.CommandText =
-                $"UPDATE \"Repository\" SET \"PrimaryWatermark\" = {_bumpPrimaryWatermarkTo}";
-            bump.ExecuteNonQuery();
+            _cancellation.Cancel();
         }
+    }
+
+    /// <summary>Behaves like Npgsql's EnableRetryOnFailure towards transactions the code opens itself.</summary>
+    private sealed class RetryingTestExecutionStrategy : ExecutionStrategy
+    {
+        public RetryingTestExecutionStrategy(ExecutionStrategyDependencies dependencies)
+            : base(dependencies, maxRetryCount: 3, maxRetryDelay: TimeSpan.FromMilliseconds(10))
+        {
+        }
+
+        protected override bool ShouldRetryOn(Exception exception) => false;
     }
 }
