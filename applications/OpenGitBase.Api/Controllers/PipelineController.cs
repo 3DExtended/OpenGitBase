@@ -18,19 +18,20 @@ public sealed class PipelineController : ControllerBase
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly RepositoryContentAuthorizationService _authorization;
-    private readonly IUserContext _userContext;
     private readonly ComputeNodeIdentityService _computeNodeIdentity;
 
+    // No IUserContext here: building it throws without a user JWT, and most of these endpoints are
+    // called by storage nodes (git-push-ingest) and compute agents, or anonymously. Asking for it in
+    // the constructor failed every such call with 500 before the action ran. Actions that need the
+    // signed-in user take it with [FromServices].
     public PipelineController(
         IQueryProcessor queryProcessor,
         RepositoryContentAuthorizationService authorization,
-        IUserContext userContext,
         ComputeNodeIdentityService computeNodeIdentity
     )
     {
         _queryProcessor = queryProcessor;
         _authorization = authorization;
-        _userContext = userContext;
         _computeNodeIdentity = computeNodeIdentity;
     }
 
@@ -636,6 +637,7 @@ public sealed class PipelineController : ControllerBase
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreateBaseImage(
         [FromBody] CreateBaseImageCatalogEntryRequest request,
+        [FromServices] IUserContext userContext,
         CancellationToken cancellationToken
     )
     {
@@ -647,7 +649,7 @@ public sealed class PipelineController : ControllerBase
                 ArtifactUri = request.ArtifactUri,
                 ContentHash = request.ContentHash,
                 OciProvenance = request.OciProvenance,
-                CreatedByUserId = _userContext.User.UserId,
+                CreatedByUserId = userContext.User.UserId,
             },
             cancellationToken
         ).ConfigureAwait(false);

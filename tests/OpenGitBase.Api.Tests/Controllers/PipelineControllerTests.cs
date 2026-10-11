@@ -4,7 +4,6 @@ using NSubstitute;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
-using OpenGitBase.Common.Auth;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
@@ -22,8 +21,7 @@ public class PipelineControllerTests
             queryProcessor,
             new HttpContextAccessor()
         );
-        var userContext = Substitute.For<IUserContext>();
-        var controller = new PipelineController(queryProcessor, authorization, userContext, CreateIdentityService())
+        var controller = new PipelineController(queryProcessor, authorization, CreateIdentityService())
         {
             ControllerContext = new ControllerContext
             {
@@ -85,8 +83,7 @@ public class PipelineControllerTests
             queryProcessor,
             new HttpContextAccessor()
         );
-        var userContext = Substitute.For<IUserContext>();
-        var controller = new PipelineController(queryProcessor, authorization, userContext, CreateIdentityService());
+        var controller = new PipelineController(queryProcessor, authorization, CreateIdentityService());
         var result = await controller.ListRepositoryRuns(repositoryId, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
