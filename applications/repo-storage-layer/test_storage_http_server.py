@@ -239,6 +239,70 @@ class StorageHttpServerTests(unittest.TestCase):
             )
 
 
+    def _init_repository_with_one_commit(self) -> None:
+        import subprocess
+
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(self.repo_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        work = Path(self.temp_dir) / "work"
+        subprocess.run(
+            ["git", "clone", str(self.repo_path), str(work)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        (work / "README").write_text("hi", encoding="utf-8")
+        for command in (
+            ["add", "README"],
+            ["-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "init"],
+            ["push", "origin", "main"],
+        ):
+            subprocess.run(
+                ["git", "-C", str(work), *command],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+    def test_create_replication_artifact_trusts_a_repository_owned_by_the_git_user(self) -> None:
+        # storage-http-server runs as root and the repositories belong to git, so a git call that
+        # discovers the repository (-C) stops at "detected dubious ownership" unless it is trusted.
+        import subprocess
+        import types
+        from unittest import mock
+
+        self._init_repository_with_one_commit()
+        fake_crypto = types.ModuleType("storage_artifact_crypto")
+        fake_crypto.encrypt_bundle = lambda bundle, key, repo_id, watermark, epoch, version: (
+            {"epoch": epoch, "watermark": watermark, "bundleSha256": "ABC", "keyVersion": version},
+            bundle,
+        )
+        real_run = subprocess.run
+        commands: list[list[str]] = []
+
+        def spy(command, *args, **kwargs):
+            commands.append(list(command))
+            return real_run(command, *args, **kwargs)
+
+        with mock.patch.dict(sys.modules, {"storage_artifact_crypto": fake_crypto}):
+            with mock.patch.object(storage_http_server.subprocess, "run", side_effect=spy):
+                storage_http_server.create_replication_artifact(
+                    str(self.repo_path),
+                    "33333333-3333-3333-3333-333333333333",
+                    watermark=7,
+                    epoch=1,
+                    key_hex="00" * 32,
+                    key_version=1,
+                )
+
+        bundle_commands = [command for command in commands if "bundle" in command]
+        self.assertEqual(1, len(bundle_commands))
+        self.assertEqual(["git", "-c", "safe.directory=*"], bundle_commands[0][:3])
+
     def test_replication_hook_hands_the_whole_push_to_the_replicate_script_once(self) -> None:
         import subprocess
         from unittest import mock
@@ -312,6 +376,15 @@ class StorageHttpServerTests(unittest.TestCase):
         )
         self.assertEqual(["2"], sorted(entry.name for entry in (self.artifact_root / repository_id).iterdir()))
         self.assertEqual(2, storage_http_server.on_disk_artifact_watermark(repository_id))
+
+
+class StorageImageTests(unittest.TestCase):
+    def test_the_image_trusts_repositories_owned_by_the_git_user(self) -> None:
+        # Root runs git in repositories that belong to git (create-artifact, content, merges).
+        # Without this, git stops at "detected dubious ownership"; the fix used to live only in
+        # a container's writable layer and vanished with every recreate.
+        dockerfile = Path(__file__).with_name("Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("git config --system --add safe.directory '*'", dockerfile)
 
 
 if __name__ == "__main__":

@@ -265,8 +265,10 @@ def create_replication_artifact(
         bundle_path = bundle_file.name
 
     try:
+        # Runs as root in a repository owned by git: trusted explicitly, so it does not depend on
+        # the image's system config (the Dockerfile sets safe.directory there too).
         subprocess.run(
-            ["git", "-C", physical_path, "bundle", "create", bundle_path, "--all"],
+            ["git", "-c", "safe.directory=*", "-C", physical_path, "bundle", "create", bundle_path, "--all"],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

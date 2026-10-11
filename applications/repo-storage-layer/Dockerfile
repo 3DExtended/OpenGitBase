@@ -18,6 +18,13 @@ RUN useradd -m -d /home/git -s /usr/bin/git-shell git \
     && chmod 755 /home/git/git-shell-commands \
     && echo "git:git" | chpasswd
 
+# storage-http-server.py runs as root, the repositories belong to git, and git refuses to work in
+# a repository owned by someone else ("detected dubious ownership") unless it is trusted. That
+# broke create-artifact's `git bundle`; the fix lived only in a container's writable layer
+# (/root/.gitconfig) and was gone after every recreate. System config, so every root git call in
+# the image has it.
+RUN git config --system --add safe.directory '*'
+
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY storage-agent.sh /usr/local/bin/storage-agent.sh
