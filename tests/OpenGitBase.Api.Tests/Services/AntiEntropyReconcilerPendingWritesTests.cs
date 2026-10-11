@@ -1,6 +1,8 @@
+using System.Data.Common;
 using Mapster;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -113,6 +115,46 @@ public class AntiEntropyReconcilerPendingWritesTests
         await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
 
         Assert.True(nested);
+        Assert.Equal(1, fixture.Creates);
+        Assert.Equal(2, fixture.Uploads);
+        Assert.Equal(1, fixture.Commits);
+        Assert.Equal(6, (await fixture.ReadStateAsync()).PrimaryWatermark);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenBothInstancesReadTheWriteBeforeEitherClaims_ReplicatesItOnce()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryAppliedWatermark: 6,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(-20)
+        );
+        var secondInstance = fixture.NewReconciler();
+        var secondIsBuilding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var letSecondFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? secondRun = null;
+        // api-1 and api-2 both read the pending write with the same LastSyncedAt. api-2 claims
+        // first and is building the artifact when api-1's claim reaches the database: only the
+        // compare-and-set on LastSyncedAt keeps api-1 from claiming it as well and building and
+        // uploading the write a second time.
+        fixture.OnCreate = async () =>
+        {
+            if (!secondIsBuilding.Task.IsCompleted)
+            {
+                secondIsBuilding.SetResult();
+                await letSecondFinish.Task;
+            }
+        };
+        fixture.Claims.BeforeNextClaim = async () =>
+        {
+            secondRun = secondInstance.RunOnceAsync(CancellationToken.None);
+            await secondIsBuilding.Task;
+        };
+
+        await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
+        letSecondFinish.SetResult();
+        await secondRun!;
+
         Assert.Equal(1, fixture.Creates);
         Assert.Equal(2, fixture.Uploads);
         Assert.Equal(1, fixture.Commits);
@@ -283,9 +325,10 @@ public class AntiEntropyReconcilerPendingWritesTests
         private int _uploads;
         private int _commits;
 
-        private Fixture(ServiceProvider provider)
+        private Fixture(ServiceProvider provider, ClaimInterceptor claims)
         {
             _provider = provider;
+            Claims = claims;
         }
 
         public Guid RepositoryId { get; } = Guid.NewGuid();
@@ -305,6 +348,8 @@ public class AntiEntropyReconcilerPendingWritesTests
         public IRepositoryKeyService RepositoryKeys { get; } = Substitute.For<IRepositoryKeyService>();
 
         public Func<Task>? OnCreate { get; set; }
+
+        public ClaimInterceptor Claims { get; }
 
         public StorageProvisionerResult UploadResult { get; set; } = StorageProvisionerResult.Ok(201);
 
@@ -335,7 +380,10 @@ public class AntiEntropyReconcilerPendingWritesTests
                     ]
                 )
             );
-            services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+            var claims = new ClaimInterceptor();
+            services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
+                options.UseSqlite(connection).EnableServiceProviderCaching(false).AddInterceptors(claims)
+            );
             var mapsterConfig = new TypeAdapterConfig();
             new RepositoryMapsterConfig().Register(mapsterConfig);
             services.AddSingleton(mapsterConfig);
@@ -350,7 +398,7 @@ public class AntiEntropyReconcilerPendingWritesTests
             services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
             services.AddSingleton<CommitReplicationWatermarkQueryHandler>();
 
-            var fixture = new Fixture(services.BuildServiceProvider());
+            var fixture = new Fixture(services.BuildServiceProvider(), claims);
             holder[0] = fixture;
             fixture.RepositoryKeys
                 .TryGetRepositoryKeyAsync(fixture.RepositoryId, Arg.Any<CancellationToken>())
@@ -567,5 +615,32 @@ public class AntiEntropyReconcilerPendingWritesTests
                     },
                 ],
             };
+    }
+
+    /// <summary>Runs <see cref="BeforeNextClaim"/> once, right before a reconciler's claim reaches the database.</summary>
+    private sealed class ClaimInterceptor : DbCommandInterceptor
+    {
+        public Func<Task>? BeforeNextClaim { get; set; }
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var isClaim =
+                command.CommandText.Contains("UPDATE \"RepositoryReplica\"", StringComparison.Ordinal)
+                && command.CommandText.Contains("\"LastSyncedAt\" = @", StringComparison.Ordinal)
+                && !command.CommandText.Contains("Watermark", StringComparison.Ordinal);
+            var before = isClaim ? BeforeNextClaim : null;
+            if (before is not null)
+            {
+                BeforeNextClaim = null;
+                await before();
+            }
+
+            return result;
+        }
     }
 }
