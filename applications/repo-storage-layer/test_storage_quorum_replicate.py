@@ -10,6 +10,7 @@ import socket
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,6 +30,7 @@ class StubApi:
         self.contexts: list[tuple[int, Any]] = []
         self.quorum_responses: list[tuple[int, Any]] = []
         self.ingest_status = 202
+        self.quorum_delay_seconds = 0.0
         self.requests: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         stub = self
@@ -72,6 +74,8 @@ class StubApi:
             def do_POST(self) -> None:  # noqa: N802 - stdlib name
                 self._record()
                 if self.path.endswith("/quorum-replicate"):
+                    if stub.quorum_delay_seconds:
+                        time.sleep(stub.quorum_delay_seconds)
                     with stub._lock:
                         status, payload = (
                             stub.quorum_responses.pop(0)
@@ -274,6 +278,87 @@ class StorageQuorumReplicateScriptTests(unittest.TestCase):
             [call["body"]["appliedWatermark"] for call in self.api.calls("/quorum-replicate")],
         )
         self.assertEqual("7", self.watermark())
+
+    def test_a_failure_after_the_watermark_was_committed_elsewhere_keeps_the_write_pending(self) -> None:
+        # Another push or the reconciler committed 6 while this push's call failed, from an
+        # artifact that may lack this push. Left at 6 the heartbeat would report the primary in
+        # sync and nothing would ever replicate this push.
+        self.api.contexts = [(200, context(5)), (200, context(6))]
+        self.api.quorum_responses = [(502, None)]
+
+        result = self.run_script("--post-receive", stdin=f"{ZERO} {SHA_A} refs/heads/main\n")
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual(
+            [
+                f"storage-quorum-replicate: {REPO_ID} stored on the primary only; encrypted replication failed "
+                "(HTTP 502) - the reconciler will retry"
+            ],
+            self.stderr_lines(result),
+        )
+        self.assertEqual("7", self.watermark())
+        self.assertEqual(1, len(self.api.calls("/git-push-ingest")))
+
+    def test_a_watermark_taken_twice_keeps_the_write_pending(self) -> None:
+        self.api.contexts = [(200, context(5)), (200, context(6)), (200, context(7))]
+        self.api.quorum_responses = [
+            (409, {"success": False, "stale": True, "error": "Watermark 6 was committed concurrently."}),
+            (409, {"success": False, "stale": True, "error": "Watermark 7 was committed concurrently."}),
+        ]
+
+        result = self.run_script("--post-receive", stdin=f"{ZERO} {SHA_A} refs/heads/main\n")
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual(
+            [6, 7],
+            [call["body"]["appliedWatermark"] for call in self.api.calls("/quorum-replicate")],
+        )
+        self.assertEqual("8", self.watermark())
+
+    def test_a_quorum_call_that_times_out_while_the_api_commits_keeps_the_write_pending(self) -> None:
+        self.api.contexts = [(200, context(5)), (200, context(6))]
+        self.api.quorum_delay_seconds = 3
+
+        result = self.run_script(
+            "--post-receive",
+            stdin=f"{ZERO} {SHA_A} refs/heads/main\n",
+            extra_env={"STORAGE_QUORUM_TIMEOUT_SECONDS": "1"},
+        )
+
+        self.assertEqual(1, result.returncode)
+        lines = self.stderr_lines(result)
+        self.assertEqual(1, len(lines), lines)
+        self.assertIn("encrypted replication failed (API unreachable", lines[0])
+        self.assertEqual("7", self.watermark())
+
+    def test_when_the_api_cannot_be_asked_again_the_file_goes_past_the_target(self) -> None:
+        self.api.contexts = [(200, context(5)), (503, {"error": "Service Unavailable"})]
+        self.api.quorum_responses = [(502, None)]
+
+        result = self.run_script("--post-receive", stdin=f"{ZERO} {SHA_A} refs/heads/main\n")
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual(1, len(self.stderr_lines(result)))
+        self.assertEqual("7", self.watermark())
+
+    def test_a_failure_with_nothing_committed_meanwhile_leaves_the_file_at_the_target(self) -> None:
+        self.api.contexts = [(200, context(5)), (200, context(5))]
+        self.api.quorum_responses = [(502, None)]
+
+        result = self.run_script("--post-receive", stdin=f"{ZERO} {SHA_A} refs/heads/main\n")
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("6", self.watermark())
+        self.assertEqual(2, len(self.api.calls("/replication")))
+
+    def test_a_node_that_lost_the_primary_role_meanwhile_leaves_its_file_alone(self) -> None:
+        self.api.contexts = [(200, context(5)), (200, context(6, isPrimary=False))]
+        self.api.quorum_responses = [(502, None)]
+
+        result = self.run_script("--post-receive", stdin=f"{ZERO} {SHA_A} refs/heads/main\n")
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("6", self.watermark())
 
     def test_an_unreachable_api_is_one_line_and_leaves_the_write_for_the_reconciler(self) -> None:
         self.set_watermark(5)

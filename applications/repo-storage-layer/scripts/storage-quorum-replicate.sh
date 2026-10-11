@@ -24,6 +24,14 @@
 # When the API cannot be asked at all, the file is raised by one; a run of such failures raises it
 # further, and the reconciler then commits one step per pass until it has caught up (each step
 # replicates the whole repository, so nothing is lost meanwhile).
+# After a failure the script asks the API again: another push or the reconciler may have committed
+# the target meanwhile from an artifact built before this push arrived (a quorum call that timed
+# out may even have committed it itself). The file then goes to one above what is committed, so
+# the heartbeat keeps this write pending instead of reporting the primary in sync; when the API
+# cannot be asked, to one above the target. At worst the reconciler replicates one step that was
+# not needed. Left open: a node whose file was reset to 0 (create, clone, promotion) and whose very
+# first push finds the API unreachable reports 1, below PrimaryWatermark, so that push stays
+# unreplicated until the next one.
 #
 # Pipelines: every updated ref goes to git-push-ingest once replication has been tried, whether it
 # succeeded or not - the push is on the primary either way. Exception: storage_merge.py sets
@@ -185,6 +193,29 @@ NOT_PRIMARY=0
 STATE=""
 FAILURE=""
 
+# After a failed replication of <target>: keeps the watermark file above what the API has
+# committed, so the heartbeat still shows this write as pending (see the header).
+keep_write_pending() {
+  local target="$1" recheck="${WORK_DIR}/recheck.json" code committed
+  code="$(api_call GET "/api/v1/storage-nodes/repositories/${REPO_ID}/replication" "" 30 "${recheck}" "${API_RETRIES}")"
+  committed="$(json_field "${recheck}" primaryWatermark '')"
+  case "${committed}" in
+    '' | *[!0-9]*) committed="" ;;
+  esac
+  if [ "${code}" != "200" ] || [ -z "${committed}" ]; then
+    raise_watermark $((target + 1))
+    return
+  fi
+  if [ "$(json_field "${recheck}" isPrimary false)" != "true" ]; then
+    # Failed over meanwhile: this node's file now describes a replica; a raised one would claim
+    # data the new primary does not have.
+    return
+  fi
+  if [ "${committed}" -ge "${target}" ]; then
+    raise_watermark $((committed + 1))
+  fi
+}
+
 # Replicates the write; on failure sets FAILURE to the reason and returns 1.
 replicate() {
   if [ ! -r "${TOKEN_FILE}" ]; then
@@ -233,6 +264,7 @@ replicate() {
       # An API from before #413 would ignore createArtifact and refuse the write for lack of
       # confirmed encrypted replicas. The API is rolled out before the storage nodes.
       FAILURE="the API cannot build encrypted artifacts yet; update the API before the storage nodes"
+      keep_write_pending "${target}"
       return 1
     fi
 
@@ -249,7 +281,8 @@ replicate() {
     fi
 
     # Stale: the watermark was committed meanwhile (another push, or the reconciler), maybe
-    # without this push's commits. Ask again with the next one, once.
+    # without this push's commits. Ask again with the next one, once; after that the reconciler
+    # takes over (keep_write_pending).
     if [ "${code}" = "409" ] && [ "${attempt}" -eq 1 ] && [ "$(json_field "${response}" stale false)" = "true" ]; then
       attempt=2
       continue
@@ -260,6 +293,7 @@ replicate() {
     else
       FAILURE="replication failed ($(describe_failure "${code}" "${response}"))"
     fi
+    keep_write_pending "${target}"
     return 1
   done
 }
