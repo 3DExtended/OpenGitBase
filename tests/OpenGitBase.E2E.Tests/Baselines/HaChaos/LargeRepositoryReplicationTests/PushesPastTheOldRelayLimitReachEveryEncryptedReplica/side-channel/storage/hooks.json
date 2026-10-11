@@ -1,0 +1,8 @@
+{
+  "PostReceive": "#!/usr/bin/env bash\nexec /usr/local/bin/storage-quorum-replicate.sh /srv/git/{{GUID}}.git --post-receive",
+  "SafeDirectoryPerNode": [
+    "*",
+    "*",
+    "*"
+  ]
+}

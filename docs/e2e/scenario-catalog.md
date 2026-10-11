@@ -27,11 +27,11 @@ Matrix packs also use `E2E-POP##-###` IDs inside `BuildCases()`; each theory dat
 | F07 Merge requests | 69 | 10 | 56 | `MergeRequestSmokeTests (5), MergeRequestE2eTests (+links), MergeRequestRegressionMatrix` |
 | F08 Git HTTPS | 57 | 10 | 54 | `GitHttpsSmokeTests (6), PatPushCloneTests, GitHttpsRegressionMatrix` |
 | F09 SSH git | 56 | 10 | 50 | `GitSshRegressionMatrix (key CRUD + gated transport)` |
-| F10 HA storage | 56 | 10 | 52 | `HaSmokeTests (3), HaStorageChaosTests, HaRegressionMatrix (@FullHa)` |
+| F10 HA storage | 57 | 10 | 52 | `HaSmokeTests (3), HaStorageChaosTests, LargeRepositoryReplicationTests, HaRegressionMatrix (@FullHa)` |
 | F11 Admin fleet | 76 | 10 | 50 | `AdminFleetSmokeTests (10), AdminFleetRegressionMatrix` |
 | F12 Discovery | 64 | 10 | 50 | `DiscoverySmokeTests (10), DiscoveryRegressionMatrix` |
 
-**Total (F01–F12):** 781 compose scenarios (facts + theory rows). Cross-cutting SEC/FUZZ/F00 counted separately in catalog rows below.
+**Total (F01–F12):** 782 compose scenarios (facts + theory rows). Cross-cutting SEC/FUZZ/F00 counted separately in catalog rows below.
 
 ## Catalog (index rows)
 
@@ -66,6 +66,7 @@ Matrix packs also use `E2E-POP##-###` IDs inside `BuildCases()`; each theory dat
 | E2E-POP23 | F08 Git HTTPS | `GitHttpsRegressionMatrix.BuildCases (50 theory rows)` | Regression | 87–94 | pop-23 | done | — |
 | E2E-POP28 | F09 SSH git | `GitSshRegressionMatrix.BuildCases (56 theory rows; transport gated)` | Regression | 95–98 | pop-28 | done | — |
 | E2E-F10-001 | F10 HA storage | `HaStorageChaosTests.StopStorageNodeStillAllowsHealthCheck` | Smoke, Regression, FullHa | 105 | ha-storage-12 | done | — |
+| E2E-F10-002 | F10 HA storage | `LargeRepositoryReplicationTests.PushesPastTheOldRelayLimitReachEveryEncryptedReplica` (two 16 MiB pushes, bundle > 30 MB; watermarks + encrypted artifacts) | FullHa | 100 | #413 | done | — |
 | E2E-F10-S01 | F10 HA storage | `HaSmokeTests (3 FullHa chaos facts)` | Smoke, FullHa | 99–106 | pop-13 | done | — |
 | E2E-POP26 | F10 HA storage | `HaRegressionMatrix.BuildCases (52 theory rows; @FullHa)` | Regression, FullHa | 99–106 | pop-26 | done | — |
 | E2E-F11-S01 | F11 Admin fleet | `AdminFleetSmokeTests (10 facts)` | Smoke | 107–110 | pop-27 | done | — |

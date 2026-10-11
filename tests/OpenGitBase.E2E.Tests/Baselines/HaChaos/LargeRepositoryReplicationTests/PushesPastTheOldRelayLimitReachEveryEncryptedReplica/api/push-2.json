@@ -1,0 +1,6 @@
+{
+  "StatusCode": 0,
+  "Body": "To http://127.0.0.1:8089/ha-large-owner-{{RUN_SUFFIX}}/ha-large-{{RUN_SUFFIX}}.git\n   {{SHA}}..{{SHA}}  main -\u003E main\n",
+  "Method": "GIT",
+  "Url": "push"
+}

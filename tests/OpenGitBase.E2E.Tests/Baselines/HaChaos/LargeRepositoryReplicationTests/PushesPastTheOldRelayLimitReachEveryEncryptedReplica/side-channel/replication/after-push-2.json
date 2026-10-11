@@ -1,0 +1,7 @@
+{
+  "ReplicationState": "Rf4Healthy",
+  "PrimaryWatermark": 2,
+  "PrimaryAppliedWatermark": 2,
+  "EncryptedReplicas": 2,
+  "EncryptedReplicasAtPrimaryWatermark": 2
+}

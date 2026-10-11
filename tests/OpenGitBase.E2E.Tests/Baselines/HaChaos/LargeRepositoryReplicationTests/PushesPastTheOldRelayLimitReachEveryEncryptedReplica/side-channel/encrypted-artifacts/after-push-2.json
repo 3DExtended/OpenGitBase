@@ -1,0 +1,6 @@
+{
+  "Watermark": 2,
+  "EncryptedReplicasHoldingIt": 2,
+  "SameBundleOnEveryReplica": true,
+  "BundleAboveKestrelDefaultLimit": true
+}

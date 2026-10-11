@@ -1,0 +1,55 @@
+[HttpRequest] POST http://localhost:8089/api/register/register | POST http://localhost:8089/api/register/register
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[HttpRequest] POST http://localhost:8089/api/account/debug/verify-email | POST http://localhost:8089/api/account/debug/verify-email
+[HttpResponse] 200 OK | Email verified
+[Intent] Login as platform admin admin
+[HttpRequest] POST http://localhost:8089/api/signin/login | POST http://localhost:8089/api/signin/login
+[HttpResponse] 200 OK | {{JWT}}
+[Intent] Create private repository ha-large-{{RUN_SUFFIX}}
+[HttpRequest] POST http://localhost:8089/api/repository/ha-large-{{RUN_SUFFIX}} | POST http://localhost:8089/api/repository/ha-large-{{RUN_SUFFIX}}
+[HttpResponse] 201 Created | {"value":"{{GUID}}"}
+[Intent] A new repository is placed RF4: primary plus two encrypted replicas, nothing committed yet
+[Intent] The primary's post-receive hook replicates once per push; the repository's storage nodes trust git-owned repositories
+[Intent] Create write-scoped PAT
+[HttpRequest] POST http://localhost:8089/api/git-access-token | POST http://localhost:8089/api/git-access-token
+[HttpResponse] 201 Created | {"id":{"value":"{{GUID}}"},"token":"{{PAT}}","metadata":{"ownerUserId":{"value":"{{USER_ID}}"},"name":"e2e-write","scope":"write","createdAt":"{{TIMESTAMP}}","expiresAt":"{{TIMESTAMP}}","revokedAt":null,"id":{"value":"{{GUID}}"}}}
+[GitCommand] git init -b main | {{TEMP_DIR}}
+[GitOutput] git succeeded | Initialized empty Git repository in {{TEMP_DIR}}
+
+[GitCommand] git config user.email ha-large-owner-{{RUN_SUFFIX}}@example.com | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git config user.name ha-large-owner-{{RUN_SUFFIX}} | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git remote add origin http://git:{{WRITE_PAT}}@127.0.0.1:8089/ha-large-owner-{{RUN_SUFFIX}}/ha-large-{{RUN_SUFFIX}}.git | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[Intent] Push 1: 16 MiB of random data, then every encrypted replica holds the push's artifact
+[GitCommand] git add -A | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m random data 1 | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main (root-commit) {{SHA}}] random data 1
+ 4 files changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 data/push-1-1.bin
+ create mode 100644 data/push-1-2.bin
+ create mode 100644 data/push-1-3.bin
+ create mode 100644 data/push-1-4.bin
+
+[GitCommand] git -c credential.helper= push origin main | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/ha-large-owner-{{RUN_SUFFIX}}/ha-large-{{RUN_SUFFIX}}.git
+ * [new branch]      main -> main
+
+[Intent] Push 2: 16 MiB of random data, then every encrypted replica holds the push's artifact
+[GitCommand] git add -A | {{TEMP_DIR}}
+[GitOutput] git succeeded
+[GitCommand] git commit -m random data 2 | {{TEMP_DIR}}
+[GitOutput] git succeeded | [main {{SHA}}] random data 2
+ 4 files changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 data/push-2-1.bin
+ create mode 100644 data/push-2-2.bin
+ create mode 100644 data/push-2-3.bin
+ create mode 100644 data/push-2-4.bin
+
+[GitCommand] git -c credential.helper= push origin main | {{TEMP_DIR}}
+[GitOutput] git succeeded | To http://127.0.0.1:8089/ha-large-owner-{{RUN_SUFFIX}}/ha-large-{{RUN_SUFFIX}}.git
+   {{SHA}}..{{SHA}}  main -> main
