@@ -239,6 +239,81 @@ class StorageHttpServerTests(unittest.TestCase):
             )
 
 
+    def test_replication_hook_hands_the_whole_push_to_the_replicate_script_once(self) -> None:
+        import subprocess
+        from unittest import mock
+
+        log = Path(self.temp_dir) / "replicate.log"
+        stub = Path(self.temp_dir) / "replicate.sh"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f'printf "args:%s\\n" "$*" >> "{log}"\n'
+            f'cat >> "{log}"\n'
+            "exit 3\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+
+        with mock.patch.object(storage_http_server, "REPLICATE_SCRIPT", str(stub)):
+            with mock.patch.object(storage_http_server.subprocess, "run"):  # chown git:git
+                storage_http_server._install_replication_hook(str(self.repo_path))
+
+        hook = self.repo_path / "hooks" / "post-receive"
+        result = subprocess.run(
+            [str(hook)],
+            input="o1 n1 refs/heads/main\no2 n2 refs/heads/feature\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        # The script's status reaches storage_merge.py, which rolls a merge back on failure.
+        self.assertEqual(3, result.returncode)
+        self.assertEqual(
+            f"args:{self.repo_path} --post-receive\n"
+            "o1 n1 refs/heads/main\n"
+            "o2 n2 refs/heads/feature\n",
+            log.read_text(encoding="utf-8"),
+        )
+
+    def test_a_failed_artifact_write_keeps_the_previous_artifact_whole(self) -> None:
+        from unittest import mock
+
+        repository_id = "55555555-5555-5555-5555-555555555555"
+        old_manifest = {"epoch": 1, "watermark": 2, "bundleSha256": "old", "keyVersion": 1}
+        storage_http_server.store_replication_artifact(repository_id, 2, old_manifest, b"old-bundle")
+
+        with mock.patch.object(Path, "write_bytes", side_effect=OSError("No space left on device")):
+            with self.assertRaises(OSError):
+                storage_http_server.store_replication_artifact(
+                    repository_id,
+                    2,
+                    {"epoch": 1, "watermark": 2, "bundleSha256": "new", "keyVersion": 1},
+                    b"new-bundle",
+                )
+
+        manifest, bundle = storage_http_server.fetch_replication_artifact(repository_id, 2)
+        self.assertEqual(old_manifest, manifest)
+        self.assertEqual(b"old-bundle", bundle)
+        self.assertEqual(["2"], sorted(entry.name for entry in (self.artifact_root / repository_id).iterdir()))
+
+    def test_replacing_an_artifact_swaps_manifest_and_bundle_together(self) -> None:
+        repository_id = "66666666-6666-6666-6666-666666666666"
+        storage_http_server.store_replication_artifact(
+            repository_id, 2, {"watermark": 2, "bundleSha256": "old"}, b"old-bundle"
+        )
+        new_manifest = {"watermark": 2, "bundleSha256": "new"}
+
+        storage_http_server.store_replication_artifact(repository_id, 2, new_manifest, b"new-bundle")
+
+        self.assertEqual(
+            (new_manifest, b"new-bundle"),
+            storage_http_server.fetch_replication_artifact(repository_id, 2),
+        )
+        self.assertEqual(["2"], sorted(entry.name for entry in (self.artifact_root / repository_id).iterdir()))
+        self.assertEqual(2, storage_http_server.on_disk_artifact_watermark(repository_id))
+
+
 if __name__ == "__main__":
     unittest.main()
 

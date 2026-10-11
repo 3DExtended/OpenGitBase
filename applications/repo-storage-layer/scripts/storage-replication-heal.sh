@@ -162,9 +162,11 @@ for repo_path in "${GIT_ROOT}"/*.git; do
     continue
   fi
 
-  # Rewind the local watermark to the last confirmed value so the heartbeat
-  # stops over-reporting and the re-drive starts from a correct base. If the
-  # re-drive then fails, the repo is left honest (watermark == confirmed).
+  # Rewind the local watermark to the last confirmed value so the re-drive
+  # starts from a correct base. storage-quorum-replicate.sh raises it to
+  # confirmed + 1 before it replicates and leaves it there if replication
+  # fails, so the heartbeat keeps reporting the write and the API's
+  # anti-entropy reconciler retries it.
   if [ "${primary_watermark}" -ge 0 ]; then
     mkdir -p "${WATERMARK_DIR}"
     printf '%s' "${primary_watermark}" > "${watermark_file}"
@@ -177,7 +179,7 @@ for repo_path in "${GIT_ROOT}"/*.git; do
     echo "  -> OK  ${repo_id}: replicated, watermark now ${new_local}"
     HEALED=$((HEALED + 1))
   else
-    echo "  -> FAIL ${repo_id}: re-drive failed (watermark left at ${primary_watermark})" >&2
+    echo "  -> FAIL ${repo_id}: re-drive failed; the reconciler retries it (watermark $(cat "${watermark_file}" 2>/dev/null || echo '?'))" >&2
     FAILED=$((FAILED + 1))
   fi
 done

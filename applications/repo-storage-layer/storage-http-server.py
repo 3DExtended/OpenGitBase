@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
+import threading
 import binascii
 import base64
 import tempfile
@@ -40,6 +42,9 @@ STORAGE_MTLS_GIT_HTTP_PORT = int(os.environ.get("STORAGE_MTLS_GIT_HTTP_PORT", "8
 WATERMARK_DIR = Path(os.environ.get("STORAGE_WATERMARK_DIR", "/var/lib/opengitbase/watermarks"))
 ARTIFACT_ROOT = Path(os.environ.get("STORAGE_ARTIFACT_ROOT", "/var/lib/opengitbase/artifacts"))
 ROLE_DIR = Path(os.environ.get("STORAGE_ROLE_DIR", "/var/lib/opengitbase/repo-roles"))
+REPLICATE_SCRIPT = os.environ.get("STORAGE_REPLICATE_SCRIPT", "/usr/local/bin/storage-quorum-replicate.sh")
+# Serialises artifact swaps against reads, so nobody sees one write's manifest with another's bundle.
+_ARTIFACT_LOCK = threading.Lock()
 REPOS_ROOT = Path("/srv/git")
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
@@ -143,29 +148,49 @@ def store_replication_artifact(
     manifest: dict[str, Any],
     bundle_bytes: bytes,
 ) -> Path:
+    """Stores an artifact whole or not at all. Both files are written into a staging directory
+    beside the target and swapped in with renames, because the same watermark can arrive twice at
+    once (a push and the reconciler, or a retry) and a failed write must not leave one write's
+    manifest next to another's bundle. Staging names start with a dot, so the watermark scans
+    ignore them."""
     artifact_dir = _artifact_directory(repository_id, watermark)
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = artifact_dir / "manifest.json"
-    bundle_path = artifact_dir / "bundle.aead"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    bundle_path.write_bytes(bundle_bytes)
+    artifact_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=f".{watermark}.staging.", dir=artifact_dir.parent))
+    try:
+        staging_dir.chmod(0o755)
+        (staging_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (staging_dir / "bundle.aead").write_bytes(bundle_bytes)
+        with _ARTIFACT_LOCK:
+            if artifact_dir.exists():
+                retired_dir = Path(
+                    tempfile.mkdtemp(prefix=f".{watermark}.retired.", dir=artifact_dir.parent)
+                )
+                os.replace(artifact_dir, retired_dir)
+                os.replace(staging_dir, artifact_dir)
+                shutil.rmtree(retired_dir, ignore_errors=True)
+            else:
+                os.replace(staging_dir, artifact_dir)
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
     return artifact_dir
 
 
 def delete_replication_artifact(repository_id: str, watermark: int) -> None:
     artifact_dir = _artifact_directory(repository_id, watermark)
-    if artifact_dir.exists():
-        shutil.rmtree(artifact_dir)
+    with _ARTIFACT_LOCK:
+        if artifact_dir.exists():
+            shutil.rmtree(artifact_dir)
 
 
 def fetch_replication_artifact(repository_id: str, watermark: int) -> tuple[dict[str, Any], bytes]:
     artifact_dir = _artifact_directory(repository_id, watermark)
     manifest_path = artifact_dir / "manifest.json"
     bundle_path = artifact_dir / "bundle.aead"
-    if not manifest_path.is_file() or not bundle_path.is_file():
-        raise FileNotFoundError(f"Artifact not found for {repository_id} at watermark {watermark}.")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return manifest, bundle_path.read_bytes()
+    with _ARTIFACT_LOCK:
+        if not manifest_path.is_file() or not bundle_path.is_file():
+            raise FileNotFoundError(f"Artifact not found for {repository_id} at watermark {watermark}.")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return manifest, bundle_path.read_bytes()
 
 
 def on_disk_artifact_watermark(repository_id: str) -> int | None:
@@ -281,15 +306,16 @@ def _write_initial_watermark(physical_path: str) -> None:
 
 
 def _install_replication_hook(physical_path: str) -> None:
+    """Writes the repository's hooks. post-receive hands the whole push to the replicate script
+    in one call: it replicates once per push (not once per ref), then gives every updated ref to
+    pipelines, also when replication failed. Rewritten for every repository at startup
+    (_backfill_replication_hooks), so a new image updates every hook."""
     hooks_dir = Path(physical_path) / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
     hook_path = hooks_dir / "post-receive"
     hook_path.write_text(
         "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        "while read -r old_sha new_sha ref_name; do\n"
-        f'  /usr/local/bin/storage-quorum-replicate.sh "{physical_path}" "$ref_name" "$new_sha"\n'
-        "done\n",
+        f"exec {shlex.quote(REPLICATE_SCRIPT)} {shlex.quote(physical_path)} --post-receive\n",
         encoding="utf-8",
     )
     hook_path.chmod(0o755)

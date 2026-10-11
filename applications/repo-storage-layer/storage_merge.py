@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -455,12 +456,15 @@ def _update_ref_with_hook(
     if not hook_path.is_file():
         return
     hook_input = f"{old_sha} {new_sha} {ref_name}\n"
+    # The ref update is undone below when the hook fails, so the hook must not hand it to
+    # pipelines after a failed replication (storage-quorum-replicate.sh).
     hook_result = subprocess.run(
         [str(hook_path)],
         input=hook_input,
         text=True,
         capture_output=True,
         check=False,
+        env={**os.environ, "STORAGE_HOOK_ROLLBACK_ON_FAILURE": "1"},
     )
     if hook_result.returncode != 0:
         _run_git(git_dir, "update-ref", ref_name, old_sha, new_sha)

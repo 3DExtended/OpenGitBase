@@ -147,6 +147,23 @@ class StorageMergeTests(unittest.TestCase):
         self.assertNotEqual(target_sha, self.main_sha)
         self.assertNotEqual(target_sha, feature_sha)
 
+    def test_execute_merge_tells_the_post_receive_hook_that_a_failure_rolls_the_merge_back(self) -> None:
+        # The replicate script hands a push to pipelines even when replication failed, except
+        # when the caller undoes the ref update on failure, as a merge does.
+        self._create_branch("feature", "feature.txt", "feature\n", "add feature")
+        seen = Path(self.temp_dir) / "hook-env"
+        hook = Path(self.repo_path) / "hooks" / "post-receive"
+        hook.write_text(
+            "#!/usr/bin/env bash\n"
+            f'printf "%s" "${{STORAGE_HOOK_ROLLBACK_ON_FAILURE:-unset}}" > "{seen}"\n',
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
+
+        execute_merge(self.repo_path, "main", "feature", "merge_commit")
+
+        self.assertEqual("1", seen.read_text(encoding="utf-8"))
+
     def test_execute_squash_produces_single_commit(self) -> None:
         feature_sha = self._create_branch("feature", "feature.txt", "feature\n", "add feature")
         result = execute_merge(
