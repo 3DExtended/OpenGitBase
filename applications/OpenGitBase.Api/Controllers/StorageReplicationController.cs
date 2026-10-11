@@ -16,6 +16,13 @@ namespace OpenGitBase.Api.Controllers;
 [Route("api/v1/storage-nodes/repositories")]
 public sealed class StorageReplicationController : ControllerBase
 {
+    /// <summary>
+    /// Body limit for replicate-artifact: the whole encrypted bundle, hex-encoded (2x), in JSON.
+    /// Kestrel's 30,000,000-byte default capped repositories at a ~15 MB bundle. Bounded, not
+    /// disabled: the endpoint is anonymous until the node token is checked inside the action.
+    /// </summary>
+    internal const long ReplicateArtifactMaxRequestBodyBytes = 256L * 1024 * 1024;
+
     private readonly IQueryProcessor _queryProcessor;
     private readonly IRepositoryKeyService _repositoryKeyService;
 
@@ -141,6 +148,7 @@ public sealed class StorageReplicationController : ControllerBase
     }
 
     [HttpPost("{repositoryId:guid}/replicate-artifact")]
+    [RequestSizeLimit(ReplicateArtifactMaxRequestBodyBytes)]
     [ProducesResponseType(typeof(RelayReplicationArtifactResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
