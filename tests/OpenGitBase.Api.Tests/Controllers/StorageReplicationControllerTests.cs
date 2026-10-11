@@ -125,6 +125,47 @@ public class StorageReplicationControllerTests
         Assert.Equal("Watermark 6 is already committed.", body.Error);
     }
 
+    [Fact]
+    public async Task GetRepositoryKey_ForThePrimary_MarksThePushAsReplicating()
+    {
+        // Only post-receive hooks from before #413 fetch the key, as the first step of replicating
+        // a push. Marking the primary there keeps the new reconciler from committing the same
+        // watermark from an older artifact while such a push is under way.
+        var nodeId = Guid.NewGuid();
+        var repositoryId = Guid.NewGuid();
+        var queryProcessor = AuthenticatedProcessor(nodeId);
+        var keys = Substitute.For<IRepositoryKeyService>();
+        keys.TryGetEphemeralKeyForPrimaryAsync(repositoryId, nodeId, Arg.Any<CancellationToken>())
+            .Returns(new EphemeralRepositoryKey(new byte[32], 1));
+        var controller = AuthenticatedController(queryProcessor, keys);
+
+        var result = await controller.GetRepositoryKey(repositoryId, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<MarkPrimaryReplicatingQuery>(query =>
+                    query.RepositoryId.Value == repositoryId && query.StorageNodeId.Value == nodeId
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task GetRepositoryKey_ForANodeThatIsNotThePrimary_MarksNothing()
+    {
+        var queryProcessor = AuthenticatedProcessor(Guid.NewGuid());
+        var controller = AuthenticatedController(queryProcessor, Substitute.For<IRepositoryKeyService>());
+
+        var result = await controller.GetRepositoryKey(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        await queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(Arg.Any<MarkPrimaryReplicatingQuery>(), Arg.Any<CancellationToken>());
+    }
+
     private static IQueryProcessor AuthenticatedProcessor(Guid nodeId)
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
@@ -134,14 +175,20 @@ public class StorageReplicationControllerTests
         return queryProcessor;
     }
 
-    private static StorageReplicationController AuthenticatedController(IQueryProcessor queryProcessor)
+    private static StorageReplicationController AuthenticatedController(
+        IQueryProcessor queryProcessor,
+        IRepositoryKeyService? repositoryKeyService = null
+    )
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.5");
         httpContext.Request.Headers.Authorization = "Bearer node-token";
         httpContext.Request.Headers["X-Storage-Node-Id"] = "storage-1";
         httpContext.Request.Headers[StorageNodeCertificateHeaderReader.ThumbprintHeaderName] = new string('A', 64);
-        return new StorageReplicationController(queryProcessor, Substitute.For<IRepositoryKeyService>())
+        return new StorageReplicationController(
+            queryProcessor,
+            repositoryKeyService ?? Substitute.For<IRepositoryKeyService>()
+        )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

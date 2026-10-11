@@ -41,6 +41,9 @@ public sealed class ReplicationServicesWiringTests
             >()
         );
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<AntiEntropyReconcilerService>());
+        Assert.NotNull(
+            scope.ServiceProvider.GetRequiredService<IQueryHandler<MarkPrimaryReplicatingQuery, bool>>()
+        );
         // Resolved in a scope of its own after a push has been answered.
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ReplicaCatchUpService>());
     }

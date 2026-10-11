@@ -418,6 +418,10 @@ public class Startup
             RelayReplicationArtifactQueryHandler
         >();
         services.AddTransient<
+            IQueryHandler<MarkPrimaryReplicatingQuery, bool>,
+            MarkPrimaryReplicatingQueryHandler
+        >();
+        services.AddTransient<
             IQueryHandler<ApplyRepositoryWatermarksQuery, ApplyRepositoryWatermarksResult>,
             ApplyRepositoryWatermarksQueryHandler
         >();

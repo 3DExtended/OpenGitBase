@@ -537,20 +537,11 @@ public sealed class QuorumReplicateRepositoryQueryHandler
         || await PrimaryStillClaimedAsync(query.RepositoryId.Value, query.StorageNodeId.Value, claimed, cancellationToken)
             .ConfigureAwait(false);
 
-    private async Task MarkPrimaryReplicatingAsync(
+    private Task<bool> MarkPrimaryReplicatingAsync(
         Guid repositoryId,
         Guid primaryNodeId,
         CancellationToken cancellationToken
-    )
-    {
-        var now = ReplicationClaim.Now();
-        await using var db = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        await db
-            .Set<RepositoryReplicaEntity>()
-            .Where(replica => replica.RepositoryId == repositoryId && replica.StorageNodeId == primaryNodeId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(replica => replica.LastSyncedAt, now), cancellationToken)
-            .ConfigureAwait(false);
-    }
+    ) => ReplicationClaim.MarkPrimaryReplicatingAsync(_contextFactory, repositoryId, primaryNodeId, cancellationToken);
 
     private async Task<bool> PrimaryStillClaimedAsync(
         Guid repositoryId,

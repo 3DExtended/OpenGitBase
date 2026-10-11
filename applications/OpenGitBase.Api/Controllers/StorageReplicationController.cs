@@ -92,6 +92,21 @@ public sealed class StorageReplicationController : ControllerBase
             return NotFound();
         }
 
+        // Only post-receive hooks from before #413 fetch the key, as the first step of replicating
+        // a push (bundle, encrypt, relay, then quorum-replicate). Mark the primary now, so a
+        // reconciler run that claimed this repository stops before it commits the same watermark
+        // from an older artifact; that hook rolls its watermark file back when it loses that race.
+        await _queryProcessor
+            .RunQueryAsync(
+                new MarkPrimaryReplicatingQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                    StorageNodeId = storageNodeId,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
         return Ok(
             new RepositoryKeyResponse
             {
