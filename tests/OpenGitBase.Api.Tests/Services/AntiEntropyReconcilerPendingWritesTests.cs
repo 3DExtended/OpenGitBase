@@ -231,6 +231,7 @@ public class AntiEntropyReconcilerPendingWritesTests
             services.AddLogging();
             services.AddSingleton(Options.Create(new HaStorageBackgroundOptions()));
             services.AddSingleton<ReplicationArtifactPublisher>();
+            services.AddSingleton<ReplicaCatchUpService>();
             services.AddSingleton<Rf1BackfillService>();
             services.AddTransient<AntiEntropyReconcilerService>();
             services.AddSingleton<GetRepositoryReplicationContextQueryHandler>();

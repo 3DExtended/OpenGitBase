@@ -121,6 +121,38 @@ public class QuorumReplicateCreateArtifactTests
     }
 
     [Fact]
+    public async Task CreateArtifact_RetriesARefusedPeerAfterTheRequestScopeIsGone()
+    {
+        // In production the handler, its query processor and the publisher belong to the request's
+        // scope, which is disposed once the response is written. The background retry of a refused
+        // replica runs after that and must not resolve anything from it.
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, requestScoped: true);
+        fixture.CommitSucceeds();
+        fixture.Provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncBId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                StorageProvisionerResult.Fail(503, "busy"),
+                StorageProvisionerResult.Ok(201)
+            );
+        var requestDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.HoldLaterLookupsOf(fixture.EncBId, requestDone.Task);
+
+        var result = await fixture.RunAsync(appliedWatermark: 6, createArtifact: true);
+        requestDone.SetResult();
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(6, await fixture.WaitForArtifactWatermarkAsync(fixture.EncBId, 6));
+    }
+
+    [Fact]
     public async Task CreateArtifact_FanOutDoesNotMarkAPeerThatStillRejectsTheArtifact()
     {
         await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5);
@@ -444,7 +476,8 @@ public class QuorumReplicateCreateArtifactTests
 
         public static async Task<Fixture> CreateAsync(
             long primaryWatermark,
-            DateTimeOffset? primaryLastSyncedAt = null
+            DateTimeOffset? primaryLastSyncedAt = null,
+            bool requestScoped = false
         )
         {
             var connection = SqliteTestConnection.OpenInMemory();
@@ -452,7 +485,23 @@ public class QuorumReplicateCreateArtifactTests
             var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
             var fixtureHolder = new Fixture[1];
             services.AddSingleton(connection);
-            services.AddSingleton(_ => fixtureHolder[0].QueryProcessor);
+            services.AddLogging();
+            if (requestScoped)
+            {
+                // Like AddCqrs: the query processor belongs to a scope and stops working with it.
+                services.AddScoped<IQueryProcessor>(_ => new ScopeBoundQueryProcessor(fixtureHolder[0].QueryProcessor));
+                services.AddTransient<ReplicationArtifactPublisher>();
+                services.AddTransient<ReplicaCatchUpService>();
+                services.AddTransient<QuorumReplicateRepositoryQueryHandler>();
+            }
+            else
+            {
+                services.AddSingleton(_ => fixtureHolder[0].QueryProcessor);
+                services.AddSingleton<ReplicationArtifactPublisher>();
+                services.AddSingleton<ReplicaCatchUpService>();
+                services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
+            }
+
             services.AddSingleton(_ => fixtureHolder[0].Provisioner);
             services.AddSingleton(repositoryKeyService);
             services.AddSingleton<IFeatureAssemblyProvider>(
@@ -464,8 +513,6 @@ public class QuorumReplicateCreateArtifactTests
                 )
             );
             services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
-            services.AddSingleton<ReplicationArtifactPublisher>();
-            services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
             var fixture = new Fixture(services.BuildServiceProvider()) { PrimaryWatermark = primaryWatermark };
             fixtureHolder[0] = fixture;
 
@@ -508,7 +555,9 @@ public class QuorumReplicateCreateArtifactTests
             DateTimeOffset? expectedPrimaryLastSyncedAt = null
         )
         {
-            var handler = _provider.GetRequiredService<QuorumReplicateRepositoryQueryHandler>();
+            // A request's scope: disposed as soon as the handler has answered.
+            await using var scope = _provider.CreateAsyncScope();
+            var handler = scope.ServiceProvider.GetRequiredService<QuorumReplicateRepositoryQueryHandler>();
             var result = await handler.RunQueryAsync(
                 new QuorumReplicateRepositoryQuery
                 {
@@ -523,6 +572,29 @@ public class QuorumReplicateCreateArtifactTests
             );
             Assert.True(result.IsSome);
             return result.Get();
+        }
+
+        /// <summary>
+        /// Lets the first lookup of <paramref name="nodeId"/> through, and holds every later one
+        /// until <paramref name="release"/> completes.
+        /// </summary>
+        public void HoldLaterLookupsOf(Guid nodeId, Task release)
+        {
+            var lookups = 0;
+            QueryProcessor
+                .RunQueryAsync(
+                    Arg.Is<GetStorageNodeQuery>(query => query.ModelId.Value == nodeId),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(async _ =>
+                {
+                    if (Interlocked.Increment(ref lookups) > 1)
+                    {
+                        await release;
+                    }
+
+                    return Option.From(Node(nodeId));
+                });
         }
 
         public DateTimeOffset? ReadPrimaryLastSyncedAt()
@@ -569,6 +641,16 @@ public class QuorumReplicateCreateArtifactTests
         }
 
         public async ValueTask DisposeAsync() => await _provider.DisposeAsync();
+
+        private static StorageNodeDto Node(Guid nodeId) =>
+            new()
+            {
+                Id = StorageNodeId.From(nodeId),
+                NodeId = nodeId.ToString(),
+                InternalHost = nodeId.ToString(),
+                InternalHttpPort = 8081,
+                IsHealthy = true,
+            };
 
         private static RepositoryReplicationPeerDto Peer(Guid nodeId, RepositoryReplicaRole role) =>
             new()
@@ -640,18 +722,7 @@ public class QuorumReplicateCreateArtifactTests
                         Arg.Is<GetStorageNodeQuery>(query => query.ModelId.Value == nodeId),
                         Arg.Any<CancellationToken>()
                     )
-                    .Returns(
-                        Option.From(
-                            new StorageNodeDto
-                            {
-                                Id = StorageNodeId.From(nodeId),
-                                NodeId = nodeId.ToString(),
-                                InternalHost = nodeId.ToString(),
-                                InternalHttpPort = 8081,
-                                IsHealthy = true,
-                            }
-                        )
-                    );
+                    .Returns(Option.From(Node(nodeId)));
                 QueryProcessor
                     .RunQueryAsync(
                         Arg.Is<GetStorageNodeApiTokenQuery>(query => query.StorageNodeId.Value == nodeId),
@@ -706,5 +777,29 @@ public class QuorumReplicateCreateArtifactTests
                     Peer(EncBId, RepositoryReplicaRole.EncryptedReplica),
                 ],
             };
+    }
+
+    /// <summary>A query processor that, like the request-scoped one in production, dies with its scope.</summary>
+    private sealed class ScopeBoundQueryProcessor : IQueryProcessor, IDisposable
+    {
+        private readonly IQueryProcessor _inner;
+        private bool _disposed;
+
+        public ScopeBoundQueryProcessor(IQueryProcessor inner)
+        {
+            _inner = inner;
+        }
+
+        public Task<Option<TResult>> RunQueryAsync<TQuery, TResult>(
+            IQuery<TResult, TQuery> query,
+            CancellationToken cancellationToken
+        )
+            where TQuery : IQuery<TResult, TQuery>
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _inner.RunQueryAsync(query, cancellationToken);
+        }
+
+        public void Dispose() => _disposed = true;
     }
 }

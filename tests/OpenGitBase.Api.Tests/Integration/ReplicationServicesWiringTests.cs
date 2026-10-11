@@ -17,7 +17,7 @@ namespace OpenGitBase.Api.Tests.Integration;
 public sealed class ReplicationServicesWiringTests
 {
     [Fact]
-    public async Task TheApplicationContainer_ResolvesTheQuorumHandlerAndTheReconciler()
+    public async Task TheApplicationContainer_ResolvesTheQuorumHandlerTheReconcilerAndTheCatchUp()
     {
         using var connection = SqliteTestConnection.OpenInMemory();
         await using var factory = new WebApplicationFactory<ApiEntryPoint>().WithWebHostBuilder(
@@ -41,5 +41,7 @@ public sealed class ReplicationServicesWiringTests
             >()
         );
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<AntiEntropyReconcilerService>());
+        // Resolved in a scope of its own after a push has been answered.
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ReplicaCatchUpService>());
     }
 }

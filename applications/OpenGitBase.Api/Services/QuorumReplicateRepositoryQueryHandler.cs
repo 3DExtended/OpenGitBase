@@ -16,18 +16,21 @@ public sealed class QuorumReplicateRepositoryQueryHandler
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly ReplicationArtifactPublisher _artifactPublisher;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public QuorumReplicateRepositoryQueryHandler(
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        ReplicationArtifactPublisher artifactPublisher
+        ReplicationArtifactPublisher artifactPublisher,
+        IServiceScopeFactory scopeFactory
     )
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
         _contextFactory = contextFactory;
         _artifactPublisher = artifactPublisher;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<Option<QuorumReplicateRepositoryResult>> RunQueryAsync(
@@ -228,20 +231,21 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             .Where(peer => !confirmedEncryptedNodeIds.Contains(peer.StorageNodeId))
             .ToList();
 
-        _ = Task.Run(
-            () =>
-                CatchUpRf4Async(
+        var sourceEncryptedNodeId = confirmedEncryptedNodeIds[0];
+        ReplicaCatchUpService.StartInBackground(
+            _scopeFactory,
+            catchUp =>
+                catchUp.CatchUpRf4Async(
                     context.RepositoryId,
                     context.PhysicalPath,
                     primaryPeer.InternalHost,
                     readReplicaPeer,
                     remainingEncryptedPeers,
-                    confirmedEncryptedNodeIds[0],
+                    sourceEncryptedNodeId,
                     query.AppliedWatermark,
                     artifactInHand: null,
                     CancellationToken.None
-                ),
-            CancellationToken.None
+                )
         );
 
         return Option.From(
@@ -254,7 +258,7 @@ public sealed class QuorumReplicateRepositoryQueryHandler
     /// on the primary, upload it to every healthy encrypted replica, and commit the watermark with
     /// the primary plus every replica that stored it. Nothing is downloaded again to confirm it:
     /// the uploads' own 2xx answers come from this request. Replicas that refused are retried by
-    /// the fan-out with the artifact still in hand.
+    /// the fan-out (<see cref="ReplicaCatchUpService"/>) with the artifact still in hand.
     /// </summary>
     private async Task<Option<QuorumReplicateRepositoryResult>> RunRf4CreateArtifactQuorumAsync(
         QuorumReplicateRepositoryQuery query,
@@ -399,20 +403,21 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             peer.IsHealthy
             && string.Equals(peer.Role, nameof(RepositoryReplicaRole.ReadReplica), StringComparison.Ordinal)
         );
-        _ = Task.Run(
-            () =>
-                CatchUpRf4Async(
+        var sourceNodeId = quorumNodeIds[1].Value;
+        ReplicaCatchUpService.StartInBackground(
+            _scopeFactory,
+            catchUp =>
+                catchUp.CatchUpRf4Async(
                     context.RepositoryId,
                     context.PhysicalPath,
                     primaryPeer.InternalHost,
                     readReplicaPeer,
                     refusedPeers,
-                    quorumNodeIds[1].Value,
+                    sourceNodeId,
                     query.AppliedWatermark,
                     artifact,
                     CancellationToken.None
-                ),
-            CancellationToken.None
+                )
         );
 
         return Option.From(
@@ -483,147 +488,6 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         return lastSyncedAt == claimed;
-    }
-
-    private async Task CatchUpRf4Async(
-        Guid repositoryId,
-        string physicalPath,
-        string primaryHost,
-        RepositoryReplicationPeerDto? readReplicaPeer,
-        IReadOnlyList<RepositoryReplicationPeerDto> remainingEncryptedPeers,
-        Guid sourceEncryptedNodeId,
-        long watermark,
-        ReplicationArtifactFetchResult? artifactInHand,
-        CancellationToken cancellationToken
-    )
-    {
-        if (readReplicaPeer is not null)
-        {
-            var readNode = await LoadStorageNodeAsync(
-                    StorageNodeId.From(readReplicaPeer.StorageNodeId),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            var readToken = readNode is null
-                ? null
-                : await GetApiTokenAsync(readNode.Id, cancellationToken).ConfigureAwait(false);
-            if (readNode is not null && readToken is not null)
-            {
-                await _storageProvisionerClient
-                    .SyncRepositoryFromPeerAsync(
-                        readNode,
-                        readToken,
-                        physicalPath,
-                        primaryHost,
-                        physicalPath,
-                        MtlsGitHttpPort,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-            }
-        }
-
-        if (remainingEncryptedPeers.Count == 0)
-        {
-            return;
-        }
-
-        var artifact = artifactInHand
-            ?? await FetchArtifactFromPeerAsync(repositoryId, sourceEncryptedNodeId, watermark, cancellationToken)
-                .ConfigureAwait(false);
-        if (artifact is null || !artifact.Success)
-        {
-            return;
-        }
-
-        foreach (var encryptedPeer in remainingEncryptedPeers)
-        {
-            var targetNode = await LoadStorageNodeAsync(
-                    StorageNodeId.From(encryptedPeer.StorageNodeId),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            if (targetNode is null)
-            {
-                continue;
-            }
-
-            var upload = await _artifactPublisher
-                .UploadAsync(targetNode, repositoryId, watermark, artifact, cancellationToken)
-                .ConfigureAwait(false);
-            if (!upload.Success)
-            {
-                // Left lagging on purpose: the reconciler repairs replicas below PrimaryWatermark.
-                continue;
-            }
-
-            await PersistEncryptedArtifactWatermarkAsync(
-                    repositoryId,
-                    encryptedPeer.StorageNodeId,
-                    watermark,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        }
-    }
-
-    private async Task<ReplicationArtifactFetchResult?> FetchArtifactFromPeerAsync(
-        Guid repositoryId,
-        Guid sourceEncryptedNodeId,
-        long watermark,
-        CancellationToken cancellationToken
-    )
-    {
-        var sourceNode = await LoadStorageNodeAsync(
-                StorageNodeId.From(sourceEncryptedNodeId),
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        var sourceToken = sourceNode is null
-            ? null
-            : await GetApiTokenAsync(sourceNode.Id, cancellationToken).ConfigureAwait(false);
-        if (sourceNode is null || sourceToken is null)
-        {
-            return null;
-        }
-
-        return await _storageProvisionerClient
-            .TryGetReplicationArtifactAsync(
-                sourceNode,
-                sourceToken,
-                repositoryId,
-                watermark,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-    }
-
-    private async Task PersistEncryptedArtifactWatermarkAsync(
-        Guid repositoryId,
-        Guid storageNodeId,
-        long watermark,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var db = await _contextFactory
-            .CreateDbContextAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var replica = await db
-            .Set<RepositoryReplicaEntity>()
-            .FirstOrDefaultAsync(
-                entity =>
-                    entity.RepositoryId == repositoryId && entity.StorageNodeId == storageNodeId,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (replica is null)
-        {
-            return;
-        }
-
-        replica.ArtifactWatermark = Math.Max(replica.ArtifactWatermark ?? 0, watermark);
-        replica.LastSyncedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<Option<QuorumReplicateRepositoryResult>> RunRf3QuorumAsync(
@@ -765,54 +629,21 @@ public sealed class QuorumReplicateRepositoryQueryHandler
         foreach (var remainingPeer in remainingReplicaPeers.DistinctBy(peer => peer.StorageNodeId))
         {
             var remainingNodeId = StorageNodeId.From(remainingPeer.StorageNodeId);
-            _ = Task.Run(
-                () =>
-                    CatchUpReplicaAsync(
+            ReplicaCatchUpService.StartInBackground(
+                _scopeFactory,
+                catchUp =>
+                    catchUp.CatchUpReplicaAsync(
                         remainingNodeId,
                         context.PhysicalPath,
                         primaryPeer.InternalHost,
                         CancellationToken.None
-                    ),
-                CancellationToken.None
+                    )
             );
         }
 
         return Option.From(
             QuorumReplicateRepositoryResult.Replicated(commitResult.Get().PrimaryWatermark)
         );
-    }
-
-    private async Task CatchUpReplicaAsync(
-        StorageNodeId replicaNodeId,
-        string physicalPath,
-        string primaryHost,
-        CancellationToken cancellationToken
-    )
-    {
-        var replicaNode = await LoadStorageNodeAsync(replicaNodeId, cancellationToken)
-            .ConfigureAwait(false);
-        if (replicaNode is null)
-        {
-            return;
-        }
-
-        var token = await GetApiTokenAsync(replicaNode.Id, cancellationToken).ConfigureAwait(false);
-        if (token is null)
-        {
-            return;
-        }
-
-        await _storageProvisionerClient
-            .SyncRepositoryFromPeerAsync(
-                replicaNode,
-                token,
-                physicalPath,
-                primaryHost,
-                physicalPath,
-                MtlsGitHttpPort,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
     }
 
     private async Task<StorageNodeDto?> LoadStorageNodeAsync(
