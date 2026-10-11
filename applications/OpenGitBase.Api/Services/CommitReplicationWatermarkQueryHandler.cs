@@ -94,24 +94,52 @@ public sealed class CommitReplicationWatermarkQueryHandler
             );
         }
 
-        entity.PrimaryWatermark = query.NewWatermark;
+        // Compare-and-set: the watermark only moves if nobody else moved it since we read it.
+        // A push hook and the reconciler (on either API instance) can race for the same
+        // watermark; exactly one wins, and a stale writer can never put it back down.
+        var expectedWatermark = query.NewWatermark - 1;
+        var expectedEpoch = query.ReplicationEpoch;
+        var primaryNodeId = query.StorageNodeId.Value;
+        var committed = await context
+            .Set<RepositoryEntity>()
+            .Where(repository =>
+                repository.Id == query.RepositoryId.Value
+                && repository.PrimaryWatermark == expectedWatermark
+                && repository.ReplicationEpoch == expectedEpoch
+                && repository.PrimaryStorageNodeId == primaryNodeId
+            )
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(repository => repository.PrimaryWatermark, query.NewWatermark),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (committed == 0)
+        {
+            return Option.From(
+                CommitReplicationWatermarkResult.Failed(
+                    "Watermark was committed concurrently; it must increment monotonically by one."
+                )
+            );
+        }
+
         var now = DateTimeOffset.UtcNow;
         foreach (var replica in entity.Replicas.Where(replica =>
                      quorumIds.Contains(replica.StorageNodeId)))
         {
+            // Only ever raise: the heartbeat may already report the primary ahead of this commit.
             if (replica.Role == RepositoryReplicaRole.EncryptedReplica)
             {
-                replica.ArtifactWatermark = query.NewWatermark;
+                replica.ArtifactWatermark = Math.Max(replica.ArtifactWatermark ?? 0, query.NewWatermark);
             }
             else
             {
-                replica.AppliedWatermark = query.NewWatermark;
+                replica.AppliedWatermark = Math.Max(replica.AppliedWatermark, query.NewWatermark);
             }
 
             replica.LastSyncedAt = now;
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return Option.From(CommitReplicationWatermarkResult.Committed(entity.PrimaryWatermark));
+        return Option.From(CommitReplicationWatermarkResult.Committed(query.NewWatermark));
     }
 }
