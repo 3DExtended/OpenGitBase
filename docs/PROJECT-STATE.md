@@ -128,7 +128,7 @@ flowchart TB
 | Fleet dispatcher SSH key (Ed25519) | Done | Encrypted private key in DB; bootstrap token for dispatchers |
 | Per-node PKI (mTLS) | Done | [docker/pki/](../docker/pki/) |
 | RF=3 repo create (provision all 3) | Done | [CreateRepositoryWithStorageQueryHandler.cs](../applications/OpenGitBase.Api/Services/CreateRepositoryWithStorageQueryHandler.cs) |
-| Write quorum 2/3 on push | Done | `post-receive` → API `quorum-replicate` |
+| Write quorum 2/3 on push | Done | `post-receive` → API `quorum-replicate` (RF4: API builds the encrypted artifact itself, #413) |
 | Peer sync over mTLS :8443 | Done | Separate from dispatcher SSH trust domain |
 | Watermark-based durability | Done | Monotonic `PrimaryWatermark` + per-replica `AppliedWatermark` |
 | Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs) |
@@ -190,10 +190,18 @@ flowchart LR
 1. Client pushes via dispatcher (HTTPS or SSH).
 2. Dispatcher calls API access-check → routes **writes to primary** only.
 3. Storage runs `pre-receive` → API push-validation (protected branches, push rules).
-4. Refs applied on primary; `post-receive` runs [storage-quorum-replicate.sh](../applications/repo-storage-layer/scripts/storage-quorum-replicate.sh).
-5. Primary bumps local watermark, calls `POST /api/v1/storage-nodes/repositories/{id}/quorum-replicate`.
-6. API orchestrates peer `sync-from` (mTLS fetch) until **2 of 3** nodes durable → commits watermark in DB.
-7. Third replica catches up asynchronously.
+4. Refs applied on primary; `post-receive` hands the whole push (every updated ref, on stdin) to [storage-quorum-replicate.sh](../applications/repo-storage-layer/scripts/storage-quorum-replicate.sh) in **one** call, so replication runs once per push.
+5. The script reads the replication context (`GET .../replication`); on a node that is not the primary it stops there. It raises the local watermark file to `PrimaryWatermark + 1` (never lowers it) and calls `POST /api/v1/storage-nodes/repositories/{id}/quorum-replicate`.
+6. API makes the write durable and commits the watermark in DB with a compare-and-set (exactly one writer wins one watermark):
+   - **RF3:** peer `sync-from` (mTLS fetch) until **2 of 3** nodes are durable.
+   - **RF4** (`createArtifact: true`): the API has the primary build the encrypted artifact (`git bundle --all`, encrypted on the node with the repository key; `POST :8081/internal/repos/create-replication-artifact`), uploads it to every healthy encrypted replica (`PUT .../artifacts/{watermark}`), and commits with the primary plus every replica that stored it. No key, bundle or artifact passes through the hook or the API's request body (the old relay through `/replicate-artifact` hit Kestrel's 30 MB body limit, #413; the endpoint stays for hooks from before the change).
+   - If the watermark was committed meanwhile (another push, the reconciler), the API answers `409` with `stale: true` and the script retries once with the next one.
+7. The script hands every updated ref to `POST /api/v1/internal/pipelines/git-push-ingest`, **whether replication succeeded or not** (the push is on the primary either way). Exception: merges from the web (`storage_merge.py`) set `STORAGE_HOOK_ROLLBACK_ON_FAILURE=1`, undo the ref update when replication fails, and get no ingest then.
+8. Every failure is one stderr line the pusher sees, e.g. `storage-quorum-replicate: <repo> stored on the primary only; encrypted replication failed (HTTP 413) - the reconciler will retry`. Exit status 0 = replicated (or not the primary), 1 = not replicated; git ignores it for pushes, merges roll back on it.
+9. Read replica and encrypted replicas that refused the upload catch up asynchronously.
+10. **A failed replication is not lost:** the watermark file stays raised, the heartbeat reports the primary's `AppliedWatermark` above `PrimaryWatermark`, and the anti-entropy reconciler (every `ReconcilerIntervalSeconds`, on every API instance) replicates the write through the same `createArtifact` path once `PrimaryAheadGraceSeconds` (600 s) have passed since the primary replica's `LastSyncedAt`. It claims the repository with a compare-and-set on that `LastSyncedAt`, so only one API instance acts, and stops before each upload if a push has started meanwhile.
+
+Rollout order for changes to this flow: API first (it serves hooks of both generations), then the storage nodes one at a time; the script refuses RF4 repositories against an API whose replication context lacks `apiCreatesArtifacts`.
 
 ### 4.4 Web content read
 
