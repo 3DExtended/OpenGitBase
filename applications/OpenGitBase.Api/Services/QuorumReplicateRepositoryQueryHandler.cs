@@ -314,31 +314,33 @@ public sealed class QuorumReplicateRepositoryQueryHandler
             );
         }
 
-        if (
-            query.ExpectedPrimaryLastSyncedAt is { } claimed
-            && !await PrimaryStillClaimedAsync(
-                    context.RepositoryId,
-                    query.StorageNodeId.Value,
-                    claimed,
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
-        )
-        {
-            // A push started replicating while this artifact was being built. Its artifact is
-            // newer than ours; uploading ours now could overwrite it under the same watermark.
-            return Option.From(
-                QuorumReplicateRepositoryResult.Failed(
-                    "A push started replicating this repository; left to the push."
-                )
-            );
-        }
-
         var quorumNodeIds = new List<StorageNodeId> { query.StorageNodeId };
         var refusedPeers = new List<RepositoryReplicationPeerDto>();
         string? firstUploadError = null;
         foreach (var peer in encryptedPeers)
         {
+            if (
+                query.ExpectedPrimaryLastSyncedAt is { } claimed
+                && !await PrimaryStillClaimedAsync(
+                        context.RepositoryId,
+                        query.StorageNodeId.Value,
+                        claimed,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+            )
+            {
+                // A push started replicating since the reconciler claimed this repository. Its
+                // artifact is newer than ours, so ours must not land after it under the same
+                // watermark: stop here and leave the repository to the push. Checked before
+                // every upload, so only one upload can be in flight when a push starts.
+                return Option.From(
+                    QuorumReplicateRepositoryResult.Failed(
+                        "A push started replicating this repository; left to the push."
+                    )
+                );
+            }
+
             var node = await LoadStorageNodeAsync(StorageNodeId.From(peer.StorageNodeId), cancellationToken)
                 .ConfigureAwait(false);
             if (node is null)

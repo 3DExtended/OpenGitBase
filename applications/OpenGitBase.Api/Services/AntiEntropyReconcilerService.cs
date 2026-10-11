@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
@@ -10,19 +12,24 @@ namespace OpenGitBase.Api.Services;
 public sealed class AntiEntropyReconcilerService
 {
     private const int MtlsGitHttpPort = 8443;
+    private const int MaxPendingPrimaryWritesPerPass = 10;
 
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly ReplicationArtifactPublisher _artifactPublisher;
     private readonly Rf1BackfillService _backfillService;
+    private readonly HaStorageBackgroundOptions _options;
+    private readonly ILogger<AntiEntropyReconcilerService> _logger;
 
     public AntiEntropyReconcilerService(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
         ReplicationArtifactPublisher artifactPublisher,
-        Rf1BackfillService backfillService
+        Rf1BackfillService backfillService,
+        IOptions<HaStorageBackgroundOptions> options,
+        ILogger<AntiEntropyReconcilerService> logger
     )
     {
         _contextFactory = contextFactory;
@@ -30,6 +37,8 @@ public sealed class AntiEntropyReconcilerService
         _storageProvisionerClient = storageProvisionerClient;
         _artifactPublisher = artifactPublisher;
         _backfillService = backfillService;
+        _options = options.Value;
+        _logger = logger;
     }
 
     public async Task RunOnceAsync(CancellationToken cancellationToken)
@@ -63,6 +72,8 @@ public sealed class AntiEntropyReconcilerService
                 .ConfigureAwait(false);
         }
 
+        await ReplicatePendingPrimaryWritesAsync(context, cancellationToken).ConfigureAwait(false);
+
         await HealRecoveredDegradedAsync(context, cancellationToken).ConfigureAwait(false);
 
         var degraded = await context
@@ -78,6 +89,119 @@ public sealed class AntiEntropyReconcilerService
         if (degraded > 0)
         {
             await _backfillService.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Replicates writes that reached the primary but never the quorum. The post-receive hook
+    /// raises the primary's watermark file before it replicates, so after a failed replication
+    /// (#413: every push of a repository whose bundle passed ~15 MB) the primary's heartbeat
+    /// reports AppliedWatermark one above PrimaryWatermark, and nothing else ever looks at that.
+    /// <para>
+    /// Such a write is left to the push for <see cref="HaStorageBackgroundOptions.PrimaryAheadGraceSeconds"/>,
+    /// measured from the primary replica's LastSyncedAt (moved by the heartbeat when it raises the
+    /// watermark, and by quorum-replicate when a push starts replicating). After that the
+    /// reconciler claims the repository by moving LastSyncedAt with a compare-and-set, so the
+    /// other API instance's reconciler, which runs at the same times, skips it, and replicates
+    /// the write through quorum-replicate's createArtifact path, which builds the artifact on the
+    /// primary, stops uploading as soon as a push marks the primary again, and commits the
+    /// watermark with a compare-and-set. One step per repository and pass; nothing is lowered.
+    /// </para>
+    /// </summary>
+    private async Task ReplicatePendingPrimaryWritesAsync(
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var pending = await context
+            .Set<RepositoryEntity>()
+            .AsNoTracking()
+            .Where(repository =>
+                (
+                    repository.ReplicationState == ReplicationState.Rf4Healthy
+                    || repository.ReplicationState == ReplicationState.Rf3Healthy
+                )
+                && repository.PrimaryStorageNodeId != null
+                && repository.Replicas.Any(replica =>
+                    replica.StorageNodeId == repository.PrimaryStorageNodeId
+                    && replica.Role == RepositoryReplicaRole.Primary
+                    && replica.AppliedWatermark > repository.PrimaryWatermark
+                )
+            )
+            .Select(repository => new
+            {
+                repository.Id,
+                PrimaryNodeId = repository.PrimaryStorageNodeId!.Value,
+                repository.PrimaryWatermark,
+                PrimaryLastSyncedAt = repository
+                    .Replicas.Where(replica => replica.StorageNodeId == repository.PrimaryStorageNodeId)
+                    .Select(replica => replica.LastSyncedAt)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        // Filtered here rather than in SQL: SQLite cannot order DateTimeOffset values.
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-_options.PrimaryAheadGraceSeconds);
+        var due = pending
+            .Where(write => write.PrimaryLastSyncedAt is null || write.PrimaryLastSyncedAt <= cutoff)
+            .Take(MaxPendingPrimaryWritesPerPass);
+        foreach (var write in due)
+        {
+            var claim = ReplicationClaim.Now();
+            var claimed = await context
+                .Set<RepositoryReplicaEntity>()
+                .Where(replica =>
+                    replica.RepositoryId == write.Id
+                    && replica.StorageNodeId == write.PrimaryNodeId
+                    && replica.LastSyncedAt == write.PrimaryLastSyncedAt
+                )
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(replica => replica.LastSyncedAt, claim),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (claimed == 0)
+            {
+                // The other API instance's reconciler, a push or a heartbeat got there first.
+                continue;
+            }
+
+            var watermark = write.PrimaryWatermark + 1;
+            var result = await _queryProcessor
+                .RunQueryAsync(
+                    new QuorumReplicateRepositoryQuery
+                    {
+                        RepositoryId = RepositoryId.From(write.Id),
+                        StorageNodeId = StorageNodeId.From(write.PrimaryNodeId),
+                        AppliedWatermark = watermark,
+                        CreateArtifact = true,
+                        ExpectedPrimaryLastSyncedAt = claim,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (result.IsSome && result.Get().Success)
+            {
+                _logger.LogInformation(
+                    "Replicated pending write {Watermark} of repository {RepositoryId} from its primary",
+                    watermark,
+                    write.Id
+                );
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Pending write {Watermark} of repository {RepositoryId} is still not replicated: {Error}",
+                    watermark,
+                    write.Id,
+                    result.IsSome ? result.Get().Error : "no result"
+                );
+            }
         }
     }
 

@@ -560,6 +560,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddLogging();
+        services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 
@@ -676,6 +678,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddLogging();
+        services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 
@@ -799,6 +803,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddLogging();
+        services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 

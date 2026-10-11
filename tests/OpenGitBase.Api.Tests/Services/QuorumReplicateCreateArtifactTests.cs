@@ -317,6 +317,42 @@ public class QuorumReplicateCreateArtifactTests
     }
 
     [Fact]
+    public async Task CreateArtifact_ForAReconcilerClaim_StopsUploadingWhenAPushTakesOverMidway()
+    {
+        var claim = DateTimeOffset.UtcNow.AddSeconds(-5);
+        await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5, primaryLastSyncedAt: claim);
+        fixture.CommitSucceeds();
+        var uploadedTo = new List<Guid>();
+        fixture.Provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(callInfo =>
+            {
+                uploadedTo.Add(callInfo.Arg<StorageNodeDto>().Id.Value);
+                // A push marks the primary while the reconciler's first upload is in flight.
+                fixture.SetPrimaryLastSyncedAt(DateTimeOffset.UtcNow);
+                return StorageProvisionerResult.Ok(201);
+            });
+
+        var result = await fixture.RunAsync(
+            appliedWatermark: 6,
+            createArtifact: true,
+            expectedPrimaryLastSyncedAt: fixture.ReadPrimaryLastSyncedAt()
+        );
+
+        Assert.False(result.Success);
+        Assert.Empty(fixture.Commits);
+        Assert.Single(uploadedTo);
+    }
+
+    [Fact]
     public async Task WithoutCreateArtifact_KeepsTheRelayPathAndItsConfirmDownload()
     {
         await using var fixture = await Fixture.CreateAsync(primaryWatermark: 5);
