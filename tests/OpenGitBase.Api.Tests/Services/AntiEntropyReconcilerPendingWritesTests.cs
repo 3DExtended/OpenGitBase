@@ -157,6 +157,117 @@ public class AntiEntropyReconcilerPendingWritesTests
         Assert.Equal(0, fixture.Commits);
     }
 
+    [Fact]
+    public async Task RunOnceAsync_WhenNoEncryptedReplicaCanBeProbed_StillReplicatesThePendingWrite()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryAppliedWatermark: 6,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(-20)
+        );
+        fixture.Provisioner
+            .TryGetArtifactWatermarkStatusAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<Task<ArtifactWatermarkStatusResult>>(_ => throw new HttpRequestException("connection refused"));
+
+        await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(6, (await fixture.ReadStateAsync()).PrimaryWatermark);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenTheOtherPassesCannotListTheNodes_StillReplicatesThePendingWrite()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryAppliedWatermark: 6,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(-20)
+        );
+        fixture.QueryProcessor
+            .RunQueryAsync(Arg.Any<ListHealthyStorageNodesQuery>(), Arg.Any<CancellationToken>())
+            .Returns<Task<Option<IReadOnlyList<StorageNodeDto>>>>(_ =>
+                throw new InvalidOperationException("database is gone")
+            );
+
+        await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(6, (await fixture.ReadStateAsync()).PrimaryWatermark);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenOneEncryptedReplicaCannotBeProbed_StillChecksTheOther()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryAppliedWatermark: 5,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(-20)
+        );
+        fixture.Provisioner
+            .TryGetArtifactWatermarkStatusAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncAId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<Task<ArtifactWatermarkStatusResult>>(_ => throw new HttpRequestException("connection refused"));
+        fixture.Provisioner
+            .TryGetArtifactWatermarkStatusAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncBId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ArtifactWatermarkStatusResult.Ok(null));
+        fixture.Provisioner
+            .TryGetReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncAId),
+                Arg.Any<string>(),
+                fixture.RepositoryId,
+                5,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(ReplicationArtifactFetchResult.Ok("{\"epoch\":1,\"watermark\":5,\"bundleSha256\":\"ABC\",\"keyVersion\":1}", [1, 2, 3]));
+
+        await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
+
+        // encB lost its artifacts: found despite encA not answering, and repaired from encA's copy.
+        await fixture.Provisioner
+            .Received(1)
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == fixture.EncBId),
+                Arg.Any<string>(),
+                fixture.RepositoryId,
+                5,
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            );
+        Assert.Equal(5, (await fixture.ReadStateAsync()).ArtifactWatermarks[fixture.EncBId]);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WhenTheOldestPendingWriteThrows_StillReplicatesTheNextOne()
+    {
+        await using var fixture = await Fixture.CreateAsync(
+            primaryWatermark: 5,
+            primaryAppliedWatermark: 6,
+            primaryLastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(-20)
+        );
+        var broken = Guid.NewGuid();
+        await fixture.AddPendingRepositoryAsync(broken, DateTimeOffset.UtcNow.AddHours(-3));
+        fixture.RepositoryKeys
+            .TryGetRepositoryKeyAsync(broken, Arg.Any<CancellationToken>())
+            .Returns<Task<EphemeralRepositoryKey?>>(_ => throw new InvalidOperationException("key store timed out"));
+
+        await fixture.NewReconciler().RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(6, (await fixture.ReadStateAsync()).PrimaryWatermark);
+    }
+
     private sealed record ReplicationRow(
         long PrimaryWatermark,
         long PrimaryAppliedWatermark,
@@ -191,6 +302,8 @@ public class AntiEntropyReconcilerPendingWritesTests
 
         public IStorageProvisionerClient Provisioner { get; } = Substitute.For<IStorageProvisionerClient>();
 
+        public IRepositoryKeyService RepositoryKeys { get; } = Substitute.For<IRepositoryKeyService>();
+
         public Func<Task>? OnCreate { get; set; }
 
         public StorageProvisionerResult UploadResult { get; set; } = StorageProvisionerResult.Ok(201);
@@ -210,11 +323,10 @@ public class AntiEntropyReconcilerPendingWritesTests
             var connection = SqliteTestConnection.OpenInMemory();
             var services = new ServiceCollection();
             var holder = new Fixture[1];
-            var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
             services.AddSingleton(connection);
             services.AddSingleton(_ => holder[0].QueryProcessor);
             services.AddSingleton(_ => holder[0].Provisioner);
-            services.AddSingleton(repositoryKeyService);
+            services.AddSingleton(_ => holder[0].RepositoryKeys);
             services.AddSingleton<IFeatureAssemblyProvider>(
                 new FeatureAssemblyProvider(
                     [
@@ -240,7 +352,7 @@ public class AntiEntropyReconcilerPendingWritesTests
 
             var fixture = new Fixture(services.BuildServiceProvider());
             holder[0] = fixture;
-            repositoryKeyService
+            fixture.RepositoryKeys
                 .TryGetRepositoryKeyAsync(fixture.RepositoryId, Arg.Any<CancellationToken>())
                 .Returns(new EphemeralRepositoryKey(new byte[32], 1));
             await fixture.SeedAsync(primaryWatermark, primaryAppliedWatermark, primaryLastSyncedAt);
@@ -267,6 +379,15 @@ public class AntiEntropyReconcilerPendingWritesTests
                     .Where(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)
                     .ToDictionary(replica => replica.StorageNodeId, replica => replica.ArtifactWatermark)
             );
+        }
+
+        /// <summary>Another repository on the same three nodes with the primary ahead.</summary>
+        public async Task AddPendingRepositoryAsync(Guid repositoryId, DateTimeOffset primaryLastSyncedAt)
+        {
+            var factory = _provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await factory.CreateDbContextAsync();
+            context.Set<RepositoryEntity>().Add(NewRepository(repositoryId, 5, 6, primaryLastSyncedAt));
+            await context.SaveChangesAsync();
         }
 
         public async ValueTask DisposeAsync() => await _provider.DisposeAsync();
@@ -392,51 +513,59 @@ public class AntiEntropyReconcilerPendingWritesTests
             }
 
             context.Set<RepositoryEntity>().Add(
-                new RepositoryEntity
-                {
-                    Id = RepositoryId,
-                    Name = "repo",
-                    Slug = "repo",
-                    OwnerUserId = Guid.NewGuid(),
-                    PhysicalPath = PhysicalPath,
-                    StorageNodeId = PrimaryId,
-                    PrimaryStorageNodeId = PrimaryId,
-                    ReadReplicaStorageNodeId = PrimaryId,
-                    PrimaryWatermark = primaryWatermark,
-                    ReplicationEpoch = 1,
-                    ReplicationState = ReplicationState.Rf4Healthy,
-                    Replicas =
-                    [
-                        new RepositoryReplicaEntity
-                        {
-                            RepositoryId = RepositoryId,
-                            StorageNodeId = PrimaryId,
-                            Role = RepositoryReplicaRole.Primary,
-                            AppliedWatermark = primaryAppliedWatermark,
-                            LastSyncedAt = primaryLastSyncedAt,
-                        },
-                        new RepositoryReplicaEntity
-                        {
-                            RepositoryId = RepositoryId,
-                            StorageNodeId = EncAId,
-                            Role = RepositoryReplicaRole.EncryptedReplica,
-                            AppliedWatermark = primaryWatermark,
-                            ArtifactWatermark = primaryWatermark,
-                            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-1),
-                        },
-                        new RepositoryReplicaEntity
-                        {
-                            RepositoryId = RepositoryId,
-                            StorageNodeId = EncBId,
-                            Role = RepositoryReplicaRole.EncryptedReplica,
-                            AppliedWatermark = primaryWatermark,
-                            ArtifactWatermark = primaryWatermark,
-                            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-1),
-                        },
-                    ],
-                }
+                NewRepository(RepositoryId, primaryWatermark, primaryAppliedWatermark, primaryLastSyncedAt)
             );
             await context.SaveChangesAsync();
         }
+
+        private RepositoryEntity NewRepository(
+            Guid repositoryId,
+            long primaryWatermark,
+            long primaryAppliedWatermark,
+            DateTimeOffset? primaryLastSyncedAt
+        ) =>
+            new RepositoryEntity
+            {
+                Id = repositoryId,
+                Name = $"repo-{repositoryId:N}",
+                Slug = $"repo-{repositoryId:N}",
+                OwnerUserId = Guid.NewGuid(),
+                PhysicalPath = $"/srv/git/{repositoryId}.git",
+                StorageNodeId = PrimaryId,
+                PrimaryStorageNodeId = PrimaryId,
+                ReadReplicaStorageNodeId = PrimaryId,
+                PrimaryWatermark = primaryWatermark,
+                ReplicationEpoch = 1,
+                ReplicationState = ReplicationState.Rf4Healthy,
+                Replicas =
+                [
+                    new RepositoryReplicaEntity
+                    {
+                        RepositoryId = repositoryId,
+                        StorageNodeId = PrimaryId,
+                        Role = RepositoryReplicaRole.Primary,
+                        AppliedWatermark = primaryAppliedWatermark,
+                        LastSyncedAt = primaryLastSyncedAt,
+                    },
+                    new RepositoryReplicaEntity
+                    {
+                        RepositoryId = repositoryId,
+                        StorageNodeId = EncAId,
+                        Role = RepositoryReplicaRole.EncryptedReplica,
+                        AppliedWatermark = primaryWatermark,
+                        ArtifactWatermark = primaryWatermark,
+                        LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-1),
+                    },
+                    new RepositoryReplicaEntity
+                    {
+                        RepositoryId = repositoryId,
+                        StorageNodeId = EncBId,
+                        Role = RepositoryReplicaRole.EncryptedReplica,
+                        AppliedWatermark = primaryWatermark,
+                        ArtifactWatermark = primaryWatermark,
+                        LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-1),
+                    },
+                ],
+            };
     }
 }

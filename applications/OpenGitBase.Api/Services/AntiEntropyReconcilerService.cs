@@ -41,12 +41,79 @@ public sealed class AntiEntropyReconcilerService
         _logger = logger;
     }
 
+    /// <summary>
+    /// One reconcile pass. Each step runs on its own: every step but the last talks to storage
+    /// nodes, and a node that does not answer (its client throws on transport failures) must cost
+    /// only the step that asked it, never the rest of the pass. Pending primary writes go first:
+    /// they are the only step that moves PrimaryWatermark, and the pushes behind them are what a
+    /// user is waiting for (#413).
+    /// </summary>
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await VerifyEncryptedArtifactPresenceAsync(context, cancellationToken).ConfigureAwait(false);
+        await RunStepAsync(context, "pending primary writes", ReplicatePendingPrimaryWritesAsync, cancellationToken)
+            .ConfigureAwait(false);
+        await RunStepAsync(context, "encrypted artifact check", VerifyEncryptedArtifactPresenceAsync, cancellationToken)
+            .ConfigureAwait(false);
+        await RunStepAsync(context, "lagging replicas", SyncLaggingRepositoriesAsync, cancellationToken)
+            .ConfigureAwait(false);
+        await RunStepAsync(context, "degraded latch", HealRecoveredDegradedAsync, cancellationToken)
+            .ConfigureAwait(false);
 
+        var degraded = await context
+            .Set<RepositoryEntity>()
+            .CountAsync(
+                repository =>
+                    repository.ReplicationState == ReplicationState.Degraded
+                    || repository.ReplicationState == ReplicationState.Rf1Backfilling,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (degraded > 0)
+        {
+            await _backfillService.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsFailure(Exception exception, CancellationToken cancellationToken) =>
+        exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested;
+
+    private static void Forget(OpenGitBaseDbContext context, RepositoryEntity repository)
+    {
+        foreach (var replica in repository.Replicas)
+        {
+            context.Entry(replica).State = EntityState.Detached;
+        }
+
+        context.Entry(repository).State = EntityState.Detached;
+    }
+
+    private async Task RunStepAsync(
+        OpenGitBaseDbContext context,
+        string step,
+        Func<OpenGitBaseDbContext, CancellationToken, Task> run,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await run(context, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsFailure(ex, cancellationToken))
+        {
+            _logger.LogError(ex, "Reconcile step {Step} failed; the other steps still ran.", step);
+            // Nothing a failed step changed and did not save may ride along with a later save.
+            context.ChangeTracker.Clear();
+        }
+    }
+
+    private async Task SyncLaggingRepositoriesAsync(
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
         var lagging = await context
             .Set<RepositoryEntity>()
             .Include(repository => repository.Replicas)
@@ -68,27 +135,20 @@ public sealed class AntiEntropyReconcilerService
 
         foreach (var repository in lagging)
         {
-            await SyncLaggingReplicasAsync(context, repository, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        await ReplicatePendingPrimaryWritesAsync(context, cancellationToken).ConfigureAwait(false);
-
-        await HealRecoveredDegradedAsync(context, cancellationToken).ConfigureAwait(false);
-
-        var degraded = await context
-            .Set<RepositoryEntity>()
-            .CountAsync(
-                repository =>
-                    repository.ReplicationState == ReplicationState.Degraded
-                    || repository.ReplicationState == ReplicationState.Rf1Backfilling,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-
-        if (degraded > 0)
-        {
-            await _backfillService.RunOnceAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await SyncLaggingReplicasAsync(context, repository, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsFailure(ex, cancellationToken))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not bring the replicas of repository {RepositoryId} up to date; next pass.",
+                    repository.Id
+                );
+                Forget(context, repository);
+            }
         }
     }
 
@@ -145,63 +205,99 @@ public sealed class AntiEntropyReconcilerService
             return;
         }
 
-        // Filtered here rather than in SQL: SQLite cannot order DateTimeOffset values.
+        // Filtered and ordered here rather than in SQL: SQLite cannot order DateTimeOffset values.
+        // Longest-waiting first; a claim moves LastSyncedAt to now, so a write that keeps failing
+        // goes to the back and cannot hold the pass's slots against the others.
         var cutoff = DateTimeOffset.UtcNow.AddSeconds(-_options.PrimaryAheadGraceSeconds);
         var due = pending
             .Where(write => write.PrimaryLastSyncedAt is null || write.PrimaryLastSyncedAt <= cutoff)
+            .OrderBy(write => write.PrimaryLastSyncedAt ?? DateTimeOffset.MinValue)
             .Take(MaxPendingPrimaryWritesPerPass);
         foreach (var write in due)
         {
-            var claim = ReplicationClaim.Now();
-            var claimed = await context
-                .Set<RepositoryReplicaEntity>()
-                .Where(replica =>
-                    replica.RepositoryId == write.Id
-                    && replica.StorageNodeId == write.PrimaryNodeId
-                    && replica.LastSyncedAt == write.PrimaryLastSyncedAt
-                )
-                .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(replica => replica.LastSyncedAt, claim),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            if (claimed == 0)
+            try
             {
-                // The other API instance's reconciler, a push or a heartbeat got there first.
-                continue;
+                await ReplicatePendingPrimaryWriteAsync(
+                        context,
+                        write.Id,
+                        write.PrimaryNodeId,
+                        write.PrimaryWatermark,
+                        write.PrimaryLastSyncedAt,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
-
-            var watermark = write.PrimaryWatermark + 1;
-            var result = await _queryProcessor
-                .RunQueryAsync(
-                    new QuorumReplicateRepositoryQuery
-                    {
-                        RepositoryId = RepositoryId.From(write.Id),
-                        StorageNodeId = StorageNodeId.From(write.PrimaryNodeId),
-                        AppliedWatermark = watermark,
-                        CreateArtifact = true,
-                        ExpectedPrimaryLastSyncedAt = claim,
-                    },
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            if (result.IsSome && result.Get().Success)
+            catch (Exception ex) when (IsFailure(ex, cancellationToken))
             {
-                _logger.LogInformation(
-                    "Replicated pending write {Watermark} of repository {RepositoryId} from its primary",
-                    watermark,
+                // The claim stays: the write waits out another grace period, behind the others.
+                _logger.LogWarning(
+                    ex,
+                    "Pending write {Watermark} of repository {RepositoryId} is still not replicated",
+                    write.PrimaryWatermark + 1,
                     write.Id
                 );
             }
-            else
-            {
-                _logger.LogWarning(
-                    "Pending write {Watermark} of repository {RepositoryId} is still not replicated: {Error}",
-                    watermark,
-                    write.Id,
-                    result.IsSome ? result.Get().Error : "no result"
-                );
-            }
+        }
+    }
+
+    private async Task ReplicatePendingPrimaryWriteAsync(
+        OpenGitBaseDbContext context,
+        Guid repositoryId,
+        Guid primaryNodeId,
+        long primaryWatermark,
+        DateTimeOffset? primaryLastSyncedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        var claim = ReplicationClaim.Now();
+        var claimed = await context
+            .Set<RepositoryReplicaEntity>()
+            .Where(replica =>
+                replica.RepositoryId == repositoryId
+                && replica.StorageNodeId == primaryNodeId
+                && replica.LastSyncedAt == primaryLastSyncedAt
+            )
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(replica => replica.LastSyncedAt, claim),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (claimed == 0)
+        {
+            // The other API instance's reconciler, a push or a heartbeat got there first.
+            return;
+        }
+
+        var watermark = primaryWatermark + 1;
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new QuorumReplicateRepositoryQuery
+                {
+                    RepositoryId = RepositoryId.From(repositoryId),
+                    StorageNodeId = StorageNodeId.From(primaryNodeId),
+                    AppliedWatermark = watermark,
+                    CreateArtifact = true,
+                    ExpectedPrimaryLastSyncedAt = claim,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (result.IsSome && result.Get().Success)
+        {
+            _logger.LogInformation(
+                "Replicated pending write {Watermark} of repository {RepositoryId} from its primary",
+                watermark,
+                repositoryId
+            );
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Pending write {Watermark} of repository {RepositoryId} is still not replicated: {Error}",
+                watermark,
+                repositoryId,
+                result.IsSome ? result.Get().Error : "no result"
+            );
         }
     }
 
@@ -319,19 +415,7 @@ public sealed class AntiEntropyReconcilerService
                     continue;
                 }
 
-                var token = await GetApiTokenAsync(node.Id, cancellationToken).ConfigureAwait(false);
-                if (token is null)
-                {
-                    continue;
-                }
-
-                var status = await _storageProvisionerClient
-                    .TryGetArtifactWatermarkStatusAsync(
-                        node,
-                        token,
-                        repository.Id,
-                        cancellationToken
-                    )
+                var status = await ProbeArtifactWatermarkAsync(node, repository.Id, cancellationToken)
                     .ConfigureAwait(false);
                 if (status is null || !status.Success)
                 {
@@ -349,6 +433,37 @@ public sealed class AntiEntropyReconcilerService
         if (changed)
         {
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The node's on-disk artifact watermark, or null when it could not be asked.</summary>
+    private async Task<ArtifactWatermarkStatusResult?> ProbeArtifactWatermarkAsync(
+        StorageNodeDto node,
+        Guid repositoryId,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var token = await GetApiTokenAsync(node.Id, cancellationToken).ConfigureAwait(false);
+            if (token is null)
+            {
+                return null;
+            }
+
+            return await _storageProvisionerClient
+                .TryGetArtifactWatermarkStatusAsync(node, token, repositoryId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsFailure(ex, cancellationToken))
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not ask {NodeId} for the artifact watermark of repository {RepositoryId}",
+                node.NodeId,
+                repositoryId
+            );
+            return null;
         }
     }
 
