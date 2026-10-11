@@ -147,10 +147,15 @@ prepare_deploy_build_env() {
   fi
 }
 
+# The primary (storage-1) goes last: the encrypted replicas then store artifacts atomically
+# before the new post-receive hook goes live on the primary, and a failover while storage-1
+# restarts promotes a node that already runs the new image. Roll storage only once no write is
+# pending on the primary (docs/PROJECT-STATE.md section 4.3, "Rollout").
 STORAGE_ROLL_SERVICES=(
-  storage-1
   storage-2
   storage-3
+  storage-4
+  storage-1
 )
 
 DISPATCHER_ROLL_SERVICES=(
@@ -183,6 +188,7 @@ service_container() {
     storage-1) echo opengitbase_storage_1 ;;
     storage-2) echo opengitbase_storage_2 ;;
     storage-3) echo opengitbase_storage_3 ;;
+    storage-4) echo opengitbase_storage_4 ;;
     dispatcher-1) echo opengitbase_dispatcher_1 ;;
     dispatcher-2) echo opengitbase_dispatcher_2 ;;
     api-1) echo opengitbase_api_1 ;;

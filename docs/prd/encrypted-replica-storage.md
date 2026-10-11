@@ -339,8 +339,6 @@ Modified post-receive hook flow:
 4. Call API quorum-replicate with encrypted confirmation.
 5. Async: git fetch to read replica.
 
-> Superseded by #413 (2026-10): the hook no longer fetches the key or builds the artifact. It calls quorum-replicate with `createArtifact: true` and the API builds the artifact on the primary and uploads it itself. Current flow: [PROJECT-STATE.md §4.3](../PROJECT-STATE.md#43-git-push-with-quorum).
-
 #### 9. Read/Write Routing (extend, API + dispatcher)
 
 Writes route to primary only. Reads route to read replica; fallback to primary if read replica unhealthy or lagging beyond threshold. Access-check response exposes `{ primary, readReplica, replicationEpoch, writeQuorumAvailable }`.
