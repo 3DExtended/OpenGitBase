@@ -590,6 +590,8 @@ public class Rf4ReplicationTests
             )
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddSingleton(Substitute.For<IRepositoryKeyService>());
+        services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();
         var provider = services.BuildServiceProvider();
 

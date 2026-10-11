@@ -14,21 +14,21 @@ public sealed class AntiEntropyReconcilerService
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
-    private readonly IRepositoryKeyService _repositoryKeyService;
+    private readonly ReplicationArtifactPublisher _artifactPublisher;
     private readonly Rf1BackfillService _backfillService;
 
     public AntiEntropyReconcilerService(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
-        IRepositoryKeyService repositoryKeyService,
+        ReplicationArtifactPublisher artifactPublisher,
         Rf1BackfillService backfillService
     )
     {
         _contextFactory = contextFactory;
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
-        _repositoryKeyService = repositoryKeyService;
+        _artifactPublisher = artifactPublisher;
         _backfillService = backfillService;
     }
 
@@ -361,16 +361,8 @@ public sealed class AntiEntropyReconcilerService
             return;
         }
 
-        var upload = await _storageProvisionerClient
-            .UploadReplicationArtifactAsync(
-                targetNode,
-                targetToken,
-                repository.Id,
-                repository.PrimaryWatermark,
-                artifact.ManifestJson,
-                artifact.BundlePayload,
-                cancellationToken
-            )
+        var upload = await _artifactPublisher
+            .UploadAsync(targetNode, repository.Id, repository.PrimaryWatermark, artifact, cancellationToken)
             .ConfigureAwait(false);
         if (upload.Success)
         {
@@ -424,31 +416,13 @@ public sealed class AntiEntropyReconcilerService
             }
         }
 
-        var primaryToken = await GetApiTokenAsync(primaryNode.Id, cancellationToken)
-            .ConfigureAwait(false);
-        if (primaryToken is null)
-        {
-            return null;
-        }
-
-        var key = await _repositoryKeyService
-            .TryGetRepositoryKeyAsync(repository.Id, cancellationToken)
-            .ConfigureAwait(false);
-        if (key is null)
-        {
-            return null;
-        }
-
-        var created = await _storageProvisionerClient
-            .CreateReplicationArtifactAsync(
+        var created = await _artifactPublisher
+            .CreateOnPrimaryAsync(
                 primaryNode,
-                primaryToken,
-                repository.PhysicalPath,
                 repository.Id,
+                repository.PhysicalPath,
                 repository.PrimaryWatermark,
                 repository.ReplicationEpoch,
-                Convert.ToHexString(key.KeyMaterial).ToLowerInvariant(),
-                key.KeyVersion,
                 cancellationToken
             )
             .ConfigureAwait(false);

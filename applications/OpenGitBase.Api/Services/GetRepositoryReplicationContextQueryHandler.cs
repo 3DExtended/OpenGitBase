@@ -84,6 +84,7 @@ public sealed class GetRepositoryReplicationContextQueryHandler
                 PhysicalPath = entity.PhysicalPath,
                 ReplicationState = entity.ReplicationState.ToString(),
                 Peers = peers,
+                ApiCreatesArtifacts = true,
             }
         );
     }

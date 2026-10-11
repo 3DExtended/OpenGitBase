@@ -320,6 +320,7 @@ public class Startup
         services.AddScoped<Rf4BackfillService>();
         services.AddScoped<RebalanceService>();
         services.AddScoped<AntiEntropyReconcilerService>();
+        services.AddTransient<ReplicationArtifactPublisher>();
         services.AddScoped<IColdRecoveryService, ColdRecoveryService>();
         services.AddScoped<IRepositoryByteOverrideService, RepositoryByteOverrideService>();
         services.AddTransient<

@@ -227,6 +227,86 @@ public class AntiEntropyReconcilerServiceTests
     }
 
     [Fact]
+    public async Task RunOnceAsync_WhenOneEncryptedReplicaIsUnreachable_StillRepairsTheOther()
+    {
+        var repositoryId = Guid.NewGuid();
+        var primaryNodeId = Guid.NewGuid();
+        var encAId = Guid.NewGuid();
+        var encBId = Guid.NewGuid();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        provisioner
+            .CreateReplicationArtifactAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                ReplicationArtifactFetchResult.Ok(
+                    "{\"epoch\":0,\"watermark\":47,\"bundleSha256\":\"ABC\",\"keyVersion\":1}",
+                    [1, 2, 3]
+                )
+            );
+        provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == encAId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<Task<StorageProvisionerResult>>(_ => throw new HttpRequestException("connection refused"));
+        provisioner
+            .UploadReplicationArtifactAsync(
+                Arg.Is<StorageNodeDto>(node => node.Id.Value == encBId),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(StorageProvisionerResult.Ok(201));
+        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
+        repositoryKeyService
+            .TryGetRepositoryKeyAsync(repositoryId, Arg.Any<CancellationToken>())
+            .Returns(new EphemeralRepositoryKey(new byte[32], 1));
+
+        var (service, provider) = await CreateRf4ServiceAsync(
+            repositoryId,
+            primaryNodeId,
+            encAId,
+            encBId,
+            primaryWatermark: 47,
+            provisioner,
+            repositoryKeyService
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            var contextFactory = provider.GetRequiredService<
+                IDbContextFactory<OpenGitBaseDbContext>
+            >();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var encrypted = await context
+                .Set<RepositoryReplicaEntity>()
+                .Where(entity => entity.Role == RepositoryReplicaRole.EncryptedReplica)
+                .ToDictionaryAsync(entity => entity.StorageNodeId, entity => entity.ArtifactWatermark);
+            Assert.Null(encrypted[encAId]);
+            Assert.Equal(47, encrypted[encBId]);
+        }
+    }
+
+    [Fact]
     public async Task RunOnceAsync_WhenEncryptedReplicaLostOnDiskArtifacts_DetectsAndRepairs()
     {
         // Both encrypted replicas report DB ArtifactWatermark == PrimaryWatermark (47), i.e. the
@@ -480,6 +560,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -595,6 +676,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -717,6 +799,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton(mapsterConfig);
         services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
         services.AddSingleton<Rf1BackfillService>();
+        services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();

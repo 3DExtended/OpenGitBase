@@ -125,6 +125,7 @@ public sealed class StorageReplicationController : ControllerBase
                     StorageNodeId = storageNodeId,
                     AppliedWatermark = request.AppliedWatermark,
                     ConfirmedEncryptedNodeIds = request.ConfirmedEncryptedNodeIds,
+                    CreateArtifact = request.CreateArtifact,
                 },
                 cancellationToken
             )
@@ -135,7 +136,14 @@ public sealed class StorageReplicationController : ControllerBase
             var error = result.IsSome
                 ? result.Get().Error
                 : "Quorum replication failed.";
-            return Conflict(new QuorumReplicateRepositoryResponse { Success = false, Error = error });
+            return Conflict(
+                new QuorumReplicateRepositoryResponse
+                {
+                    Success = false,
+                    Error = error,
+                    Stale = result.IsSome && result.Get().Stale,
+                }
+            );
         }
 
         return Ok(
