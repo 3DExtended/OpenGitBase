@@ -56,24 +56,7 @@ internal static class AuthTestServerConfiguration
             JwtBearerDefaults.AuthenticationScheme,
             options =>
             {
-                options.Events = new JwtBearerEvents
-                {
-                    OnMessageReceived = context =>
-                    {
-                        if (
-                            string.IsNullOrEmpty(context.Token)
-                            && context.Request.Cookies.TryGetValue(
-                                AuthCookieOptions.CookieName,
-                                out var cookieToken
-                            )
-                        )
-                        {
-                            context.Token = cookieToken;
-                        }
-
-                        return Task.CompletedTask;
-                    },
-                };
+                options.Events = AuthJwtBearerEvents.Create();
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = jwtOptions.Issuer,

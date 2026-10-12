@@ -277,6 +277,7 @@ public class PublicGitSshKeyControllerTests : ControllerTestBase
     )
     {
         var (client, _) = CreateClientWithQueryProcessor(queryProcessor);
+        SeedTokenUser(userId.Value, username);
         var token = JwtTokenGenerator.GetJWTToken(username, userId.Value.ToString());
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;

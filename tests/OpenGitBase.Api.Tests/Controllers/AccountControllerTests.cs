@@ -130,6 +130,70 @@ public class AccountControllerTests : ControllerTestBase
     }
 
     [Fact]
+    public async Task ChangePassword_RevokesOtherSessions()
+    {
+        await RegisterUserAsync("revoke-other-user", "revoke-other@example.com", "Password123!");
+        var otherSession = await LoginAsync("revoke-other-user", "Password123!");
+        var currentSession = await LoginAsync("revoke-other-user", "Password123!");
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", currentSession);
+
+        var change = await Client.PostAsJsonAsync(
+            "/account/change-password",
+            new ChangePasswordDto
+            {
+                CurrentPassword = "Password123!",
+                NewPassword = "NewPassword456!",
+            }
+        );
+        change.EnsureSuccessStatusCode();
+
+        var response = await GetWithBearerOnlyAsync("/signin/testlogin", otherSession);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangePassword_KeepsTheCallerSignedInThroughAFreshCookie()
+    {
+        await RegisterUserAsync("revoke-self-user", "revoke-self@example.com", "Password123!");
+        var currentSession = await LoginAsync("revoke-self-user", "Password123!");
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", currentSession);
+
+        var change = await Client.PostAsJsonAsync(
+            "/account/change-password",
+            new ChangePasswordDto
+            {
+                CurrentPassword = "Password123!",
+                NewPassword = "NewPassword456!",
+            }
+        );
+        change.EnsureSuccessStatusCode();
+
+        Client.DefaultRequestHeaders.Authorization = null;
+        var response = await Client.GetAsync("/signin/testlogin");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_RevokesTheDeletedUsersSessions()
+    {
+        await RegisterUserAsync("revoke-deleted-user", "revoke-deleted@example.com", "Password123!");
+        var session = await LoginAsync("revoke-deleted-user", "Password123!");
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session);
+
+        var delete = await Client.PostAsJsonAsync(
+            "/account/delete",
+            new DeleteAccountDto { Password = "Password123!" }
+        );
+        delete.EnsureSuccessStatusCode();
+
+        var response = await GetWithBearerOnlyAsync("/signin/testlogin", session);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ChangePassword_WithWrongCurrentPassword_ReturnsBadRequest()
     {
         await RegisterUserAsync("wrongpass-user", "wrongpass@example.com", "Password123!");

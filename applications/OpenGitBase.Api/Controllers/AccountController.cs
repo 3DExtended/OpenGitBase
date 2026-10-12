@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
@@ -166,6 +167,8 @@ public class AccountController : ControllerBase
     [HttpPost("change-password")]
     public async Task<ActionResult<string>> ChangePasswordAsync(
         [FromBody] ChangePasswordDto requestDto,
+        [FromServices] IJWTTokenGenerator jwtTokenGenerator,
+        [FromServices] IAuthCookieService authCookieService,
         CancellationToken cancellationToken
     )
     {
@@ -178,11 +181,12 @@ public class AccountController : ControllerBase
             return BadRequest();
         }
 
+        var userId = UserId.From(_userContext.User.UserId);
         var result = await _queryProcessor
             .RunQueryAsync(
                 new UserChangePasswordQuery
                 {
-                    UserId = UserId.From(_userContext.User.UserId),
+                    UserId = userId,
                     CurrentPassword = requestDto.CurrentPassword,
                     NewPassword = requestDto.NewPassword,
                 },
@@ -190,7 +194,23 @@ public class AccountController : ControllerBase
             )
             .ConfigureAwait(false);
 
-        return result.IsSome ? Ok("Password changed") : BadRequest("Could not change password!");
+        if (result.IsNone)
+        {
+            return BadRequest("Could not change password!");
+        }
+
+        // Changing the password revoked every session of this user, the calling one included.
+        // Hand the caller a fresh session so only the other sessions are signed out.
+        var user = await _queryProcessor
+            .RunQueryAsync(new UserGetByIdQuery { ModelId = userId }, cancellationToken)
+            .ConfigureAwait(false);
+        var token = jwtTokenGenerator.GetJWTToken(
+            user.IsSome ? user.Get().Username : _userContext.User.Username ?? string.Empty,
+            userId.Value.ToString(),
+            user.IsSome && user.Get().IsAdmin
+        );
+        authCookieService.SetAuthCookie(Response, token);
+        return Ok("Password changed");
     }
 
     [HttpPost("delete")]

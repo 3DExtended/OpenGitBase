@@ -437,6 +437,40 @@ public class SignInControllerTests : ControllerTestBase
     }
 
     [Fact]
+    public async Task ResetPassword_RevokesSessionsIssuedBeforeTheReset()
+    {
+        var session = await RegisterUserAsync("resetrevoke", "resetrevoke@example.com", "Password123!");
+        await VerifyJwtAsync(session);
+
+        const string resetCode = "123-456-789";
+        await using (var context = await ContextFactory.CreateDbContextAsync())
+        {
+            var credentials = await context
+                .Set<UserCredentialsEntity>()
+                .SingleAsync(x => x.Username == "resetrevoke");
+            credentials.PasswordResetTokenHash = PasswordHasher.HashPassword(resetCode);
+            credentials.PasswordResetTokenExpireDate = DateTimeOffset.UtcNow.AddHours(2);
+            await context.SaveChangesAsync();
+        }
+
+        var reset = await Client.PostAsJsonAsync(
+            "/signin/resetpassword",
+            new ResetPasswordDto
+            {
+                Username = "resetrevoke",
+                Email = "resetrevoke@example.com",
+                ResetCode = resetCode,
+                NewPassword = "NewPassword456!",
+            }
+        );
+        reset.EnsureSuccessStatusCode();
+
+        var response = await GetWithBearerOnlyAsync("/signin/testlogin", session);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ResetPassword_WithNullBody_ReturnsBadRequest()
     {
         var response = await Client.PostAsJsonAsync<ResetPasswordDto?>(

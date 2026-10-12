@@ -376,6 +376,7 @@ public class Startup
         services.AddScoped<IAuthCookieService, AuthCookieService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
+        services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<
@@ -461,24 +462,7 @@ public class Startup
             })
             .AddJwtBearer(options =>
             {
-                options.Events = new JwtBearerEvents
-                {
-                    OnMessageReceived = context =>
-                    {
-                        if (
-                            string.IsNullOrEmpty(context.Token)
-                            && context.Request.Cookies.TryGetValue(
-                                AuthCookieOptions.CookieName,
-                                out var cookieToken
-                            )
-                        )
-                        {
-                            context.Token = cookieToken;
-                        }
-
-                        return Task.CompletedTask;
-                    },
-                };
+                options.Events = AuthJwtBearerEvents.Create();
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = jwtOptions.Issuer ?? "api",

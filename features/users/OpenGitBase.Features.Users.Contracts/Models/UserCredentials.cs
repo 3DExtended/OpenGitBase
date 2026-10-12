@@ -27,4 +27,6 @@ public class UserCredentials : ModelBase<UserCredentialsId, Guid>
     public DateTimeOffset? EmailVerificationTokenExpireDate { get; set; }
 
     public bool Deleted { get; set; }
+
+    public DateTimeOffset? SessionsValidAfter { get; set; }
 }

@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
@@ -28,24 +29,30 @@ public class JWTTokenGenerator : IJWTTokenGenerator
             _jwtOptions.Key ?? throw new InvalidOperationException("Jwt:Key is required.")
         );
 
+        var now = _systemClock.UtcNow;
         var claims = new List<Claim>
         {
             new("identityproviderid", userIdentityProviderId),
             new(JwtRegisteredClaimNames.Name, username),
             new(JwtRegisteredClaimNames.Sub, username),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(
+                SessionClaims.IssuedAtMilliseconds,
+                now.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64
+            ),
         };
         if (isAdmin)
         {
             claims.Add(new Claim("role", "admin"));
         }
 
-        var now = _systemClock.UtcNow.UtcDateTime;
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            NotBefore = now,
-            Expires = now.AddSeconds(_jwtOptions.NumberOfSecondsToExpire),
+            IssuedAt = now.UtcDateTime,
+            NotBefore = now.UtcDateTime,
+            Expires = now.UtcDateTime.AddSeconds(_jwtOptions.NumberOfSecondsToExpire),
             Issuer = issuer,
             Audience = audience,
             SigningCredentials = new SigningCredentials(

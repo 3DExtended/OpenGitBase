@@ -1810,6 +1810,9 @@ namespace OpenGitBase.Common.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<DateTimeOffset?>("SessionsValidAfter")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("SignInProvider")
                         .HasColumnType("boolean");
 

@@ -37,4 +37,7 @@ public class UserCredentialsEntity : IIdentifiableEntity<Guid>
     public DateTimeOffset? EmailVerificationTokenExpireDate { get; set; }
 
     public bool Deleted { get; set; }
+
+    /// <summary>Sign-in tokens issued before this instant are rejected (set on password reset/change).</summary>
+    public DateTimeOffset? SessionsValidAfter { get; set; }
 }

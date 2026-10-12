@@ -79,6 +79,7 @@ public class UserPasswordResetQueryHandler : IQueryHandler<UserPasswordResetQuer
         credentials.PasswordHash = _passwordHasherService.HashPassword(query.NewPassword);
         credentials.PasswordResetTokenHash = null;
         credentials.PasswordResetTokenExpireDate = null;
+        UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, _systemClock.UtcNow);
         await context.SaveChangesAsync(cancellationToken);
 
         var emailResult = await _queryProcessor

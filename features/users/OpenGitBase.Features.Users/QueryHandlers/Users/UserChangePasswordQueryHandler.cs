@@ -11,14 +11,17 @@ public class UserChangePasswordQueryHandler : IQueryHandler<UserChangePasswordQu
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _passwordHasherService;
+    private readonly ISystemClock _systemClock;
 
     public UserChangePasswordQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        IPasswordHasherService passwordHasherService
+        IPasswordHasherService passwordHasherService,
+        ISystemClock systemClock
     )
     {
         _contextFactory = contextFactory;
         _passwordHasherService = passwordHasherService;
+        _systemClock = systemClock;
     }
 
     public async Task<Option<Unit>> RunQueryAsync(
@@ -48,6 +51,7 @@ public class UserChangePasswordQueryHandler : IQueryHandler<UserChangePasswordQu
         }
 
         credentials.PasswordHash = _passwordHasherService.HashPassword(query.NewPassword);
+        UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, _systemClock.UtcNow);
         await context.SaveChangesAsync(cancellationToken);
 
         return Unit.Value;

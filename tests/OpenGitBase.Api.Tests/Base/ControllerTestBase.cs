@@ -180,6 +180,36 @@ public abstract class ControllerTestBase
         return (customFactory.CreateClient(), serviceProvider.GetRequiredService<IMemoryCache>());
     }
 
+    /// <summary>
+    /// Sends one request carrying only the given bearer token. <see cref="Client"/> keeps the auth
+    /// cookie from earlier calls, and the API prefers that cookie over the Authorization header.
+    /// </summary>
+    protected async Task<HttpResponseMessage> GetWithBearerOnlyAsync(string path, string jwt)
+    {
+        using var client = Factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+        return await client.GetAsync(path);
+    }
+
+    /// <summary>
+    /// Inserts the user a hand-made token names. Sign-in tokens are only honoured while their user
+    /// exists, also when the test substitutes the query processor.
+    /// </summary>
+    protected void SeedTokenUser(Guid userId, string username)
+    {
+        using var context = ContextFactory.CreateDbContext();
+        context.Set<OpenGitBase.Features.Users.Entities.UserEntity>().Add(
+            new OpenGitBase.Features.Users.Entities.UserEntity
+            {
+                Id = userId,
+                Username = username,
+                NormalizedUsername = username.ToLowerInvariant(),
+                CreatedAt = DateTimeOffset.UtcNow,
+            }
+        );
+        context.SaveChanges();
+    }
+
     protected HttpClient CreateClientWithDebugEmailVerification(bool enabled)
     {
         return Factory
