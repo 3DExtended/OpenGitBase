@@ -411,6 +411,8 @@ Top-level \`variables:\` are **Pipeline Defaults**. Jobs may add or override **n
 
 Reserved \`CI_*\` names are injected by the platform and **cannot** be overridden.
 
+Names starting with \`OGB_\` belong to the compute agent. A pipeline file that sets one is not scheduled.
+
 ## \`GIT_DEPTH\`
 
 Special variable controlling [workspace materialization](/docs/ci/how-it-works):

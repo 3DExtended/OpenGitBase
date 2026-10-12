@@ -17,6 +17,10 @@ namespace OpenGitBase.Features.Pipeline.QueryHandlers;
 public sealed class SchedulePipelineRunFromPushQueryHandler
     : IQueryHandler<SchedulePipelineRunFromPushQuery, PipelineRunId>
 {
+    // The compute agent reads its own control values (rootfs, overlay, layer promotion) from
+    // OGB_* entries in the job environment, so pipeline files must not be able to set them.
+    private const string PlatformVariablePrefix = "OGB_";
+
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IMapper _mapper;
     private readonly IJobAvailableEventPublisher _jobAvailableEventPublisher;
@@ -106,7 +110,12 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
 
             var jobId = Guid.NewGuid();
             var reservedVariables = BuildCiVariables(run, repository, job, jobId, ownerContext);
-            if (job.Variables.Keys.Any(key => reservedVariables.ContainsKey(key)))
+            if (
+                job.Variables.Keys.Any(key =>
+                    reservedVariables.ContainsKey(key)
+                    || key.StartsWith(PlatformVariablePrefix, StringComparison.Ordinal)
+                )
+            )
             {
                 return Option<PipelineRunId>.None;
             }
