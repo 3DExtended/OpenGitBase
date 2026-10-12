@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
@@ -85,6 +85,7 @@ public sealed class OrganizationPipelineController : ControllerBase
                 RequestId = DomainAllowanceRequestId.From(requestId),
                 Approve = approve,
                 ReviewedByUserId = _userContext.User.UserId,
+                OrganizationId = organizationId,
             },
             cancellationToken
         ).ConfigureAwait(false);

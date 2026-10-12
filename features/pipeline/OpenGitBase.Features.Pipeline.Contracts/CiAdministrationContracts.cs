@@ -100,6 +100,12 @@ public sealed class ReviewDomainAllowanceRequestQuery
     public bool Approve { get; set; }
 
     public Guid ReviewedByUserId { get; set; }
+
+    /// <summary>
+    /// Set when an organization owner reviews: only that organization's own requests can be
+    /// reviewed. Null for platform admins, who review any request.
+    /// </summary>
+    public Guid? OrganizationId { get; set; }
 }
 
 public sealed class DomainAllowanceRequestDto

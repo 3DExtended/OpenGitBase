@@ -187,6 +187,17 @@ public sealed class ReviewDomainAllowanceRequestQueryHandler
             return Option<DomainAllowanceRequestDto>.None;
         }
 
+        if (
+            query.OrganizationId.HasValue
+            && (
+                request.Scope != DomainAllowanceRequestScope.Organization
+                || request.OrganizationId != query.OrganizationId
+            )
+        )
+        {
+            return Option<DomainAllowanceRequestDto>.None;
+        }
+
         request.Status = query.Approve
             ? DomainAllowanceRequestStatus.Approved
             : DomainAllowanceRequestStatus.Denied;

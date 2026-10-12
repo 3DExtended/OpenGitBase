@@ -343,6 +343,109 @@ public class ReviewDomainAllowanceRequestQueryHandlerTests
         Assert.True(result.IsSome);
         Assert.Equal(DomainAllowanceRequestStatus.Approved, result.Get().Status);
     }
+
+    [Fact]
+    public async Task RunQueryAsync_ForAnOrganization_DoesNotReviewAnotherOrganizationsRequest()
+    {
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var requestId = await SeedPendingRequestAsync(
+            scope,
+            DomainAllowanceRequestScope.Organization,
+            Guid.NewGuid()
+        );
+
+        var result = await ApproveForOrganizationAsync(scope, requestId, Guid.NewGuid());
+
+        Assert.True(result.IsNone);
+        await AssertStillPendingWithoutAllowlistEntriesAsync(scope, requestId);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ForAnOrganization_DoesNotReviewAPlatformRequest()
+    {
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var requestId = await SeedPendingRequestAsync(scope, DomainAllowanceRequestScope.Platform, null);
+
+        var result = await ApproveForOrganizationAsync(scope, requestId, Guid.NewGuid());
+
+        Assert.True(result.IsNone);
+        await AssertStillPendingWithoutAllowlistEntriesAsync(scope, requestId);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ForTheRequestsOrganization_AddsTheDomainToThatOrganizationsAllowlist()
+    {
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var organizationId = Guid.NewGuid();
+        var requestId = await SeedPendingRequestAsync(
+            scope,
+            DomainAllowanceRequestScope.Organization,
+            organizationId
+        );
+
+        var result = await ApproveForOrganizationAsync(scope, requestId, organizationId);
+
+        Assert.True(result.IsSome);
+        Assert.Equal(DomainAllowanceRequestStatus.Approved, result.Get().Status);
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var entry = await context.Set<OrgEgressAllowlistEntity>().SingleAsync();
+        Assert.Equal(organizationId, entry.OrganizationId);
+        Assert.Equal("pypi.org", entry.Domain);
+    }
+
+    private static async Task<Guid> SeedPendingRequestAsync(
+        PipelineHandlerTestScope scope,
+        DomainAllowanceRequestScope requestScope,
+        Guid? organizationId
+    )
+    {
+        var requestId = Guid.NewGuid();
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        context.Set<DomainAllowanceRequestEntity>()
+            .Add(
+                new DomainAllowanceRequestEntity
+                {
+                    Id = requestId,
+                    Domain = "pypi.org",
+                    Justification = "python deps",
+                    Scope = requestScope,
+                    OrganizationId = organizationId,
+                    Status = DomainAllowanceRequestStatus.Pending,
+                    RequestedByUserId = Guid.NewGuid(),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                }
+            );
+        await context.SaveChangesAsync();
+        return requestId;
+    }
+
+    private static Task<Option<DomainAllowanceRequestDto>> ApproveForOrganizationAsync(
+        PipelineHandlerTestScope scope,
+        Guid requestId,
+        Guid organizationId
+    ) =>
+        new ReviewDomainAllowanceRequestQueryHandler(scope.ContextFactory, scope.Mapper).RunQueryAsync(
+            new ReviewDomainAllowanceRequestQuery
+            {
+                RequestId = DomainAllowanceRequestId.From(requestId),
+                Approve = true,
+                ReviewedByUserId = Guid.NewGuid(),
+                OrganizationId = organizationId,
+            },
+            CancellationToken.None
+        );
+
+    private static async Task AssertStillPendingWithoutAllowlistEntriesAsync(
+        PipelineHandlerTestScope scope,
+        Guid requestId
+    )
+    {
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var request = await context.Set<DomainAllowanceRequestEntity>().SingleAsync(entity => entity.Id == requestId);
+        Assert.Equal(DomainAllowanceRequestStatus.Pending, request.Status);
+        Assert.False(await context.Set<PlatformEgressAllowlistEntity>().AnyAsync());
+        Assert.False(await context.Set<OrgEgressAllowlistEntity>().AnyAsync());
+    }
 }
 
 public class ResolveEffectiveEgressAllowlistQueryHandlerTests

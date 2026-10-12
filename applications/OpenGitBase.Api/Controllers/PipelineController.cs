@@ -585,20 +585,6 @@ public sealed class PipelineController : ControllerBase
     public Task<IActionResult> DenyPlatformDomainRequest(Guid requestId, CancellationToken cancellationToken) =>
         ReviewDomainRequestAsync(requestId, false, cancellationToken);
 
-    [HttpPost("organizations/{organizationId:guid}/pipeline/egress/domain-requests/{requestId:guid}/approve")]
-    public Task<IActionResult> ApproveOrganizationDomainRequest(
-        Guid organizationId,
-        Guid requestId,
-        CancellationToken cancellationToken
-    ) => ReviewDomainRequestAsync(requestId, true, cancellationToken);
-
-    [HttpPost("organizations/{organizationId:guid}/pipeline/egress/domain-requests/{requestId:guid}/deny")]
-    public Task<IActionResult> DenyOrganizationDomainRequest(
-        Guid organizationId,
-        Guid requestId,
-        CancellationToken cancellationToken
-    ) => ReviewDomainRequestAsync(requestId, false, cancellationToken);
-
     [HttpGet("pipeline/egress/effective")]
     public async Task<IActionResult> GetEffectiveEgressAllowlist(
         [FromQuery(Name = "runs-on")] string runsOn,
