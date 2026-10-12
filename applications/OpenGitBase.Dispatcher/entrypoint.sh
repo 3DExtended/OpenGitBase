@@ -17,7 +17,7 @@ if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -f "${PRIVATE_KEY_PATH}" ]; then
   install -d -m 700 "$(dirname "${PRIVATE_KEY_PATH}")"
   curl -fsS "${API_URL}/api/v1/fleet/bootstrap/dispatcher-ssh-private-key" \
     -H "X-Fleet-Bootstrap-Token: ${FLEET_BOOTSTRAP_TOKEN}" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["privateKey"])' > "${PRIVATE_KEY_PATH}"
+    | python3 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)["privateKey"])' > "${PRIVATE_KEY_PATH}"
   chmod 600 "${PRIVATE_KEY_PATH}"
 fi
 

@@ -334,6 +334,7 @@ public class Startup
             IQueryHandler<UpdateRepositoryMaxBytesOverrideQuery, RepositoryDto>,
             UpdateRepositoryMaxBytesOverrideQueryHandler
         >();
+        services.AddSingleton<IFleetSshKeyGenerator, FleetSshKeyGenerator>();
         services.AddTransient<
             IQueryHandler<GenerateFleetDispatcherSshKeysQuery, GenerateFleetDispatcherSshKeysResult>,
             GenerateFleetDispatcherSshKeysQueryHandler

@@ -60,7 +60,7 @@ public class GetFleetDispatcherSshPrivateKeyQueryHandlerTests
                     new FleetSecretsEntity
                     {
                         Id = Guid.NewGuid(),
-                        DispatcherSshPrivateKeyProtected = protection.EncryptEmail(privateKey),
+                        DispatcherSshPrivateKeyProtected = protection.EncryptSecret(privateKey),
                         FleetBootstrapTokenHash = hasher.HashPassword(bootstrapToken),
                         UpdatedAt = DateTimeOffset.UtcNow,
                     }

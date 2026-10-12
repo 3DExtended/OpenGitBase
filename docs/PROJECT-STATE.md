@@ -258,7 +258,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 |------|-----------|----------------|
 | User emails | AES-256-GCM + HMAC lookup hash | [EmailProtectionService.cs](../common/OpenGitBase.Common/Services/EmailProtectionService.cs) → `UserCredentialsEntity.EmailCiphertext` |
 | Storage node API tokens | Same AES-GCM (`EncryptSecret`) | `StorageNodeEntity.ApiTokenProtected` |
-| Fleet dispatcher SSH private key | Same AES-GCM | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
+| Fleet dispatcher SSH private key | Same AES-GCM (`EncryptSecret`, stored byte-for-byte, never email-normalized) | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
 | Transport: storage peer sync | mTLS (per-node X.509) | nginx :8443, [docker/pki/](../docker/pki/) |

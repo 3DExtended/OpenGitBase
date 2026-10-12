@@ -14,16 +14,19 @@ public sealed class GenerateFleetDispatcherSshKeysQueryHandler
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _passwordHasherService;
     private readonly IEmailProtectionService _emailProtectionService;
+    private readonly IFleetSshKeyGenerator _keyGenerator;
 
     public GenerateFleetDispatcherSshKeysQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IPasswordHasherService passwordHasherService,
-        IEmailProtectionService emailProtectionService
+        IEmailProtectionService emailProtectionService,
+        IFleetSshKeyGenerator keyGenerator
     )
     {
         _contextFactory = contextFactory;
         _passwordHasherService = passwordHasherService;
         _emailProtectionService = emailProtectionService;
+        _keyGenerator = keyGenerator;
     }
 
     public async Task<Option<GenerateFleetDispatcherSshKeysResult>> RunQueryAsync(
@@ -31,7 +34,7 @@ public sealed class GenerateFleetDispatcherSshKeysQueryHandler
         CancellationToken cancellationToken
     )
     {
-        var keyPair = FleetSshKeyGenerator.GenerateEd25519KeyPair();
+        var keyPair = _keyGenerator.GenerateEd25519KeyPair();
         var bootstrapToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var now = DateTimeOffset.UtcNow;
 
@@ -48,7 +51,7 @@ public sealed class GenerateFleetDispatcherSshKeysQueryHandler
         }
 
         existing.DispatcherSshPublicKey = keyPair.PublicKey;
-        existing.DispatcherSshPrivateKeyProtected = _emailProtectionService.EncryptEmail(
+        existing.DispatcherSshPrivateKeyProtected = _emailProtectionService.EncryptSecret(
             keyPair.PrivateKey
         );
         existing.FleetBootstrapTokenHash = _passwordHasherService.HashPassword(bootstrapToken);

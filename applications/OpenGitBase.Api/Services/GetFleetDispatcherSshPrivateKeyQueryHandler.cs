@@ -54,7 +54,7 @@ public sealed class GetFleetDispatcherSshPrivateKeyQueryHandler
             return Option<string>.None;
         }
 
-        var privateKey = _emailProtectionService.DecryptEmail(
+        var privateKey = _emailProtectionService.DecryptSecret(
             secrets.DispatcherSshPrivateKeyProtected
         );
         secrets.FleetBootstrapTokenHash = string.Empty;

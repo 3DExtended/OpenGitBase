@@ -101,6 +101,16 @@ public class EmailProtectionServiceTests
         Assert.Equal(original, CreateService(CurrentDataKey).DecryptSecret(reprotected));
     }
 
+    [Fact]
+    public void EncryptDecryptSecret_PreservesSurroundingWhitespace()
+    {
+        var service = CreateService();
+        var value = "-----BEGIN OPENSSH PRIVATE KEY-----\nAbC+/\n-----END OPENSSH PRIVATE KEY-----\n";
+        var ciphertext = service.EncryptSecret(value);
+        var decrypted = service.DecryptSecret(ciphertext);
+        Assert.Equal(value, decrypted);
+    }
+
     private static EmailProtectionService CreateService(string dataKey, params string[] previousDataKeys) =>
         new(
             new EncryptionOptions

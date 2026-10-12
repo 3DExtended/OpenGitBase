@@ -22,7 +22,7 @@ public class EmailProtectionService : IEmailProtectionService
         _pepper = Encoding.UTF8.GetBytes(options.Pepper);
     }
 
-    public string EncryptSecret(string value) => EncryptUtf8(value.Trim());
+    public string EncryptSecret(string value) => EncryptUtf8(value);
 
     public string DecryptSecret(string ciphertext) => DecryptUtf8(ciphertext);
 

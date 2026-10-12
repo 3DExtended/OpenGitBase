@@ -2,9 +2,9 @@
 
 namespace OpenGitBase.Api.Services;
 
-internal static class FleetSshKeyGenerator
+internal sealed class FleetSshKeyGenerator : IFleetSshKeyGenerator
 {
-    public static (string PublicKey, string PrivateKey) GenerateEd25519KeyPair()
+    public (string PublicKey, string PrivateKey) GenerateEd25519KeyPair()
     {
         var tempDir = Path.Combine(
             Path.GetTempPath(),
@@ -34,7 +34,9 @@ internal static class FleetSshKeyGenerator
                 );
             }
 
-            return (File.ReadAllText(keyPath + ".pub").Trim(), File.ReadAllText(keyPath).Trim());
+            // The private key is returned verbatim: OpenSSH rejects a key file whose END marker
+            // is not followed by a newline.
+            return (File.ReadAllText(keyPath + ".pub").Trim(), File.ReadAllText(keyPath));
         }
         finally
         {
