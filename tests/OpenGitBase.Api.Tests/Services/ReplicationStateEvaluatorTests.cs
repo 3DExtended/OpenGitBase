@@ -1,4 +1,4 @@
-using OpenGitBase.Api.Services;
+﻿using OpenGitBase.Api.Services;
 using OpenGitBase.Features.Repository.Entities;
 
 namespace OpenGitBase.Api.Tests.Services;
@@ -83,6 +83,67 @@ public class ReplicationStateEvaluatorTests
 
         Assert.Null(ReplicationStateEvaluator.RecoveredStateOrNull(repo, healthy));
     }
+
+    [Fact]
+    public void RecoveredStateOrNull_Rf4PlannerLayout_WhenPrimaryAndBothEncryptedInSync_ReturnsRf4Healthy()
+    {
+        // ReplicaSetPlanner lays RF4 out as the primary plus two encrypted replicas: only one
+        // plaintext copy. Requiring two plaintext copies left such repos Degraded (and
+        // unwritable) forever.
+        var repo = Rf4PlannerRepo(primaryWatermark: 28, artifactB: 28, artifactC: 28);
+        var healthy = new HashSet<Guid> { NodeA, NodeB, NodeC };
+
+        Assert.Equal(
+            ReplicationState.Rf4Healthy,
+            ReplicationStateEvaluator.RecoveredStateOrNull(repo, healthy)
+        );
+    }
+
+    [Fact]
+    public void RecoveredStateOrNull_Rf4PlannerLayout_WhenOneEncryptedArtifactLags_ReturnsNull()
+    {
+        var repo = Rf4PlannerRepo(primaryWatermark: 28, artifactB: 28, artifactC: 27);
+        var healthy = new HashSet<Guid> { NodeA, NodeB, NodeC };
+
+        Assert.Null(ReplicationStateEvaluator.RecoveredStateOrNull(repo, healthy));
+    }
+
+    [Fact]
+    public void RecoveredStateOrNull_Rf4PlannerLayout_WhenEncryptedReplicaSitsOnUnhealthyNode_ReturnsNull()
+    {
+        var repo = Rf4PlannerRepo(primaryWatermark: 28, artifactB: 28, artifactC: 28);
+        var healthy = new HashSet<Guid> { NodeA, NodeB };
+
+        Assert.Null(ReplicationStateEvaluator.RecoveredStateOrNull(repo, healthy));
+    }
+
+    [Fact]
+    public void RecoveredStateOrNull_Rf4PlannerLayout_WhenPrimaryLags_ReturnsNull()
+    {
+        var repo = Rf4PlannerRepo(primaryWatermark: 28, artifactB: 28, artifactC: 28, primaryApplied: 27);
+        var healthy = new HashSet<Guid> { NodeA, NodeB, NodeC };
+
+        Assert.Null(ReplicationStateEvaluator.RecoveredStateOrNull(repo, healthy));
+    }
+
+    private static RepositoryEntity Rf4PlannerRepo(
+        long primaryWatermark,
+        long artifactB,
+        long artifactC,
+        long? primaryApplied = null
+    ) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            PrimaryWatermark = primaryWatermark,
+            ReplicationState = ReplicationState.Degraded,
+            Replicas =
+            [
+                Replica(NodeA, RepositoryReplicaRole.Primary, applied: primaryApplied ?? primaryWatermark),
+                Replica(NodeB, RepositoryReplicaRole.EncryptedReplica, applied: 0, artifact: artifactB),
+                Replica(NodeC, RepositoryReplicaRole.EncryptedReplica, applied: 0, artifact: artifactC),
+            ],
+        };
 
     private static RepositoryEntity Rf3Repo(
         long primaryWatermark,

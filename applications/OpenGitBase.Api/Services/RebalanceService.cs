@@ -86,7 +86,7 @@ public sealed class RebalanceService
                 replica.Role != RepositoryReplicaRole.EncryptedReplica
                 && ReplicationSync.IsInSync(replica.AppliedWatermark, repository.PrimaryWatermark)
             );
-            return encryptedCount >= 1 && plaintextInSync >= 2
+            return ReplicationStateEvaluator.MeetsRf4Target(plaintextInSync, encryptedCount)
                 ? ReplicationState.Rf4Healthy
                 : ReplicationState.Degraded;
         }

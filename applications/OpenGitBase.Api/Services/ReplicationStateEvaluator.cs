@@ -1,4 +1,4 @@
-using OpenGitBase.Features.Repository.Entities;
+﻿using OpenGitBase.Features.Repository.Entities;
 
 namespace OpenGitBase.Api.Services;
 
@@ -19,6 +19,24 @@ namespace OpenGitBase.Api.Services;
 /// </remarks>
 public static class ReplicationStateEvaluator
 {
+    /// <summary>
+    /// Copies an RF4 repository needs in sync to count as healthy, at least one of them
+    /// plaintext (normally the primary) and one encrypted.
+    /// </summary>
+    public const int Rf4RequiredCopiesInSync = 3;
+
+    /// <summary>
+    /// Whether an RF4 repository meets its replication target. <see cref="ReplicaSetPlanner"/>
+    /// lays RF4 out as the primary plus two encrypted replicas, so there is only one plaintext
+    /// copy; older repos may still carry an extra plaintext replica. Requiring two plaintext
+    /// copies (as this used to) can never hold for the planner's layout and left every RF4
+    /// repository that went Degraded there for good, refusing all writes.
+    /// </summary>
+    public static bool MeetsRf4Target(int plaintextInSync, int encryptedInSync) =>
+        plaintextInSync >= 1
+        && encryptedInSync >= 1
+        && plaintextInSync + encryptedInSync >= Rf4RequiredCopiesInSync;
+
     /// <summary>
     /// Returns the healthy state a <see cref="ReplicationState.Degraded"/> repository should be
     /// promoted to now, or <c>null</c> if it does not yet qualify (leave it Degraded). Only ever
@@ -47,7 +65,7 @@ public static class ReplicationStateEvaluator
                 && healthyNodeIds.Contains(replica.StorageNodeId)
                 && replica.ArtifactWatermark >= repository.PrimaryWatermark
             );
-            return encryptedInSync >= 1 && plaintextInSync >= 2
+            return MeetsRf4Target(plaintextInSync, encryptedInSync)
                 ? ReplicationState.Rf4Healthy
                 : null;
         }
