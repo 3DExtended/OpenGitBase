@@ -47,6 +47,22 @@ public class InternalNetworkMiddlewareIntegrationTests
     }
 
     [Fact]
+    public async Task AccessCheckPath_ExternalClientForwardedByTrustedProxy_Returns403()
+    {
+        var response = await SendAsync("/api/v1/access-checks/repositories", "203.0.113.10");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AccessCheckPath_InternalClientForwardedByTrustedProxy_AllowsRequest()
+    {
+        var response = await SendAsync("/api/v1/access-checks/repositories", "10.20.30.40");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task E2ePath_ExternalClientForwardedByTrustedProxy_Returns403()
     {
         var response = await SendAsync("/internal/e2e/emails", "203.0.113.10");
