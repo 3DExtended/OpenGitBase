@@ -157,6 +157,7 @@ public class SignInController : ControllerBase
 
     [HttpPost("requestresetpassword")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<ActionResult<string>> RequestPasswordResetAsync(
         [FromBody] ResetPasswordRequestDto requestDto,
         CancellationToken cancellationToken
@@ -189,6 +190,7 @@ public class SignInController : ControllerBase
 
     [HttpPost("resetpassword")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<ActionResult<string>> UserPasswordResetAsync(
         [FromBody] ResetPasswordDto requestDto,
         CancellationToken cancellationToken
