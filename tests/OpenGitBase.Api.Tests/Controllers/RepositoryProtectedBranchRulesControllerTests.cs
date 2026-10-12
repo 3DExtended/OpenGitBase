@@ -177,6 +177,7 @@ public class RepositoryProtectedBranchRulesControllerTests
             .RunQueryAsync(
                 Arg.Is<DeleteProtectedBranchRuleQuery>(query =>
                     query.Id == ProtectedBranchRuleId.From(ruleId)
+                    && query.RepositoryId == repositoryId
                 ),
                 Arg.Any<CancellationToken>()
             );

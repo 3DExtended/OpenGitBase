@@ -172,7 +172,11 @@ public class RepositoryProtectedBranchRulesController : ControllerBase
 
         var result = await _queryProcessor
             .RunQueryAsync(
-                new DeleteProtectedBranchRuleQuery { Id = ProtectedBranchRuleId.From(id) },
+                new DeleteProtectedBranchRuleQuery
+                {
+                    RepositoryId = repository.Id,
+                    Id = ProtectedBranchRuleId.From(id),
+                },
                 cancellationToken
             )
             .ConfigureAwait(false);

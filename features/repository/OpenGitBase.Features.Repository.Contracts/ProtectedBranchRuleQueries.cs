@@ -30,5 +30,7 @@ public class UpdateProtectedBranchRuleQuery
 public class DeleteProtectedBranchRuleQuery
     : IQuery<Unit, DeleteProtectedBranchRuleQuery>
 {
+    public RepositoryId RepositoryId { get; set; } = default!;
+
     public ProtectedBranchRuleId Id { get; set; } = default!;
 }

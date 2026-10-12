@@ -212,7 +212,7 @@ public class DeleteProtectedBranchRuleQueryHandler
             .Set<ProtectedBranchRuleEntity>()
             .FirstOrDefaultAsync(item => item.Id == query.Id.Value, cancellationToken)
             .ConfigureAwait(false);
-        if (entity is null)
+        if (entity is null || entity.RepositoryId != query.RepositoryId.Value)
         {
             return Option<Unit>.None;
         }
