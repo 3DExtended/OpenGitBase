@@ -20,7 +20,7 @@ public sealed class IngestGitPushQueryHandler : IQueryHandler<IngestGitPushQuery
         CancellationToken cancellationToken
     )
     {
-        if (query.RepositoryId == Guid.Empty || string.IsNullOrWhiteSpace(query.AfterSha))
+        if (query.RepositoryId == Guid.Empty || !GitObjectIds.IsValid(query.AfterSha))
         {
             return Option<bool>.None;
         }

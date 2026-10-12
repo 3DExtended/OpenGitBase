@@ -25,7 +25,7 @@ public class IngestGitPushOutboxTests
             {
                 RepositoryId = repositoryId,
                 Ref = "refs/heads/main",
-                AfterSha = "abc123def456",
+                AfterSha = "abc123def4560000000000000000000000000000",
             },
             CancellationToken.None
         );
@@ -36,7 +36,7 @@ public class IngestGitPushOutboxTests
         var row = await context.Set<GitPushOutboxEntity>().SingleAsync();
         Assert.Equal(repositoryId, row.RepositoryId);
         Assert.Equal("refs/heads/main", row.Ref);
-        Assert.Equal("abc123def456", row.AfterSha);
+        Assert.Equal("abc123def4560000000000000000000000000000", row.AfterSha);
         Assert.Equal(GitPushOutboxStatus.Pending, row.Status);
     }
 
@@ -53,7 +53,7 @@ public class IngestGitPushOutboxTests
         {
             RepositoryId = Guid.NewGuid(),
             Ref = "refs/heads/main",
-            AfterSha = "deadbeef",
+            AfterSha = "deadbeef00000000000000000000000000000000",
         };
 
         Assert.True((await handler.RunQueryAsync(query, CancellationToken.None)).IsSome);
@@ -61,5 +61,34 @@ public class IngestGitPushOutboxTests
 
         await using var context = await scope.CreateDbContextAsync();
         Assert.Equal(1, await context.Set<GitPushOutboxEntity>().CountAsync());
+    }
+
+    [Theory]
+    [InlineData("HEAD")]
+    [InlineData("abc123def456")]
+    [InlineData("ABC123DEF4560000000000000000000000000000")]
+    [InlineData("abc123def456000000000000000000000000000z")]
+    [InlineData(" abc123def4560000000000000000000000000000")]
+    public async Task Ingest_WhenAfterShaIsNotAnObjectId_IsRejected(string afterSha)
+    {
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, PipelineMapsterConfig>(
+            typeof(IngestGitPushQueryHandler).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        var handler = scope.GetHandler<IngestGitPushQueryHandler>();
+        var result = await handler.RunQueryAsync(
+            new IngestGitPushQuery
+            {
+                RepositoryId = Guid.NewGuid(),
+                Ref = "refs/heads/main",
+                AfterSha = afterSha,
+            },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsNone);
+        await using var context = await scope.CreateDbContextAsync();
+        Assert.False(await context.Set<GitPushOutboxEntity>().AnyAsync());
     }
 }

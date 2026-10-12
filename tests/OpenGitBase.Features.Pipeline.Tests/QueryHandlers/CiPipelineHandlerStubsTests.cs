@@ -10,17 +10,17 @@ using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.ComputeNode.Contracts;
 using OpenGitBase.Features.ComputeNode.Entities;
+using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
 using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Entities;
+using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.Pipeline.Tests.QueryHandlers;
 
 public class IngestGitPushQueryHandlerTests;
-
-public class SchedulePipelineRunFromPushQueryHandlerTests;
 
 public class ListPipelineRunsQueryHandlerTests;
 
@@ -430,6 +430,8 @@ internal sealed class PipelineHandlerTestScope : IAsyncDisposable
                     typeof(PipelineMapsterConfig).Assembly,
                     typeof(ComputeNodeEntity).Assembly,
                     typeof(RepositoryEntity).Assembly,
+                    typeof(OrganizationEntity).Assembly,
+                    typeof(UserEntity).Assembly,
                 ]
             )
         );

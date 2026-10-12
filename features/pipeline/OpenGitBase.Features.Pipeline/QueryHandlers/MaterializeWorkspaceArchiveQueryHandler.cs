@@ -72,7 +72,7 @@ public sealed class MaterializeWorkspaceArchiveQueryHandler
             .AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.Id == job.RunId, cancellationToken)
             .ConfigureAwait(false);
-        if (run is null || !IsObjectId(run.AfterSha))
+        if (run is null || !GitObjectIds.IsValid(run.AfterSha))
         {
             return Option<WorkspaceArchiveResult>.None;
         }
@@ -215,10 +215,6 @@ public sealed class MaterializeWorkspaceArchiveQueryHandler
             }
         }
     }
-
-    // Only full commit ids reach git; refs, revision expressions and options are refused.
-    private static bool IsObjectId(string? value) =>
-        value is { Length: 40 or 64 } && value.All(char.IsAsciiHexDigitLower);
 
     private static async Task<int> RunProcessAsync(
         string fileName,

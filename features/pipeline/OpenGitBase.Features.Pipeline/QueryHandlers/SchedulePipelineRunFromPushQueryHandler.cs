@@ -37,7 +37,7 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         CancellationToken cancellationToken
     )
     {
-        if (query.RepositoryId == Guid.Empty || string.IsNullOrWhiteSpace(query.AfterSha))
+        if (query.RepositoryId == Guid.Empty || !GitObjectIds.IsValid(query.AfterSha))
         {
             return Option<PipelineRunId>.None;
         }
