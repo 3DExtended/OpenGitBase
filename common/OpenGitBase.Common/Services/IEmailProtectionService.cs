@@ -11,4 +11,7 @@ public interface IEmailProtectionService
     string DecryptSecret(string ciphertext);
 
     string ComputeLookupHash(string email);
+
+    /// <summary>Re-encrypts a stored ciphertext with the current data key, keeping its plaintext byte for byte.</summary>
+    string Reprotect(string ciphertext);
 }

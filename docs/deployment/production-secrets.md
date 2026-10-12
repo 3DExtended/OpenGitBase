@@ -30,6 +30,21 @@ The API refuses to start in `Production` when known dev placeholder secrets are 
 
 `docker-compose.prod.yml` sets `ASPNETCORE_ENVIRONMENT=Production`, turns off the debug email-verification flag, and removes host port bindings for Postgres and Redis. It does **not** set the cryptographic secrets above — provide them via a private `.env` file or `docker-compose.override.yml` that is not committed.
 
+## Rotating the encryption keys
+
+`Encryption__DataKey` wraps every repository key, the storage node API tokens, the dispatcher SSH private key, and the stored email addresses. Losing the data key makes encrypted repositories unreadable, so keep a copy outside the host (for example in a password manager) before and after a rotation. Never simply replace the key: existing rows would no longer decrypt.
+
+1. Back up the database (`pg_dump`).
+2. On `api-1` and `api-2`, set the new `Encryption__DataKey` and `Encryption__Pepper` and keep the old data key as `Encryption__PreviousDataKeys__0`. Recreate both API instances one at a time. They now read values written with either key and write with the new one.
+3. Re-encrypt everything once:
+
+   ```bash
+   docker compose run --rm --no-deps -e OPENGITBASE_ROTATE_ENCRYPTION_KEYS=true api-1
+   ```
+
+   The run re-encrypts all protected columns with the new data key and recomputes the email lookup hashes with the new pepper, in one transaction. If any value cannot be decrypted, it changes nothing and exits with code 1. Email lookups (duplicate-email check, organization invites) can miss between step 2 and this step, so run it right after the recreate.
+4. Once the run has succeeded, `Encryption__PreviousDataKeys__0` can be removed.
+
 ## E2E endpoints
 
 `/internal/e2e/*` stays disabled unless **both** of the following are true:

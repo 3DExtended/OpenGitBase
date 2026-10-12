@@ -7,6 +7,12 @@ public static partial class Program
 {
     public static async Task Main(string[] args)
     {
+        if (EncryptionKeyRotationHost.IsEnabled())
+        {
+            Environment.Exit(await EncryptionKeyRotationHost.RunAsync(args));
+            return;
+        }
+
         if (MigrateOnlyHost.IsEnabled())
         {
             Environment.Exit(await MigrateOnlyHost.RunAsync(args));

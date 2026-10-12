@@ -68,17 +68,11 @@ public static class DependencyInjectionHelpers
             return 0;
         }
 
-        var services = new ServiceCollection();
-        services.AddSingleton(env);
-        services.AddSingleton(configuration);
-        services.AddLogging();
-
-        var assemblies = featureAssemblies ?? Array.Empty<Assembly>();
-        services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider(assemblies));
-
-        ConfigureDatabase(services, configuration, env);
-
-        await using var provider = services.BuildServiceProvider();
+        await using var provider = BuildDatabaseServiceProvider(
+            configuration,
+            env,
+            featureAssemblies ?? Array.Empty<Assembly>()
+        );
         var factory = provider.GetService<IDbContextFactory<OpenGitBaseDbContext>>();
 
         if (factory == null)
@@ -121,6 +115,28 @@ public static class DependencyInjectionHelpers
             Console.Error.WriteLine($"Migration failed: {ex.Message}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Builds a minimal provider with only the database context factory, for one-shot maintenance
+    /// hosts that must not start the web app or its background services. The factory is missing
+    /// when no Sql connection string is configured.
+    /// </summary>
+    public static ServiceProvider BuildDatabaseServiceProvider(
+        IConfiguration configuration,
+        IHostEnvironment env,
+        IReadOnlyList<Assembly> featureAssemblies
+    )
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(env);
+        services.AddSingleton(configuration);
+        services.AddLogging();
+        services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider(featureAssemblies));
+
+        ConfigureDatabase(services, configuration, env);
+
+        return services.BuildServiceProvider();
     }
 
     private static void ConfigureDatabase(
