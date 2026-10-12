@@ -46,8 +46,10 @@ x-api-env: &api-env
     # Encryption__Pepper: "REPLACE_WITH_UNIQUE_PEPPER"
     # AdminSeed__Password: "REPLACE_WITH_ADMIN_PASSWORD"
 
-    # OAuth client IDs (optional)
+    # OAuth client IDs (optional). Google/Apple sign-in is rejected until set;
+    # ID tokens are only accepted when issued for these client IDs.
     # Google__ClientId: "REPLACE_WITH_GOOGLE_CLIENT_ID"
+    # Google__ClientIds__0: "REPLACE_WITH_ADDITIONAL_GOOGLE_CLIENT_ID"
     # Apple__ClientId: "REPLACE_WITH_APPLE_CLIENT_ID"
 
     # First-start admin user seed
