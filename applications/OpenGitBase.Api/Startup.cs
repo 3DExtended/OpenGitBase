@@ -353,6 +353,10 @@ public class Startup
         >();
         services.AddSingleton<IJWTTokenGenerator, JWTTokenGenerator>();
         services.AddSingleton<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
+        services.AddSingleton<IAppleIdentityTokenValidator>(sp => new AppleIdentityTokenValidator(
+            sp.GetRequiredService<AppleAuthOptions>(),
+            AppleIdentityTokenValidator.CreateAppleConfigurationManager()
+        ));
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
         services.AddSingleton<IRepositoryKeyProtectionService, RepositoryKeyProtectionService>();
         services.AddSingleton<IEncryptedArtifactService, EncryptedArtifactService>();

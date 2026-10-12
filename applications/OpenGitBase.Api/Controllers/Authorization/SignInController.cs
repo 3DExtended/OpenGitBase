@@ -9,7 +9,6 @@ using Microsoft.Extensions.Caching.Memory;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
-using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
@@ -20,7 +19,7 @@ namespace OpenGitBase.Api.Controllers.Authorization;
 [Route("signin")]
 public class SignInController : ControllerBase
 {
-    private readonly AppleAuthOptions _appleAuthOptions;
+    private readonly IAppleIdentityTokenValidator _appleTokenValidator;
     private readonly IMemoryCache _cache;
     private readonly IGoogleIdentityTokenValidator _googleTokenValidator;
     private readonly IQueryProcessor _queryProcessor;
@@ -29,7 +28,7 @@ public class SignInController : ControllerBase
 
     public SignInController(
         IQueryProcessor queryProcessor,
-        AppleAuthOptions appleAuthOptions,
+        IAppleIdentityTokenValidator appleTokenValidator,
         IMemoryCache cache,
         IGoogleIdentityTokenValidator googleTokenValidator,
         IJWTTokenGenerator jwtTokenGenerator,
@@ -37,7 +36,7 @@ public class SignInController : ControllerBase
     )
     {
         _queryProcessor = queryProcessor;
-        _appleAuthOptions = appleAuthOptions;
+        _appleTokenValidator = appleTokenValidator;
         _cache = cache;
         _googleTokenValidator = googleTokenValidator;
         _jwtTokenGenerator = jwtTokenGenerator;
@@ -139,42 +138,20 @@ public class SignInController : ControllerBase
             return BadRequest("Expected IdentityToken.");
         }
 
-        var tokenDetails = GetTokenInfo(loginDto.IdentityToken);
+        var appleIdentity = await _appleTokenValidator
+            .ValidateAsync(loginDto.IdentityToken, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (
-            tokenDetails.TryGetValue("iss", out var issuer)
-            && issuer != "https://appleid.apple.com"
-        )
+        if (appleIdentity is null)
         {
             return Unauthorized();
         }
 
-        if (
-            tokenDetails.TryGetValue("aud", out var audience)
-            && audience != _appleAuthOptions.ClientId
-        )
-        {
-            return Unauthorized();
-        }
-
-        if (
-            tokenDetails.TryGetValue("exp", out var expValue)
-            && long.TryParse(expValue, out var expSeconds)
-        )
-        {
-            var expDate = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
-            if (DateTimeOffset.UtcNow > expDate)
-            {
-                return Unauthorized();
-            }
-        }
-
-        var internalId = tokenDetails["sub"];
-        var email = tokenDetails.TryGetValue("email", out var emailValue)
-            ? emailValue
-            : string.Empty;
-
-        return await HandleProviderLoginAsync(internalId, email, cancellationToken)
+        return await HandleProviderLoginAsync(
+                appleIdentity.Subject,
+                appleIdentity.Email,
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 

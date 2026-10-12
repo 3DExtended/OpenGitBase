@@ -5,6 +5,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Api.Tests.Services;
@@ -87,9 +89,19 @@ internal static class AuthTestServerConfiguration
             }
         );
 
+        var appleOptions = new AppleAuthOptions { ClientId = AuthTestJwtHelper.TestAppleClientId };
         services.RemoveAll<AppleAuthOptions>();
-        services.AddSingleton(
-            new AppleAuthOptions { ClientId = AuthTestJwtHelper.TestAppleClientId }
+        services.AddSingleton(appleOptions);
+
+        // Real validator, but trusting a test key instead of fetching Apple's JWKS.
+        var appleKeySet = new OpenIdConnectConfiguration { Issuer = AppleIdentityTokenValidator.Issuer };
+        appleKeySet.SigningKeys.Add(AuthTestJwtHelper.TestAppleVerificationKey);
+        services.RemoveAll<IAppleIdentityTokenValidator>();
+        services.AddSingleton<IAppleIdentityTokenValidator>(
+            new AppleIdentityTokenValidator(
+                appleOptions,
+                new StaticConfigurationManager<OpenIdConnectConfiguration>(appleKeySet)
+            )
         );
 
         services.RemoveAll<EncryptionOptions>();

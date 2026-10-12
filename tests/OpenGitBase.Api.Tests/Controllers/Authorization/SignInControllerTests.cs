@@ -267,6 +267,39 @@ public class SignInControllerTests : ControllerTestBase
     }
 
     [Fact]
+    public async Task Apple_WithTokenNotSignedByApple_ReturnsUnauthorized()
+    {
+        var identityToken = AuthTestJwtHelper.CreateAppleIdentityTokenWithUntrustedKey(
+            "apple-subject",
+            "apple@example.com"
+        );
+
+        var response = await Client.PostAsJsonAsync(
+            "/signin/apple",
+            new AppleLoginDto { IdentityToken = identityToken }
+        );
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Apple_WithoutAudience_ReturnsUnauthorized()
+    {
+        var identityToken = AuthTestJwtHelper.CreateAppleIdentityToken(
+            "apple-subject",
+            "apple@example.com",
+            audience: string.Empty
+        );
+
+        var response = await Client.PostAsJsonAsync(
+            "/signin/apple",
+            new AppleLoginDto { IdentityToken = identityToken }
+        );
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Apple_NewUser_ReturnsRedirectToken()
     {
         var identityToken = AuthTestJwtHelper.CreateAppleIdentityToken(
