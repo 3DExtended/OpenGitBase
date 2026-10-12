@@ -364,6 +364,22 @@ public sealed class PipelineController : ControllerBase
             return NotFound();
         }
 
+        // Promoted layers are resolved for every tenant's jobs, so only the node running this
+        // promotion's job (DependencyLayerPromotionWorker stores its id here) may supply it.
+        if (
+            !Guid.TryParse(promotion.LayerStoreObjectKey, out var promotionJobId)
+            || !await context
+                .Set<PipelineJobEntity>()
+                .AnyAsync(
+                    job => job.Id == promotionJobId && job.ClaimedByComputeNodeId == node.Id,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            return Unauthorized();
+        }
+
         await using var stream = artifact.OpenReadStream();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken).ConfigureAwait(false);
