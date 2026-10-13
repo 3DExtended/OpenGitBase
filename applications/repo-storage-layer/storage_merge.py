@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from storage_content import GitContentError, _run_git, resolve_ref
+from storage_content import GitContentError, _run_git, require_rev, resolve_ref
 
 MERGE_STRATEGIES = frozenset({"merge_commit", "squash", "fast_forward"})
 HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -171,7 +171,7 @@ def delete_branch_ref(git_dir: str, ref_name: str) -> None:
 
 
 def _verify_object(git_dir: str, sha: str) -> None:
-    _run_git(git_dir, "cat-file", "-e", sha)
+    _run_git(git_dir, "cat-file", "-e", require_rev(sha, label="sha"))
 
 
 def _parse_name_status(output: str) -> dict[str, dict[str, str | None]]:
@@ -358,6 +358,8 @@ def _is_ancestor(git_dir: str, ancestor_sha: str, descendant_sha: str) -> bool:
 
 
 def is_ancestor_commit(git_dir: str, ancestor_sha: str, descendant_sha: str) -> bool:
+    ancestor_sha = require_rev(ancestor_sha, label="ancestorSha")
+    descendant_sha = require_rev(descendant_sha, label="descendantSha")
     return _is_ancestor(git_dir, ancestor_sha, descendant_sha)
 
 

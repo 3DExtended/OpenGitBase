@@ -31,6 +31,22 @@ class GitContentError(Exception):
         self.message = message
 
 
+def require_rev(value: str, *, label: str = "ref") -> str:
+    """Validate a client-supplied revision before it reaches git.
+
+    Git passes a bare revision positionally, so a value beginning with '-'
+    would be read as an option (e.g. ``--output=…``) rather than a ref. Git's
+    own ref-format rules forbid a leading dash and SHAs are hex, so rejecting
+    these rejects nothing legitimate while closing the argument-injection path.
+    """
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise GitContentError("invalid_ref", f"{label} is required.")
+    if cleaned.startswith("-"):
+        raise GitContentError("invalid_ref", f"Invalid {label}.")
+    return cleaned
+
+
 def _run_git(git_dir: str, *args: str) -> str:
     result = subprocess.run(
         ["git", "--git-dir", git_dir, *args],
@@ -108,15 +124,19 @@ def list_tags(git_dir: str) -> list[dict[str, str]]:
 
 
 def resolve_ref(git_dir: str, ref: str) -> str:
+    ref = require_rev(ref)
     return _run_git(git_dir, "rev-parse", "--verify", ref).strip()
 
 
 def count_commits_ahead(git_dir: str, base_ref: str, head_ref: str) -> int:
+    base_ref = require_rev(base_ref, label="baseRef")
+    head_ref = require_rev(head_ref, label="headRef")
     output = _run_git(git_dir, "rev-list", "--count", f"{base_ref}..{head_ref}")
     return int(output.strip())
 
 
 def list_tree(git_dir: str, ref: str, path: str = "") -> dict[str, Any]:
+    ref = require_rev(ref)
     normalized_path = _normalize_repo_path(path)
     tree_ref = f"{ref}:{normalized_path}" if normalized_path else ref
     output = _run_git(git_dir, "ls-tree", tree_ref)
@@ -153,6 +173,7 @@ def _preview_kind(path: str, is_binary: bool) -> str:
 
 
 def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
+    ref = require_rev(ref)
     normalized_path = _normalize_repo_path(unquote(path))
     if not normalized_path:
         raise GitContentError("invalid_path", "Blob path is required.")
@@ -191,6 +212,7 @@ def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
 
 
 def get_raw_bytes(git_dir: str, ref: str, path: str, *, max_bytes: int = RAW_MAX_BYTES) -> tuple[bytes, str]:
+    ref = require_rev(ref)
     normalized_path = _normalize_repo_path(unquote(path))
     if not normalized_path:
         raise GitContentError("invalid_path", "Blob path is required.")

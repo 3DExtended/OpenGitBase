@@ -12,6 +12,7 @@ from pathlib import Path
 from storage_content import (
     INLINE_MAX_BYTES,
     GitContentError,
+    count_commits_ahead,
     get_blob,
     get_disk_usage,
     get_raw_bytes,
@@ -20,6 +21,7 @@ from storage_content import (
     list_tags,
     list_tree,
     resolve_readme,
+    resolve_ref,
 )
 
 
@@ -159,6 +161,48 @@ class StorageContentTests(unittest.TestCase):
         )
         self.assertTrue(is_empty_repository(empty_repo))
         self.assertFalse(is_empty_repository(self.repo_path))
+
+
+class StorageContentRefInjectionTests(StorageContentTests):
+    """Refs that begin with '-' must never reach git as an option.
+
+    Git's own ref-format rules forbid a leading dash, so rejecting these
+    rejects nothing a client could legitimately ask for, while closing the
+    argument-injection path (e.g. a value that git would read as --output=…).
+    """
+
+    def test_resolve_ref_rejects_leading_dash(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            resolve_ref(self.repo_path, "--output=/tmp/pwned")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_count_commits_ahead_rejects_leading_dash_base(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            count_commits_ahead(self.repo_path, "--all", "main")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_count_commits_ahead_rejects_leading_dash_head(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            count_commits_ahead(self.repo_path, "main", "--all")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_list_tree_rejects_leading_dash_ref(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            list_tree(self.repo_path, "--output=/tmp/pwned", "")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_get_blob_rejects_leading_dash_ref(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            get_blob(self.repo_path, "--output=/tmp/pwned", "README.md")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_get_raw_bytes_rejects_leading_dash_ref(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            get_raw_bytes(self.repo_path, "--output=/tmp/pwned", "README.md")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_resolve_ref_still_resolves_a_real_branch(self) -> None:
+        self.assertEqual(len(resolve_ref(self.repo_path, "main")), 40)
 
 
 if __name__ == "__main__":

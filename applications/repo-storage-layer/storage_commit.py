@@ -8,16 +8,17 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from storage_content import GitContentError, _run_git
+from storage_content import GitContentError, _run_git, require_rev
 from storage_merge import get_diff
 
 AMBIGUOUS_SHA = re.compile(r"ambiguous", re.IGNORECASE)
 
 
 def resolve_commit_sha(git_dir: str, sha: str) -> str:
-    cleaned = sha.strip()
-    if not cleaned:
-        raise GitContentError("not_found", "Commit not found.")
+    try:
+        cleaned = require_rev(sha, label="sha")
+    except GitContentError as exc:
+        raise GitContentError("not_found", "Commit not found.") from exc
 
     try:
         return _run_git(git_dir, "rev-parse", "--verify", f"{cleaned}^{{commit}}").strip()

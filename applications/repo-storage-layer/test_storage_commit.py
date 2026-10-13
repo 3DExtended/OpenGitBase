@@ -14,6 +14,13 @@ from storage_commit import get_commit, resolve_commit_sha
 from storage_content import GitContentError
 
 
+class ResolveCommitShaInjectionTests(unittest.TestCase):
+    def test_resolve_commit_sha_rejects_leading_dash(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            resolve_commit_sha("/nonexistent.git", "--output=/tmp/pwned")
+        self.assertIn(ctx.exception.code, {"invalid_ref", "not_found"})
+
+
 class StorageCommitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.mkdtemp()

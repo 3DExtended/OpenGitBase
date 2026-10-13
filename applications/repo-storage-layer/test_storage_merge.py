@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from storage_content import GitContentError
 from storage_merge import check_mergeability, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 
@@ -214,6 +215,33 @@ class StorageMergeTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual(before, feature_sha)
         self.assertNotEqual(other_sha, feature_sha)
+
+
+class StorageMergeShaInjectionTests(StorageMergeTests):
+    """SHA operands beginning with '-' must be rejected before reaching git."""
+
+    def test_get_diff_rejects_leading_dash_base(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            get_diff(self.repo_path, "--output=/tmp/pwned", "main")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_check_mergeability_does_not_act_on_leading_dash(self) -> None:
+        # The guard trips inside _verify_object, which check_mergeability maps to
+        # a safe "unknown" result; git never receives "--all" as an operand.
+        self.assertEqual(
+            check_mergeability(self.repo_path, "--all", "main"),
+            {"status": "unknown"},
+        )
+
+    def test_list_commits_since_merge_base_rejects_leading_dash(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            list_commits_since_merge_base(self.repo_path, "--all", "main")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_is_ancestor_commit_rejects_leading_dash(self) -> None:
+        with self.assertRaises(GitContentError) as ctx:
+            is_ancestor_commit(self.repo_path, "--is-ancestor", "main")
+        self.assertEqual(ctx.exception.code, "invalid_ref")
 
 
 if __name__ == "__main__":
