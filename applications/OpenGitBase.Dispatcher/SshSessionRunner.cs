@@ -144,6 +144,9 @@ internal static class SshSessionRunner
             options.HttpPort = int.TryParse(configuration["Dispatcher:HttpPort"], out var httpPort)
                 ? httpPort
                 : 8082;
+            options.MaxPushBytes = long.TryParse(configuration["Dispatcher:MaxPushBytes"], out var maxPushBytes)
+                ? maxPushBytes
+                : 1_073_741_824;
             options.StorageSshPrivateKeyPath =
                 configuration["Dispatcher:StorageSshPrivateKeyPath"]
                 ?? "/run/secrets/storage_ssh_key";

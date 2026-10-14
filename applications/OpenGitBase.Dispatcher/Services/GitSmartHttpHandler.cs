@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenGitBase.Dispatcher.Models;
+using OpenGitBase.Dispatcher.Options;
 
 namespace OpenGitBase.Dispatcher.Services;
 
@@ -11,18 +14,21 @@ public sealed class GitSmartHttpHandler
     private readonly GitSmartHttpPathParser _pathParser;
     private readonly RepositoryAccessCheckClient _accessCheckClient;
     private readonly GitHttpProxyService _gitHttpProxyService;
+    private readonly DispatcherOptions _options;
     private readonly ILogger<GitSmartHttpHandler> _logger;
 
     public GitSmartHttpHandler(
         GitSmartHttpPathParser pathParser,
         RepositoryAccessCheckClient accessCheckClient,
         GitHttpProxyService gitHttpProxyService,
+        IOptions<DispatcherOptions> options,
         ILogger<GitSmartHttpHandler> logger
     )
     {
         _pathParser = pathParser;
         _accessCheckClient = accessCheckClient;
         _gitHttpProxyService = gitHttpProxyService;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -50,24 +56,27 @@ public sealed class GitSmartHttpHandler
             if (gitRequest.Operation == RepositoryOperation.WriteGit
                 && HttpMethods.IsPost(context.Request.Method))
             {
+                RaiseRequestBodyLimit(context);
+
+                // The access check needs the ref updates and the pack size before anything reaches storage.
+                // EnableBuffering spills to a temp file, so a large push is not held in memory.
                 context.Request.EnableBuffering();
-                await using var bodyCopy = new MemoryStream();
-                await context.Request.Body
-                    .CopyToAsync(bodyCopy, context.RequestAborted)
+                var (_, refUpdates) = await GitReceivePackParser
+                    .ReadPrefixAsync(context.Request.Body, context.RequestAborted)
                     .ConfigureAwait(false);
-                bodyCopy.Position = 0;
+                await context.Request.Body
+                    .CopyToAsync(Stream.Null, context.RequestAborted)
+                    .ConfigureAwait(false);
+                var packSizeBytes = context.Request.Body.Length;
                 context.Request.Body.Position = 0;
 
-                var (_, refUpdates) = await GitReceivePackParser
-                    .ReadPrefixAsync(bodyCopy, context.RequestAborted)
-                    .ConfigureAwait(false);
                 accessCheck = await _accessCheckClient
                     .CheckWithTokenAsync(
                         accessToken,
                         gitRequest.RepositoryPath,
                         gitRequest.Operation,
                         refUpdates,
-                        packSizeBytes: bodyCopy.Length,
+                        packSizeBytes,
                         maxFileBytes: 0,
                         context.RequestAborted
                     )
@@ -84,6 +93,16 @@ public sealed class GitSmartHttpHandler
                     )
                     .ConfigureAwait(false);
             }
+        }
+        catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge)
+        {
+            _logger.LogWarning(
+                "Push to {RepositoryPath} exceeds the {MaxPushBytes}-byte limit",
+                gitRequest.RepositoryPath,
+                _options.MaxPushBytes
+            );
+            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            return;
         }
         catch (Exception ex)
         {
@@ -130,5 +149,14 @@ public sealed class GitSmartHttpHandler
         }
 
         return StatusCodes.Status403Forbidden;
+    }
+
+    private void RaiseRequestBodyLimit(HttpContext context)
+    {
+        var bodySize = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (bodySize is { IsReadOnly: false })
+        {
+            bodySize.MaxRequestBodySize = _options.MaxPushBytes;
+        }
     }
 }
