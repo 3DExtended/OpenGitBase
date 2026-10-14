@@ -87,16 +87,12 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         var requestUri =
             $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/repos/{repositoryId:D}/artifacts/{watermark}";
         using var manifestDocument = JsonDocument.Parse(manifestJson);
-        var payload = JsonSerializer.Serialize(
-            new
-            {
-                manifest = manifestDocument.RootElement,
-                bundleBase64 = Convert.ToHexString(bundlePayload).ToLowerInvariant(),
-            }
-        );
         using var request = new HttpRequestMessage(HttpMethod.Put, requestUri)
         {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+            Content = new ReplicationArtifactUploadContent(
+                JsonSerializer.Serialize(manifestDocument.RootElement),
+                bundlePayload
+            ),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
 

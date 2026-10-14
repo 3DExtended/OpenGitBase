@@ -106,6 +106,85 @@ public class StorageProvisionerClientTests
         Assert.Equal(401, result.StatusCode);
     }
 
+    [Fact]
+    public async Task UploadReplicationArtifactAsync_SendsTheManifestAndAHexBundleWithContentLength()
+    {
+        byte[]? requestBody = null;
+        long? contentLength = null;
+        var handler = new StubHttpMessageHandler(
+            async (request, _) =>
+            {
+                Assert.Equal(HttpMethod.Put, request.Method);
+                Assert.Equal(
+                    "http://storage-1:8081/internal/repos/0b9c7c41-5e1b-4a8f-9d3e-0c6f1f6d2a11/artifacts/7",
+                    request.RequestUri?.ToString()
+                );
+                Assert.Equal("application/json", request.Content?.Headers.ContentType?.MediaType);
+                contentLength = request.Content?.Headers.ContentLength;
+                requestBody = await request.Content!.ReadAsByteArrayAsync();
+                return new HttpResponseMessage(HttpStatusCode.Created);
+            }
+        );
+        var client = new StorageProvisionerClient(new HttpClient(handler));
+
+        var result = await client.UploadReplicationArtifactAsync(
+            CreateNode(),
+            "secret-token",
+            Guid.Parse("0b9c7c41-5e1b-4a8f-9d3e-0c6f1f6d2a11"),
+            7,
+            """{ "watermark": 7, "keyId": "k1" }""",
+            [0x00, 0xAB, 0xFF, 0x10],
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success);
+        Assert.Equal(requestBody!.Length, contentLength);
+        using var json = System.Text.Json.JsonDocument.Parse(requestBody);
+        Assert.Equal(7, json.RootElement.GetProperty("manifest").GetProperty("watermark").GetInt32());
+        Assert.Equal("k1", json.RootElement.GetProperty("manifest").GetProperty("keyId").GetString());
+        Assert.Equal("00abff10", json.RootElement.GetProperty("bundleBase64").GetString());
+    }
+
+    [Fact]
+    public async Task UploadReplicationArtifactAsync_UploadsABundleBeyondTheJsonWriterValueLimit()
+    {
+        // System.Text.Json refuses string values above 166,666,666 characters; this bundle's hex is 168,000,000.
+        var bundle = new byte[84_000_000];
+        new Random(413).NextBytes(bundle);
+        byte[]? requestBody = null;
+        var handler = new StubHttpMessageHandler(
+            async (request, _) =>
+            {
+                requestBody = await request.Content!.ReadAsByteArrayAsync();
+                return new HttpResponseMessage(HttpStatusCode.Created);
+            }
+        );
+        var client = new StorageProvisionerClient(new HttpClient(handler));
+
+        var result = await client.UploadReplicationArtifactAsync(
+            CreateNode(),
+            "secret-token",
+            Guid.NewGuid(),
+            1,
+            """{"watermark":1}""",
+            bundle,
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success);
+        var prefix = Encoding.UTF8.GetBytes("{\"manifest\":{\"watermark\":1},\"bundleBase64\":\"");
+        var suffix = Encoding.UTF8.GetBytes("\"}");
+        Assert.Equal(prefix.Length + (2 * bundle.Length) + suffix.Length, requestBody!.Length);
+        Assert.True(requestBody.AsSpan(0, prefix.Length).SequenceEqual(prefix));
+        Assert.True(requestBody.AsSpan(requestBody.Length - suffix.Length).SequenceEqual(suffix));
+        for (var offset = 0; offset < bundle.Length; offset += 1_000_000)
+        {
+            var chunk = bundle.AsSpan(offset, Math.Min(1_000_000, bundle.Length - offset));
+            var expectedHex = Encoding.ASCII.GetBytes(Convert.ToHexStringLower(chunk));
+            Assert.True(requestBody.AsSpan(prefix.Length + (2 * offset), expectedHex.Length).SequenceEqual(expectedHex));
+        }
+    }
+
     private static StorageNodeDto CreateNode() =>
         new()
         {
