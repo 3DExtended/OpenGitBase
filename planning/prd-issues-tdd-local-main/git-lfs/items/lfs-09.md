@@ -65,15 +65,24 @@
   - `dotnet test tests/OpenGitBase.Api.Tests`: 888 passed. New: `ColdRecoveryServiceTests`
     `TryRecoverAsync_PrefersANodeWithoutACopyOverOneOfTheEncryptedReplicas`. A mutation check (the old target choice)
     fails it.
-  - E2E meta tests (`RequiresCompose!=true`): 29 passed. The new E2E classes build without warnings.
-- **Compose E2E: not run yet.** Docker Desktop stopped working on this host during the slice:
-  - image builds and `docker pull` hang at registry metadata, for other projects' builds too, while the host
-    reaches the registry;
-  - containers of the stack die with SIGKILL and no kill event (HAProxy 49 restarts, dispatchers 32 and 54
-    restarts), so `api-lb` keeps disappearing, heartbeats fail and nodes flip to unhealthy.
+  - E2E meta tests (`RequiresCompose!=true`): 29 passed.
+- **Compose E2E: passed.**
+  - **Docker trouble during the slice.** Docker Desktop on this host hung for a while:
+    - image builds and `docker pull` stopped at registry metadata, for other projects' builds too;
+    - containers were SIGKILLed in a loop, and api-1 hung after a start-up migration failure while Postgres
+      recovered.
 
-  The chaos suite (`GitHttps.Lfs*` and `HaChaos.LfsColdRecoveryChaosTests`) runs once Docker works again. The
-  acceptance criterion "all chaos scenarios pass" is open.
+    After recreating `ssh-lb` and restarting api-1, the stack was stable. Builds still hung, so the new code went
+    into the running containers directly:
+    - storage: `storage-http-server.py` and `storage_lfs.py` via `docker cp`, restarting the nodes one at a time;
+    - API: the 30 `OpenGitBase.*.dll` from a local `dotnet publish -c Release`. All third-party assemblies were
+      byte-identical to the image's.
+
+    Recreating those containers brings back the lfs-07 image until the images are rebuilt.
+  - `GitHttps.Lfs*`: 9/9 passed. That covers lfs-01..08, plus the new `LfsRepositoryDeletionTests` and
+    `LfsLargeObjectTests`, the 120 MiB object at 22 s.
+  - `HaChaos.LfsColdRecoveryChaosTests` (`OPENGITBASE_E2E_COMPOSE_PROFILE=FullHa`) passed in 2 m 10 s. Afterwards
+    all four nodes were healthy and storage-1's capacity was back to unlimited.
 - **Production (HITL): not started.** The deploy order and the `Lfs:Enabled` switch need a human decision. The
   Cloudflare body limit needs one too.
 - Commit(s): see `progress-log.md`

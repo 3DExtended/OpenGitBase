@@ -99,8 +99,8 @@
   - Web: `pnpm vitest run` gives 30 files and 152 tests. New: `utils/adminLfs.test.ts` (7).
   - Compose E2E: `LfsRepositoryDeletionTests` (new). It pushes an LFS object, waits for every replica's copy,
     deletes the repository, and checks that no storage node keeps its plaintext or encrypted LFS directory. It
-    builds, but it has not run yet: the Docker daemon stopped answering under host load (load average 400–500;
-    `docker ps` did not return within 12 minutes). It runs with the full `GitHttps.Lfs*` suite in lfs-09.
+    could not run during this slice: the Docker daemon stopped answering under host load. It passed later, with the
+    full `GitHttps.Lfs*` suite in lfs-09 (see `lfs-09.md`).
 - Visual snapshots:
   - `tests/visual/admin-lfs.spec.ts` is new, with 2 snapshots × 3 viewports: copies with a restore in progress,
     and fleet totals.

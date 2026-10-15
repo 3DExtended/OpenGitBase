@@ -18,7 +18,7 @@ Branch strategy: **worktree branch `claude/lfs-implementation-difficulty-1a3fd2`
 | 6 | lfs-06 | Cold recovery and post-promotion LFS restore | AFK | done | lfs-05 | #240 | 53e640e |
 | 7 | lfs-07 | Web UI: LFS files in blob view and raw downloads | AFK | done | lfs-01, lfs-02 | #241 | b6f4f5b |
 | 8 | lfs-08 | Repository deletion cleanup and admin LFS figures | AFK | done | lfs-05 | #242 | 70aacd3 |
-| 9 | lfs-09 | LFS chaos E2E and production rollout | HITL | in progress (compose E2E run and production pending) | lfs-03..lfs-08 | #243 | fae6159 |
+| 9 | lfs-09 | LFS chaos E2E and production rollout | HITL | in progress (compose E2E green; production HITL pending) | lfs-03..lfs-08 | #243 | fae6159 |
 
 ## Dependency graph
 
