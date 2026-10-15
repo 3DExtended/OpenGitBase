@@ -8,6 +8,7 @@ const { instanceName, instanceLogoUrl } = useInstanceBranding()
 const { t } = useI18n()
 const colorMode = useColorMode()
 import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
+import type { AdminLfsFleetSummaryDto, AdminRepositoryLfsStatusDto } from '~/utils/api'
 
 // A fixed inline image, so the LFS preview snapshot does not depend on the network.
 const lfsImageFixtureUrl = `data:image/svg+xml,${encodeURIComponent(
@@ -32,6 +33,25 @@ function lfsBlobFixture(path: string, previewKind: string, size: number, availab
     lfs: { oid: '4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393', size, available },
     replicationLag: null,
   }
+}
+
+// lfs-08: a cold-recovered primary (storage-4) halfway through its LFS restore, one encrypted copy missing.
+const adminLfsRestoringFixture: AdminRepositoryLfsStatusDto = {
+  objectCount: 240,
+  totalBytes: 1_932_735_283,
+  missingCopies: 131,
+  nodes: [
+    { storageNodeId: 'n4', nodeId: 'storage-4', kind: 'Plaintext', isPrimary: true, copies: 110, missing: 130 },
+    { storageNodeId: 'n2', nodeId: 'storage-2', kind: 'Encrypted', isPrimary: false, copies: 240, missing: 0 },
+    { storageNodeId: 'n3', nodeId: 'storage-3', kind: 'Encrypted', isPrimary: false, copies: 239, missing: 1 },
+  ],
+}
+
+const adminLfsFleetFixture: AdminLfsFleetSummaryDto = {
+  objectCount: 1284,
+  totalBytes: 48_318_382_080,
+  missingCopies: 131,
+  repositoriesWithMissingCopies: 2,
 }
 
 function memberLabel(userId: string): string {
@@ -928,6 +948,26 @@ const selfHostOptions = [
           </div>
         </div>
       </UCard>
+    </section>
+
+    <section
+      class="mt-10 max-w-5xl space-y-4"
+      data-testid="visual-admin-lfs-copy-status"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin Git LFS copies (restore in progress)
+      </h2>
+      <AdminLfsCopyStatus :lfs="adminLfsRestoringFixture" />
+    </section>
+
+    <section
+      class="mt-10 max-w-6xl space-y-4"
+      data-testid="visual-admin-lfs-fleet-summary"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin Git LFS fleet totals
+      </h2>
+      <AdminLfsFleetSummary :summary="adminLfsFleetFixture" />
     </section>
   </div>
 </template>

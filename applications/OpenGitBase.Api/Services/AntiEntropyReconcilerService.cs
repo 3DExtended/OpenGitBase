@@ -20,6 +20,7 @@ public sealed class AntiEntropyReconcilerService
     private readonly ReplicationArtifactPublisher _artifactPublisher;
     private readonly Rf1BackfillService _backfillService;
     private readonly ILfsRepairQueue _lfsRepairs;
+    private readonly ILfsOrphanCleaner _lfsOrphans;
     private readonly HaStorageBackgroundOptions _options;
     private readonly ILogger<AntiEntropyReconcilerService> _logger;
 
@@ -30,6 +31,7 @@ public sealed class AntiEntropyReconcilerService
         ReplicationArtifactPublisher artifactPublisher,
         Rf1BackfillService backfillService,
         ILfsRepairQueue lfsRepairs,
+        ILfsOrphanCleaner lfsOrphans,
         IOptions<HaStorageBackgroundOptions> options,
         ILogger<AntiEntropyReconcilerService> logger
     )
@@ -40,13 +42,14 @@ public sealed class AntiEntropyReconcilerService
         _artifactPublisher = artifactPublisher;
         _backfillService = backfillService;
         _lfsRepairs = lfsRepairs;
+        _lfsOrphans = lfsOrphans;
         _options = options.Value;
         _logger = logger;
     }
 
     /// <summary>
-    /// One reconcile pass. Each step runs on its own: every step but the last two talks to storage
-    /// nodes, and a node that does not answer (its client throws on transport failures) must cost
+    /// One reconcile pass. Each step runs on its own: every step but the degraded latch and LFS copies
+    /// talks to storage nodes, and a node that does not answer (its client throws on transport failures) must cost
     /// only the step that asked it, never the rest of the pass. Pending primary writes go first:
     /// they are the only step that moves PrimaryWatermark, and the pushes behind them are what a
     /// user is waiting for (#413).
@@ -64,6 +67,8 @@ public sealed class AntiEntropyReconcilerService
         await RunStepAsync(context, "degraded latch", HealRecoveredDegradedAsync, cancellationToken)
             .ConfigureAwait(false);
         await RunStepAsync(context, "LFS copies", QueueLfsRepairsAsync, cancellationToken)
+            .ConfigureAwait(false);
+        await RunStepAsync(context, "LFS orphans", _lfsOrphans.RunOnceAsync, cancellationToken)
             .ConfigureAwait(false);
 
         var degraded = await context

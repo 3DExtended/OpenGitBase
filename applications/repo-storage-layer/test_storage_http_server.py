@@ -561,6 +561,58 @@ class LfsInternalEndpointTests(unittest.TestCase):
 
         self.assertEqual(401, status)
 
+    def test_delete_removes_the_plaintext_and_encrypted_lfs_data_of_the_repository(self) -> None:
+        other_repository = "1a2b3c4d-0000-4000-8000-000000000001"
+        self._store(b"plaintext copy")
+        oid = hashlib.sha256(b"encrypted copy").hexdigest()
+        storage_http_server.encrypted_lfs_store().store(self.REPOSITORY_ID, oid, io.BytesIO(b"OLFS"), 4)
+        storage_http_server.lfs_store().store(other_repository, hashlib.sha256(b"kept").hexdigest(), io.BytesIO(b"kept"), 4)
+
+        status, _, body = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+
+        self.assertEqual((200, {"deleted": True}), (status, json.loads(body)))
+        self.assertFalse((storage_http_server.LFS_ROOT / self.REPOSITORY_ID).exists())
+        self.assertFalse((storage_http_server.LFS_ENCRYPTED_ROOT / self.REPOSITORY_ID).exists())
+        self.assertEqual(1, len(storage_http_server.lfs_store().inventory(other_repository)))
+
+    def test_delete_is_idempotent(self) -> None:
+        self._store(b"plaintext copy")
+
+        first, _, _ = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+        status, _, body = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+
+        self.assertEqual(200, first)
+        self.assertEqual((200, {"deleted": False}), (status, json.loads(body)))
+
+    def test_delete_requires_the_node_token(self) -> None:
+        self._store(b"plaintext copy")
+
+        status, _, _ = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}", token=None)
+
+        self.assertEqual(401, status)
+        self.assertTrue((storage_http_server.LFS_ROOT / self.REPOSITORY_ID).is_dir())
+
+    def test_delete_of_a_malformed_repository_id_answers_404(self) -> None:
+        for path in ("/internal/lfs/..", "/internal/lfs/not-a-guid", f"/internal/lfs/{self.REPOSITORY_ID}/objects"):
+            with self.subTest(path=path):
+                status, _, _ = self._request("DELETE", path)
+                self.assertEqual(404, status)
+
+    def test_inventory_names_every_repository_with_lfs_data(self) -> None:
+        encrypted_only = "1a2b3c4d-0000-4000-8000-000000000001"
+        self._store(b"plaintext copy")
+        storage_http_server.encrypted_lfs_store().store(
+            encrypted_only, hashlib.sha256(b"x").hexdigest(), io.BytesIO(b"OLFS"), 4
+        )
+        storage_http_server.encrypted_lfs_store().store(
+            self.REPOSITORY_ID, hashlib.sha256(b"y").hexdigest(), io.BytesIO(b"OLFS"), 4
+        )
+
+        inventory = storage_http_server.on_disk_inventory()
+
+        self.assertEqual(sorted([self.REPOSITORY_ID, encrypted_only]), inventory["lfsRepositories"])
+        self.assertEqual([], inventory["plaintextRepositories"])
+
     def test_the_lfs_root_is_never_a_repository_path(self) -> None:
         lfs_root = storage_http_server.LFS_ROOT
 

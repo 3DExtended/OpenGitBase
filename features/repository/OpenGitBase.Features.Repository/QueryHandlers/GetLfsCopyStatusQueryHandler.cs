@@ -53,19 +53,10 @@ public class GetLfsCopyStatusQueryHandler : IQueryHandler<GetLfsCopyStatusQuery,
             .Select(entity => new { entity.StorageNodeId, entity.Role })
             .ToListAsync(cancellationToken);
 
-        // The nodes that should hold copies: every replica, and the primary even when it has no replica row.
-        var nodes = replicas
-            .GroupBy(replica => replica.StorageNodeId)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Any(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)
-                    ? LfsObjectCopyKind.Encrypted
-                    : LfsObjectCopyKind.Plaintext
-            );
-        if (repository.PrimaryStorageNodeId is { } primary)
-        {
-            nodes.TryAdd(primary, LfsObjectCopyKind.Plaintext);
-        }
+        var nodes = LfsCopyExpectation.Nodes(
+            replicas.Select(replica => (replica.StorageNodeId, replica.Role)),
+            repository.PrimaryStorageNodeId
+        );
 
         var status = nodes
             .Select(node =>

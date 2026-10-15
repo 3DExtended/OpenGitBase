@@ -33,6 +33,12 @@ public interface IStorageLfsClient
     /// </summary>
     Task<LfsNodeInventory> GetInventoryAsync(StorageNodeEndpoint node, Guid repositoryId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Removes all of the repository's LFS data on the node, plaintext and encrypted. True when there was some.
+    /// Deleting what is already gone succeeds; throws when the node cannot answer.
+    /// </summary>
+    Task<bool> DeleteRepositoryAsync(StorageNodeEndpoint node, Guid repositoryId, CancellationToken cancellationToken);
+
     /// <summary>Stores <paramref name="content"/> (which must report its length) as the node's copy.</summary>
     Task PutObjectAsync(
         StorageNodeEndpoint node,

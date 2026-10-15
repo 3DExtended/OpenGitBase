@@ -53,6 +53,23 @@ public static class LfsStorageDisk
         }
     }
 
+    /// <summary>Polls without the transcript until the path no longer exists.</summary>
+    public static async Task WaitForAbsentAsync(string nodeId, string path, TimeSpan deadline)
+    {
+        var until = DateTimeOffset.UtcNow + deadline;
+        while (true)
+        {
+            var test = await ExecAsync(nodeId, "test", "-e", path).ConfigureAwait(false);
+            if (test.ExitCode != 0)
+            {
+                return;
+            }
+
+            Assert.True(DateTimeOffset.UtcNow < until, $"{path} was still on {nodeId} after {deadline.TotalSeconds:0} s.");
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+    }
+
     /// <summary><c>docker exec</c> against the stack's container for a compose service.</summary>
     public static async Task<(int ExitCode, string StdOut, string StdErr)> ExecAsync(string serviceName, params string[] command)
     {

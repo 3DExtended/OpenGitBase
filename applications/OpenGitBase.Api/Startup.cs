@@ -201,6 +201,7 @@ public class Startup
         services.AddSingleton<LfsRepairQueue>();
         services.AddSingleton<ILfsRepairQueue>(provider => provider.GetRequiredService<LfsRepairQueue>());
         services.AddHostedService(provider => provider.GetRequiredService<LfsRepairQueue>());
+        services.AddScoped<ILfsOrphanCleaner, LfsOrphanCleaner>();
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()

@@ -533,6 +533,34 @@ public class AntiEntropyReconcilerServiceTests
     }
 
     [Fact]
+    public async Task RunOnceAsync_RunsTheLfsOrphanStepEvenWhenAnEarlierStepFails()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (service, provider) = await CreateRf3ServiceAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 6,
+            replicaWatermark: 4
+        );
+
+        await using (provider)
+        {
+            var queryProcessor = provider.GetRequiredService<IQueryProcessor>();
+            queryProcessor
+                .RunQueryAsync(Arg.Any<ListHealthyStorageNodesQuery>(), Arg.Any<CancellationToken>())
+                .Returns<Task<Option<IReadOnlyList<StorageNodeDto>>>>(_ => throw new HttpRequestException("node list down"));
+
+            await service.RunOnceAsync(CancellationToken.None);
+
+            await provider
+                .GetRequiredService<ILfsOrphanCleaner>()
+                .Received(1)
+                .RunOnceAsync(Arg.Any<OpenGitBaseDbContext>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
     public async Task RunOnceAsync_WhenDegradedRepoIsFullyInSyncOnHealthyNodes_ClearsLatchToRf3Healthy()
     {
         var repositoryId = Guid.NewGuid();
@@ -618,6 +646,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<RecordingLfsRepairQueue>();
         services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
+        services.AddSingleton(Substitute.For<ILfsOrphanCleaner>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -738,6 +767,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<RecordingLfsRepairQueue>();
         services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
+        services.AddSingleton(Substitute.For<ILfsOrphanCleaner>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -865,6 +895,7 @@ public class AntiEntropyReconcilerServiceTests
         services.AddSingleton<ReplicationArtifactPublisher>();
         services.AddSingleton<RecordingLfsRepairQueue>();
         services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
+        services.AddSingleton(Substitute.For<ILfsOrphanCleaner>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();

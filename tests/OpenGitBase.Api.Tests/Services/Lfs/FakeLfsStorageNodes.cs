@@ -40,6 +40,10 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
     public void Remove(string host, Guid repositoryId, string oid, LfsObjectCopyKind kind) =>
         _objects.TryRemove(Key(host, repositoryId, oid, kind), out _);
 
+    /// <summary>Whether the host holds any copy, plaintext or encrypted, of the repository.</summary>
+    public bool Holds(string host, Guid repositoryId) =>
+        _objects.Keys.Any(key => key.StartsWith(RepositoryPrefix(host, repositoryId), StringComparison.Ordinal));
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
@@ -65,6 +69,11 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
         if (request.Method == HttpMethod.Get && uri.AbsolutePath.EndsWith("/inventory", StringComparison.Ordinal))
         {
             return Inventory(uri);
+        }
+
+        if (request.Method == HttpMethod.Delete)
+        {
+            return DeleteRepository(uri);
         }
 
         if (request.Method == HttpMethod.Put)
@@ -94,7 +103,24 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
     }
 
     private static string Key(string host, Guid repositoryId, string oid, LfsObjectCopyKind kind) =>
-        $"{host}/internal/lfs/{repositoryId:D}/{(kind == LfsObjectCopyKind.Encrypted ? "encrypted" : "objects")}/{oid}";
+        $"{RepositoryPrefix(host, repositoryId)}{(kind == LfsObjectCopyKind.Encrypted ? "encrypted" : "objects")}/{oid}";
+
+    private static string RepositoryPrefix(string host, Guid repositoryId) => $"{host}/internal/lfs/{repositoryId:D}/";
+
+    private HttpResponseMessage DeleteRepository(Uri uri)
+    {
+        var prefix = $"{uri.Host}{uri.AbsolutePath}/";
+        var deleted = false;
+        foreach (var key in _objects.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            deleted |= _objects.TryRemove(key, out _);
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent($"{{\"deleted\":{(deleted ? "true" : "false")}}}", System.Text.Encoding.UTF8, "application/json"),
+        };
+    }
 
     private HttpResponseMessage Inventory(Uri uri)
     {

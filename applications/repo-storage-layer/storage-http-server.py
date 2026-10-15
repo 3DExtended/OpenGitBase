@@ -57,6 +57,7 @@ INTERNAL_LFS_OBJECT_PATH_PATTERN = re.compile(
     r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/(?P<kind>objects|encrypted)/(?P<oid>[0-9a-f]{64})$"
 )
 INTERNAL_LFS_INVENTORY_PATH_PATTERN = re.compile(r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/inventory$")
+INTERNAL_LFS_REPOSITORY_PATH_PATTERN = re.compile(r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})$")
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
 )
@@ -265,9 +266,12 @@ def on_disk_inventory() -> dict[str, Any]:
                     {"repositoryId": entry.name, "artifactWatermark": watermark}
                 )
 
+    lfs = set(lfs_store().repositories()) | set(encrypted_lfs_store().repositories())
+
     return {
         "plaintextRepositories": sorted(plaintext),
         "artifactRepositories": sorted(artifacts, key=lambda a: a["repositoryId"]),
+        "lfsRepositories": sorted(lfs),
     }
 
 
@@ -951,6 +955,16 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(200, {"kind": "encrypted" if encrypted_replica else "plaintext", "objects": objects})
 
+    def _handle_delete_lfs_repository(self, repository_id: str) -> None:
+        """Removes the repository's LFS data whatever this node's role: plaintext objects and encrypted copies.
+        Deleting what is already gone succeeds, so a retry or a reconciler pass is harmless."""
+        try:
+            deleted = [store.delete_repository(repository_id) for store in (lfs_store(), encrypted_lfs_store())]
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
+            return
+        self._send_json(200, {"deleted": any(deleted)})
+
     def _handle_get_inventory(self) -> None:
         self._send_json(200, on_disk_inventory())
 
@@ -1296,6 +1310,11 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_REPOSITORY_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            self._handle_delete_lfs_repository(lfs_match.group("repository_id"))
+            return
+
         artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
         if artifact_match:
             delete_replication_artifact(

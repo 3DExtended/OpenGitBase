@@ -98,6 +98,25 @@ class LfsObjectStore:
                 continue
         return sorted(objects, key=lambda item: item["oid"])
 
+    def repositories(self) -> list[str]:
+        """The repositories that have a directory under the root, sorted; other entries are left out."""
+        if not self.root.is_dir():
+            return []
+        return sorted(
+            entry.name.lower()
+            for entry in self.root.iterdir()
+            if entry.is_dir() and REPOSITORY_ID_PATTERN.match(entry.name)
+        )
+
+    def delete_repository(self, repository_id: str) -> bool:
+        """Removes every object of the repository, partial uploads included. False when there was nothing to
+        remove, so deleting twice is harmless."""
+        repository_root = self.root / require_repository_id(repository_id)
+        if not repository_root.is_dir():
+            return False
+        shutil.rmtree(repository_root)
+        return True
+
     def store(self, repository_id: str, oid: str, stream: BinaryIO, size: int) -> None:
         """Reads exactly ``size`` bytes from ``stream`` and stores them under ``oid``.
 

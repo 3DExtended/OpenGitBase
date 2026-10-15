@@ -153,6 +153,43 @@ class PlaintextObjectStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.inventory("../escape")
 
+    def test_delete_repository_removes_its_objects_and_keeps_other_repositories(self) -> None:
+        other_repository = "1a2b3c4d-0000-4000-8000-000000000001"
+        self.store.store(REPOSITORY_ID, oid_of(b"gone"), io.BytesIO(b"gone"), 4)
+        self.store.store(other_repository, oid_of(b"kept"), io.BytesIO(b"kept"), 4)
+
+        self.assertTrue(self.store.delete_repository(REPOSITORY_ID.upper()))
+
+        self.assertFalse((self.store.root / REPOSITORY_ID).exists())
+        self.assertEqual([{"oid": oid_of(b"kept"), "size": 4}], self.store.inventory(other_repository))
+
+    def test_delete_repository_without_objects_succeeds_and_changes_nothing(self) -> None:
+        self.assertFalse(self.store.delete_repository(REPOSITORY_ID))
+        self.store.store(REPOSITORY_ID, oid_of(b"once"), io.BytesIO(b"once"), 4)
+        self.assertTrue(self.store.delete_repository(REPOSITORY_ID))
+        self.assertFalse(self.store.delete_repository(REPOSITORY_ID))
+
+    def test_delete_repository_refuses_an_invalid_repository_id(self) -> None:
+        self.store.store(REPOSITORY_ID, oid_of(b"kept"), io.BytesIO(b"kept"), 4)
+        for repository_id in ("../escape", "", ".", REPOSITORY_ID + "/.."):
+            with self.subTest(repository_id=repository_id):
+                with self.assertRaises(ValueError):
+                    self.store.delete_repository(repository_id)
+        self.assertTrue(self.store.root.is_dir())
+        self.assertEqual(1, len(self.store.inventory(REPOSITORY_ID)))
+
+    def test_repositories_lists_the_repositories_with_lfs_data(self) -> None:
+        other_repository = "1a2b3c4d-0000-4000-8000-000000000001"
+        self.store.store(REPOSITORY_ID, oid_of(b"one"), io.BytesIO(b"one"), 3)
+        self.store.store(other_repository, oid_of(b"two"), io.BytesIO(b"two"), 3)
+        (self.store.root / "not-a-repository").mkdir()
+        (self.store.root / "1a2b3c4d-0000-4000-8000-00000000000f.txt").write_bytes(b"a file")
+
+        self.assertEqual(sorted([REPOSITORY_ID, other_repository]), self.store.repositories())
+
+    def test_repositories_of_a_missing_root_is_empty(self) -> None:
+        self.assertEqual([], storage_lfs.LfsObjectStore(self.temp_dir / "never-created").repositories())
+
     def _leftover_files(self) -> list[Path]:
         return [path for path in self.store.root.rglob("*") if path.is_file()]
 

@@ -394,6 +394,7 @@ public class AntiEntropyReconcilerPendingWritesTests
             services.AddSingleton<ReplicaCatchUpService>();
             services.AddSingleton<Rf1BackfillService>();
             services.AddSingleton<ILfsRepairQueue>(new OpenGitBase.Api.Tests.Services.Lfs.RecordingLfsRepairQueue());
+            services.AddSingleton(Substitute.For<ILfsOrphanCleaner>());
             services.AddTransient<AntiEntropyReconcilerService>();
             services.AddSingleton<GetRepositoryReplicationContextQueryHandler>();
             services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();

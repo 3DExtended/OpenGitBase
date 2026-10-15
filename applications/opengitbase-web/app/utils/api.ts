@@ -175,6 +175,31 @@ export interface AdminRepositoryReplicationDetailDto {
   replicationEpoch: number
   writeQuorumAvailable: boolean
   replicas: AdminRepositoryReplicaStatusDto[]
+  lfs?: AdminRepositoryLfsStatusDto | null
+}
+
+export interface AdminLfsNodeStatusDto {
+  storageNodeId: string
+  nodeId: string
+  kind: 'Plaintext' | 'Encrypted'
+  isPrimary: boolean
+  copies: number
+  missing: number
+}
+
+/** A repository's Git LFS objects and how complete each node's copies are. */
+export interface AdminRepositoryLfsStatusDto {
+  objectCount: number
+  totalBytes: number
+  missingCopies: number
+  nodes: AdminLfsNodeStatusDto[]
+}
+
+export interface AdminLfsFleetSummaryDto {
+  objectCount: number
+  totalBytes: number
+  missingCopies: number
+  repositoriesWithMissingCopies: number
 }
 
 export interface AccountDebugFeatures {
@@ -2878,6 +2903,7 @@ export function createApi(baseUrl: string) {
         },
         getRepository: (repositoryId: string) =>
           request<AdminRepositoryReplicationDetailDto>(`/admin/repositories/${repositoryId}/replication`),
+        getLfsSummary: () => request<AdminLfsFleetSummaryDto>('/admin/lfs/summary'),
       },
       status: {
         getIncident: () => request<PublicStatusIncident | null>('/admin/status/incident'),

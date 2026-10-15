@@ -185,6 +185,55 @@ public class StorageProvisionerClientTests
         }
     }
 
+    [Fact]
+    public async Task TryGetInventoryAsync_ReadsTheRepositoriesWithLfsData()
+    {
+        var withLfs = Guid.NewGuid();
+        var handler = new StubHttpMessageHandler(
+            (_, _) =>
+                Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            $$"""{"plaintextRepositories":[],"artifactRepositories":[],"lfsRepositories":["{{withLfs}}","not-a-guid"]}""",
+                            Encoding.UTF8,
+                            "application/json"
+                        ),
+                    }
+                )
+        );
+
+        var result = await new StorageProvisionerClient(new HttpClient(handler))
+            .TryGetInventoryAsync(CreateNode(), "secret-token", CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal([withLfs], result.LfsRepositories);
+    }
+
+    [Fact]
+    public async Task TryGetInventoryAsync_OfANodeThatReportsNoLfsData_HasNone()
+    {
+        var handler = new StubHttpMessageHandler(
+            (_, _) =>
+                Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{"plaintextRepositories":[],"artifactRepositories":[]}""",
+                            Encoding.UTF8,
+                            "application/json"
+                        ),
+                    }
+                )
+        );
+
+        var result = await new StorageProvisionerClient(new HttpClient(handler))
+            .TryGetInventoryAsync(CreateNode(), "secret-token", CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Empty(result.LfsRepositories);
+    }
+
     private static StorageNodeDto CreateNode() =>
         new()
         {

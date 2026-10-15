@@ -982,6 +982,21 @@
         "primary": "Primary repos",
         "replica": "Replica repos",
         "spare": "Spare"
+      },
+      "lfs": {
+        "title": "Git LFS",
+        "objects": "{count} objects",
+        "stored": "{bytes} stored",
+        "missingCopies": "{count} missing copies",
+        "complete": "All copies present",
+        "plaintext": "Plaintext",
+        "encrypted": "Encrypted",
+        "primary": "Primary",
+        "copies": "{copies} of {total}",
+        "missing": "{count} missing",
+        "restoring": "Restoring LFS objects to {node}: {restored} of {total}",
+        "fleetTitle": "Git LFS across all repositories",
+        "fleetMissing": "{count} missing copies in {repositories} repositories"
       }
     }
   }

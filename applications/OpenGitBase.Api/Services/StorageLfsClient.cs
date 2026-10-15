@@ -8,6 +8,10 @@ namespace OpenGitBase.Api.Services;
 
 public sealed class StorageLfsClient : IStorageLfsClient
 {
+    // The HttpClient has no timeout (transfers bound themselves); deleting a large LFS directory may take a while,
+    // and the node finishes it even when the caller stops waiting.
+    private static readonly TimeSpan DeleteTimeout = TimeSpan.FromMinutes(2);
+
     private readonly HttpClient _httpClient;
 
     public StorageLfsClient(HttpClient httpClient)
@@ -137,6 +141,35 @@ public sealed class StorageLfsClient : IStorageLfsClient
         return new LfsNodeInventory(kind, objects);
     }
 
+    public async Task<bool> DeleteRepositoryAsync(
+        StorageNodeEndpoint node,
+        Guid repositoryId,
+        CancellationToken cancellationToken
+    )
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/lfs/{repositoryId:D}"
+        );
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", node.ApiToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(DeleteTimeout);
+        using var response = await _httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Storage node {node.InternalHost} answered {(int)response.StatusCode} when deleting LFS data.",
+                null,
+                response.StatusCode
+            );
+        }
+
+        var body = await response
+            .Content.ReadFromJsonAsync<DeleteBody>(JsonSerializerOptions.Web, timeout.Token)
+            .ConfigureAwait(false);
+        return body?.Deleted ?? false;
+    }
+
     private static HttpRequestMessage Request(
         HttpMethod method,
         StorageNodeEndpoint node,
@@ -157,4 +190,6 @@ public sealed class StorageLfsClient : IStorageLfsClient
     private sealed record InventoryBody(string? Kind, IReadOnlyList<InventoryItem>? Objects);
 
     private sealed record InventoryItem(string Oid, long Size);
+
+    private sealed record DeleteBody(bool Deleted);
 }
