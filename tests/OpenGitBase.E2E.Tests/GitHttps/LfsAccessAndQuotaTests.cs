@@ -39,8 +39,8 @@ public class LfsAccessAndQuotaTests : E2eTestBase
                 .ConfigureAwait(false);
             await repositories.AddMemberAsync(owner, repository.RepositoryId, reader.UserId, ReaderRole).ConfigureAwait(false);
             await E2eScenarioHelpers.WaitForStorageProvisioningAsync().ConfigureAwait(false);
-            var ownerRemote = await RemoteForAsync(owner, repository).ConfigureAwait(false);
-            var readerRemote = await RemoteForAsync(reader, repository).ConfigureAwait(false);
+            var ownerRemote = await LfsGit.PatRemoteAsync(Context, owner, repository).ConfigureAwait(false);
+            var readerRemote = await LfsGit.PatRemoteAsync(Context, reader, repository).ConfigureAwait(false);
 
             Transcript.Describe("Owner pushes a 1 MB LFS object");
             var ownerDir = Path.Combine(workDir, "owner");
@@ -121,7 +121,7 @@ public class LfsAccessAndQuotaTests : E2eTestBase
 
             // Per-repository overrides need an organization-run storage fleet, so fill the usage instead.
             await SetStorageBytesUsedAsync(repository.RepositoryId, bytesLimit - (2 * 1024 * 1024)).ConfigureAwait(false);
-            var remote = await RemoteForAsync(owner, repository).ConfigureAwait(false);
+            var remote = await LfsGit.PatRemoteAsync(Context, owner, repository).ConfigureAwait(false);
 
             Transcript.Describe("Pushing a 3 MiB LFS object fails with the quota message");
             await LfsGit.InitLfsRepositoryAsync(gitOps, workDir, owner.Username).ConfigureAwait(false);
@@ -168,15 +168,5 @@ public class LfsAccessAndQuotaTests : E2eTestBase
         var stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
         await process.WaitForExitAsync().ConfigureAwait(false);
         Assert.True(process.ExitCode == 0 && stdout.Contains("UPDATE 1", StringComparison.Ordinal), stderr + stdout);
-    }
-
-    private async Task<string> RemoteForAsync(AuthenticatedClient user, RepositorySeed repository)
-    {
-        var patResponse = await user.Client
-            .PostAsync("/git-access-token", new { name = $"lfs-{user.Username}", scope = "write" })
-            .ConfigureAwait(false);
-        var pat = E2eScenarioHelpers.ParsePatToken(patResponse);
-        Context.Normalizer.RegisterToken("PAT", pat);
-        return E2eEnvironment.BuildPatRemoteUrl(repository.OwnerUsername, repository.Slug, pat);
     }
 }

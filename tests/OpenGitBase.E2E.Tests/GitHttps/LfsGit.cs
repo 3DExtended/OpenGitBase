@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using OpenGitBase.E2E.Core;
+using OpenGitBase.E2E.Core.Fixtures;
 
 namespace OpenGitBase.E2E.Tests.GitHttps;
 
@@ -56,6 +57,17 @@ internal static partial class LfsGit
     /// <summary>stderr without the curl trace lines, for assertion messages.</summary>
     public static string WithoutTrace(string stderr) =>
         string.Join('\n', stderr.Split('\n').Where(line => !TraceLine().IsMatch(line)));
+
+    /// <summary>A remote URL with a fresh write-scoped PAT of <paramref name="user"/>, masked in the transcript.</summary>
+    public static async Task<string> PatRemoteAsync(TestIsolation context, AuthenticatedClient user, RepositorySeed repository)
+    {
+        var patResponse = await user.Client
+            .PostAsync("/git-access-token", new { name = $"lfs-{user.Username}", scope = "write" })
+            .ConfigureAwait(false);
+        var pat = E2eScenarioHelpers.ParsePatToken(patResponse);
+        context.Normalizer.RegisterToken("PAT", pat);
+        return E2eEnvironment.BuildPatRemoteUrl(repository.OwnerUsername, repository.Slug, pat);
+    }
 
     public static Task<GitCommandResult> PushAsync(GitOperations gitOps, string workDir, string branch) =>
         gitOps.RunAsync(workDir, ["-c", "credential.helper=", "push", "-u", "origin", branch], HttpTrace);

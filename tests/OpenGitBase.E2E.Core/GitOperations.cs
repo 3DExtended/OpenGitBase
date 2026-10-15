@@ -195,9 +195,13 @@ public sealed class GitOperations : IGitOperations
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git.");
-        var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        var stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        // Both pipes are drained at once: git (and git-lfs with GIT_CURL_VERBOSE) can fill stderr while stdout is
+        // still open, and reading one after the other would then block both processes.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
 
         _transcript.RecordWire(new WireEvent
         {

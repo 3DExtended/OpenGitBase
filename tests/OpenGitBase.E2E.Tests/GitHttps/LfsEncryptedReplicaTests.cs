@@ -57,7 +57,7 @@ public class LfsEncryptedReplicaTests : E2eTestBase
             await LfsGit.InitLfsRepositoryAsync(gitOps, workDir, owner.Username).ConfigureAwait(false);
             await File.WriteAllBytesAsync(Path.Combine(workDir, "marker.bin"), content).ConfigureAwait(false);
             await gitOps.CommitPathsAsync(workDir, "add an lfs object with a plaintext marker").ConfigureAwait(false);
-            await gitOps.AddRemoteAsync(workDir, "origin", await RemoteForAsync(owner, repository).ConfigureAwait(false))
+            await gitOps.AddRemoteAsync(workDir, "origin", await LfsGit.PatRemoteAsync(Context, owner, repository).ConfigureAwait(false))
                 .ConfigureAwait(false);
             var push = await LfsGit.PushAsync(gitOps, workDir, "main").ConfigureAwait(false);
             Assert.True(push.Succeeded, LfsGit.WithoutTrace(push.StdErr));
@@ -152,15 +152,5 @@ public class LfsEncryptedReplicaTests : E2eTestBase
         var stderr = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync().ConfigureAwait(false);
         return (process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
-    }
-
-    private async Task<string> RemoteForAsync(AuthenticatedClient user, RepositorySeed repository)
-    {
-        var patResponse = await user.Client
-            .PostAsync("/git-access-token", new { name = $"lfs-{user.Username}", scope = "write" })
-            .ConfigureAwait(false);
-        var pat = E2eScenarioHelpers.ParsePatToken(patResponse);
-        Context.Normalizer.RegisterToken("PAT", pat);
-        return E2eEnvironment.BuildPatRemoteUrl(repository.OwnerUsername, repository.Slug, pat);
     }
 }
