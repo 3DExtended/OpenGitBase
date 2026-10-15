@@ -11,7 +11,7 @@ const props = withDefaults(defineProps<CollaborationThreadProps>(), {
   members: () => [],
   resolvedLabel: 'Resolved',
   outdatedLabel: 'Outdated',
-  replyCountLabel: (count: number) => `${count} replies`,
+  replyCountLabel: (count: number) => (count === 1 ? '1 reply' : `${count} replies`),
 })
 
 const emit = defineEmits<{

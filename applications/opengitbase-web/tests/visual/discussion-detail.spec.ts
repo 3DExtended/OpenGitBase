@@ -225,6 +225,7 @@ test.describe('Discussion detail page', () => {
     const opening = page.getByTestId('discussion-opening')
     await expect(opening).toContainText('Revised spec: limit pushes to 30 per minute.')
     await expect(opening.getByTestId('discussion-sub-thread-reply')).toContainText('30 matches what CI bursts need.')
+    await expect(opening.getByText('1 reply', { exact: true })).toBeVisible()
     const openingBox = await opening.boundingBox()
     const linkedBox = await page.getByRole('heading', { name: 'Linked discussions' }).boundingBox()
     expect(openingBox!.y).toBeLessThan(linkedBox!.y)
