@@ -83,18 +83,28 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
             .ThenBy(copy => copy.MissingSince)
             .Take(Math.Max(1, _options.MaxRepairsPerRun))
             .ToList();
-        var repairs = new RepairRun(repositoryId, nodes);
+        var run = new RepairRun(repositoryId, nodes, copies);
+        var queue = new Queue<MissingCopy>(due);
+        var attempted = 0;
         var repaired = 0;
-        foreach (var copy in due)
+        while (queue.TryDequeue(out var copy))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await RepairAsync(context, repairs, copy, cancellationToken).ConfigureAwait(false))
+            attempted++;
+            if (await RepairAsync(context, run, copy, cancellationToken).ConfigureAwait(false))
             {
                 repaired++;
             }
+
+            // Encrypted copies that failed verification while serving as a source are re-encrypted in the same run.
+            while (run.Damaged.TryDequeue(out var damaged))
+            {
+                queue.Enqueue(damaged);
+            }
         }
 
-        return new LfsReconcileResult(missing.Count, repaired, due.Count - repaired, missing.Count - due.Count);
+        var found = missing.Count + (attempted - due.Count);
+        return new LfsReconcileResult(found, repaired, attempted - repaired, missing.Count - due.Count);
     }
 
     private static bool IsFailure(Exception exception, CancellationToken cancellationToken) =>
@@ -129,23 +139,44 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
             .Select(replica => new { replica.StorageNodeId, replica.Role })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var primaryNodeId = await context
+            .Set<RepositoryEntity>()
+            .AsNoTracking()
+            .Where(repository => repository.Id == repositoryId)
+            .Select(repository => repository.PrimaryStorageNodeId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // The primary holds plaintext even before it has a replica row (a cold recovery onto a fresh node).
+        var kinds = replicas
+            .GroupBy(replica => replica.StorageNodeId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Any(role => role.Role == RepositoryReplicaRole.EncryptedReplica)
+                    ? LfsObjectCopyKind.Encrypted
+                    : LfsObjectCopyKind.Plaintext
+            );
+        if (primaryNodeId is { } primary)
+        {
+            kinds.TryAdd(primary, LfsObjectCopyKind.Plaintext);
+        }
+
         var healthy = await _queryProcessor
             .RunQueryAsync(new ListHealthyStorageNodesQuery(), cancellationToken)
             .ConfigureAwait(false);
         var healthyById = healthy.IsSome ? healthy.Get().ToDictionary(node => node.Id.Value) : [];
 
         var nodes = new List<NodeState>();
-        foreach (var replica in replicas.GroupBy(replica => replica.StorageNodeId))
+
+        // A stable order, so repairs try their sources the same way every run.
+        foreach (var (nodeId, kind) in kinds.OrderBy(node => node.Key))
         {
             // An unhealthy node is not asked; its rows stay as they are until it is back.
-            if (!healthyById.TryGetValue(replica.Key, out var node))
+            if (!healthyById.TryGetValue(nodeId, out var node))
             {
                 continue;
             }
 
-            var kind = replica.Any(role => role.Role == RepositoryReplicaRole.EncryptedReplica)
-                ? LfsObjectCopyKind.Encrypted
-                : LfsObjectCopyKind.Plaintext;
             var token = await _queryProcessor
                 .RunQueryAsync(new GetStorageNodeApiTokenQuery { StorageNodeId = node.Id }, cancellationToken)
                 .ConfigureAwait(false);
@@ -288,6 +319,11 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
                         repairedFrom = $"{source.Endpoint.InternalHost} (decrypted)";
                         break;
                     }
+
+                    if (attempt.SourceFailedVerification)
+                    {
+                        ForgetDamagedCopy(context, run, copy.Object, source);
+                    }
                 }
             }
         }
@@ -310,6 +346,8 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
 
         if (repairedFrom is null)
         {
+            // Rows of encrypted sources that failed verification go even when nothing was repaired.
+            await SaveAsync(context, run.RepositoryId, cancellationToken).ConfigureAwait(false);
             _logger.LogWarning(
                 "Could not repair LFS object {Oid} of {RepositoryId} on {Node}: {Reason}",
                 oid,
@@ -331,6 +369,27 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
             repairedFrom
         );
         return true;
+    }
+
+    /// <summary>
+    /// An encrypted copy that failed authentication or the oid check is as good as missing: its row goes, and it is
+    /// queued for re-encryption once a plaintext copy exists again.
+    /// </summary>
+    private void ForgetDamagedCopy(OpenGitBaseDbContext context, RepairRun run, RecordedObject recorded, NodeState node)
+    {
+        node.Holding.Remove(recorded.Oid);
+        if (run.Copies.Remove((recorded.Oid, node.Endpoint.StorageNodeId), out var row))
+        {
+            context.Remove(row);
+        }
+
+        run.Damaged.Enqueue(new MissingCopy(recorded, node, DateTimeOffset.MinValue));
+        _logger.LogWarning(
+            "Encrypted copy of LFS object {Oid} of {RepositoryId} on {Node} failed verification; it is re-encrypted from plaintext",
+            recorded.Oid,
+            run.RepositoryId,
+            node.Endpoint.InternalHost
+        );
     }
 
     /// <summary>Saves the bookkeeping. A row another writer changed first only costs this save, never the repairs.</summary>
@@ -363,8 +422,15 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
         public HashSet<string> Holding { get; } = new(StringComparer.Ordinal);
     }
 
-    /// <summary>One run's nodes and its Repository Key, fetched once and only when a repair needs it.</summary>
-    private sealed class RepairRun(Guid repositoryId, IReadOnlyList<NodeState> nodes)
+    /// <summary>
+    /// One run's nodes, copy rows, damaged copies found on the way, and its Repository Key, which is fetched once
+    /// and only when a repair needs it.
+    /// </summary>
+    private sealed class RepairRun(
+        Guid repositoryId,
+        IReadOnlyList<NodeState> nodes,
+        Dictionary<(string Oid, Guid StorageNodeId), LfsObjectCopyEntity> copies
+    )
     {
         private bool _keyFetched;
         private EphemeralRepositoryKey? _key;
@@ -372,6 +438,10 @@ public sealed class LfsCopyReconciler : ILfsCopyReconciler
         public Guid RepositoryId { get; } = repositoryId;
 
         public IReadOnlyList<NodeState> Nodes { get; } = nodes;
+
+        public Dictionary<(string Oid, Guid StorageNodeId), LfsObjectCopyEntity> Copies { get; } = copies;
+
+        public Queue<MissingCopy> Damaged { get; } = new();
 
         public async Task<LfsCipherContext?> CipherAsync(IRepositoryKeyService keys, string oid, CancellationToken cancellationToken)
         {

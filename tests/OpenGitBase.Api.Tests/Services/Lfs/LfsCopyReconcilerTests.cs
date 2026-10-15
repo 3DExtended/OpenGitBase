@@ -145,8 +145,102 @@ public sealed class LfsCopyReconcilerTests : IAsyncDisposable
 
         Assert.Null(_nodes.Find(Primary, _repositoryId, oid, LfsObjectCopyKind.Plaintext));
         Assert.Null(_nodes.Find(ReadReplica, _repositoryId, oid, LfsObjectCopyKind.Plaintext));
-        Assert.Equal((0, 2), (result.Repaired, result.Failed));
+
+        // Both plaintext restores fail, and so do the re-encryptions of the two damaged copies: nothing good is left.
+        Assert.Equal((0, 4), (result.Repaired, result.Failed));
+        Assert.Null(await FindCopyAsync(oid, EncryptedA));
+        Assert.Null(await FindCopyAsync(oid, EncryptedB));
         Assert.Contains(_logger.Entries, entry => entry.Level == LogLevel.Warning && entry.Message.Contains($"Could not repair LFS object {oid} of {_repositoryId} on {Primary}", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReconcileRepositoryAsync_RestoresFromTheOtherEncryptedReplicaAndReEncryptsTheCorruptCopy()
+    {
+        var content = Content("one-corrupt-replica");
+        var oid = await RecordEverywhereAsync(content);
+        _nodes.Remove(Primary, _repositoryId, oid, LfsObjectCopyKind.Plaintext);
+        _nodes.Remove(ReadReplica, _repositoryId, oid, LfsObjectCopyKind.Plaintext);
+
+        // Sources are tried in node-id order: damage the copy that is tried first.
+        var (damagedHost, goodHost) = FakeLfsStorageNodes.NodeId(EncryptedA).CompareTo(FakeLfsStorageNodes.NodeId(EncryptedB)) < 0
+            ? (EncryptedA, EncryptedB)
+            : (EncryptedB, EncryptedA);
+        var damaged = _nodes.Find(damagedHost, _repositoryId, oid, LfsObjectCopyKind.Encrypted)!;
+        damaged[LfsObjectCipher.HeaderBytes + 3] ^= 0x40;
+        _nodes.Store(damagedHost, _repositoryId, oid, LfsObjectCopyKind.Encrypted, damaged);
+
+        var result = await ReconcileAsync();
+
+        Assert.Equal(content, _nodes.Find(Primary, _repositoryId, oid, LfsObjectCopyKind.Plaintext));
+        Assert.Equal(content, _nodes.Find(ReadReplica, _repositoryId, oid, LfsObjectCopyKind.Plaintext));
+        Assert.Equal(content, await DecryptAsync(_nodes.Find(damagedHost, _repositoryId, oid, LfsObjectCopyKind.Encrypted)!, oid));
+        Assert.Equal((3, 3, 0), (result.Missing, result.Repaired, result.Failed));
+        Assert.Contains(_logger.Entries, entry => entry.Level == LogLevel.Warning && entry.Message.Contains($"Encrypted copy of LFS object {oid} of {_repositoryId} on {damagedHost} failed verification", StringComparison.Ordinal));
+        Assert.Contains(_logger.Entries, entry => entry.Message.Contains($"on {Primary} from {goodHost} (decrypted)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ReconcileRepositoryAsync_AfterColdRecovery_DecryptsEveryObjectOntoTheNewPrimary()
+    {
+        var contents = new[] { Content("cold-one"), Content("cold-two"), Content("cold-three") };
+        var oids = new List<string>();
+        foreach (var content in contents)
+        {
+            oids.Add(await RecordEverywhereAsync(content));
+        }
+
+        // What cold recovery leaves behind: the plaintext node is lost, git now lives on a node new to the
+        // repository, and the lost node's plaintext copy rows are gone.
+        _healthy.Remove(Primary);
+        _healthy.Remove(ReadReplica);
+        foreach (var oid in oids)
+        {
+            _nodes.Remove(Primary, _repositoryId, oid, LfsObjectCopyKind.Plaintext);
+            _nodes.Remove(ReadReplica, _repositoryId, oid, LfsObjectCopyKind.Plaintext);
+        }
+
+        await AddReplicaAsync(NewReplica, RepositoryReplicaRole.Primary);
+        await using (var context = await CreateContextAsync())
+        {
+            var repository = await context.Set<RepositoryEntity>().SingleAsync(entity => entity.Id == _repositoryId);
+            repository.PrimaryStorageNodeId = FakeLfsStorageNodes.NodeId(NewReplica);
+            context.RemoveRange(await context.Set<LfsObjectCopyEntity>().Where(copy => copy.Kind == LfsObjectCopyKind.Plaintext).ToListAsync());
+            await context.SaveChangesAsync();
+        }
+
+        _nodes.Kinds[NewReplica] = LfsObjectCopyKind.Plaintext;
+
+        var result = await ReconcileAsync();
+
+        for (var i = 0; i < contents.Length; i++)
+        {
+            Assert.Equal(contents[i], _nodes.Find(NewReplica, _repositoryId, oids[i], LfsObjectCopyKind.Plaintext));
+            Assert.Equal(LfsObjectCopyKind.Plaintext, (await FindCopyAsync(oids[i], NewReplica))?.Kind);
+        }
+
+        Assert.Equal((3, 3, 0, 0), (result.Missing, result.Repaired, result.Failed, result.Remaining));
+        Assert.DoesNotContain(_nodes.Requests, request => request.Uri.Host is Primary or ReadReplica);
+    }
+
+    [Fact]
+    public async Task ReconcileRepositoryAsync_FillsAPrimaryThatHasNoReplicaRowYet()
+    {
+        var content = Content("primary-without-row");
+        var oid = await RecordEverywhereAsync(content);
+        await using (var context = await CreateContextAsync())
+        {
+            var repository = await context.Set<RepositoryEntity>().SingleAsync(entity => entity.Id == _repositoryId);
+            repository.PrimaryStorageNodeId = FakeLfsStorageNodes.NodeId(NewReplica);
+            await context.SaveChangesAsync();
+        }
+
+        _nodes.Kinds[NewReplica] = LfsObjectCopyKind.Plaintext;
+
+        var result = await ReconcileAsync();
+
+        Assert.Equal(content, _nodes.Find(NewReplica, _repositoryId, oid, LfsObjectCopyKind.Plaintext));
+        Assert.Equal(LfsObjectCopyKind.Plaintext, (await FindCopyAsync(oid, NewReplica))?.Kind);
+        Assert.Equal(1, result.Repaired);
     }
 
     [Fact]

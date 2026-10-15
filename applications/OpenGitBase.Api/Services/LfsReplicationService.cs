@@ -312,8 +312,22 @@ public sealed class LfsReplicationService
                 target.InternalHost,
                 encryptedSource.InternalHost
             );
-            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false, IsCipherFailure(ex));
         }
+    }
+
+    /// <summary>Whether the copy itself was bad: HttpClient may wrap what the request content threw.</summary>
+    private static bool IsCipherFailure(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is LfsCipherException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<StorageNodeEndpoint?> ResolveEndpointAsync(

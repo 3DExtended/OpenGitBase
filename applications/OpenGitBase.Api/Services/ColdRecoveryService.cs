@@ -5,6 +5,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Storage;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.StorageNode.Contracts;
 
@@ -17,6 +18,7 @@ public sealed class ColdRecoveryService : IColdRecoveryService
     private readonly IRepositoryKeyService _repositoryKeyService;
     private readonly IEncryptedArtifactService _encryptedArtifactService;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
+    private readonly ILfsRepairQueue _lfsRepairs;
     private readonly ILogger<ColdRecoveryService> _logger;
 
     public ColdRecoveryService(
@@ -25,6 +27,7 @@ public sealed class ColdRecoveryService : IColdRecoveryService
         IRepositoryKeyService repositoryKeyService,
         IEncryptedArtifactService encryptedArtifactService,
         IStorageProvisionerClient storageProvisionerClient,
+        ILfsRepairQueue lfsRepairs,
         ILogger<ColdRecoveryService> logger
     )
     {
@@ -33,6 +36,7 @@ public sealed class ColdRecoveryService : IColdRecoveryService
         _repositoryKeyService = repositoryKeyService;
         _encryptedArtifactService = encryptedArtifactService;
         _storageProvisionerClient = storageProvisionerClient;
+        _lfsRepairs = lfsRepairs;
         _logger = logger;
     }
 
@@ -173,6 +177,14 @@ public sealed class ColdRecoveryService : IColdRecoveryService
         entity.PrimaryWatermark = encryptedReplica.ArtifactWatermark.Value;
         entity.ReplicationState = ReplicationState.Rf4Healthy;
 
+        if (entity.Replicas.All(replica => replica.StorageNodeId != targetNode.Id.Value))
+        {
+            // Routing finds the primary through its replica row; a node new to the repository needs one.
+            entity.Replicas.Add(
+                new RepositoryReplicaEntity { RepositoryId = repositoryId, StorageNodeId = targetNode.Id.Value }
+            );
+        }
+
         foreach (var replica in entity.Replicas)
         {
             if (replica.StorageNodeId == targetNode.Id.Value)
@@ -186,9 +198,39 @@ public sealed class ColdRecoveryService : IColdRecoveryService
             }
         }
 
+        await ForgetLostPlaintextCopiesAsync(context, repositoryId, targetNode.Id.Value, cancellationToken)
+            .ConfigureAwait(false);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Cold recovery completed for repository {RepositoryId}", repositoryId);
+
+        // Git is back and the repository is writable. Its LFS objects are decrypted from the encrypted replicas in
+        // the background; downloads of objects not restored yet answer 503 with Retry-After meanwhile.
+        _lfsRepairs.Schedule(repositoryId);
         return true;
+    }
+
+    /// <summary>
+    /// The plaintext copies on the other nodes went with the git data, so their rows go too: the copy rows then
+    /// show the restore's progress. A node that comes back with its copies gets them recorded again by the next
+    /// LFS reconcile. Rows on the target are kept, so a repeated recovery keeps the copies restored so far.
+    /// </summary>
+    private static async Task ForgetLostPlaintextCopiesAsync(
+        OpenGitBaseDbContext context,
+        Guid repositoryId,
+        Guid targetNodeId,
+        CancellationToken cancellationToken
+    )
+    {
+        var lost = await context
+            .Set<LfsObjectCopyEntity>()
+            .Where(copy =>
+                copy.RepositoryId == repositoryId
+                && copy.Kind == LfsObjectCopyKind.Plaintext
+                && copy.StorageNodeId != targetNodeId
+            )
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        context.RemoveRange(lost);
     }
 
     private async Task<StorageNodeDto?> LoadStorageNodeAsync(

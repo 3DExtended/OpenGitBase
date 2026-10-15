@@ -1,10 +1,11 @@
-using Mapster;
+﻿using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Api.Tests.Services.Lfs;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -113,6 +114,104 @@ public class PromotePrimaryReplicaQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenRf4ReadReplicaIsPromoted_SchedulesAnLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 5
+        );
+
+        await using (provider)
+        {
+            await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal([repositoryId], provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenRf3ReplicaIsPromoted_SchedulesAnLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryHealthy: false,
+            replicaWatermark: 5,
+            primaryWatermark: 2
+        );
+
+        await using (provider)
+        {
+            await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal([repositoryId], provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenThePrimaryIsHealthy_SchedulesNoLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryHealthy: true,
+            replicaWatermark: 5,
+            primaryWatermark: 5
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheReadReplicaLagsAndColdRecoveryFails_SchedulesNoLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 3
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
     private static async Task<(PromotePrimaryReplicaQueryHandler Handler, ServiceProvider Provider)>
         CreateRf4HandlerAsync(
             Guid repositoryId,
@@ -137,6 +236,8 @@ public class PromotePrimaryReplicaQueryHandlerTests
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
 
         var provider = services.BuildServiceProvider();
@@ -243,6 +344,8 @@ public class PromotePrimaryReplicaQueryHandlerTests
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
 
         var provider = services.BuildServiceProvider();
