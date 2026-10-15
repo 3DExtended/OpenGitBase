@@ -76,11 +76,18 @@ The pull updates the file whose first `<!-- forge: #N -->` marker matches, anywh
 
 ## Update existing spec
 
-Edit the spec's opening or continuation comment on the forge (web UI), then:
+Write the **full** new spec to a file, then rewrite it in place and pull:
 
 ```bash
+ogb issue edit 42 --body-file spec.md
 ogb docs pull && git commit -m "docs: sync discussion #42"
 ```
+
+`ogb issue edit` splits the text like `create` (but the first part may hold 16000 characters, since it replaces the opening comment), edits only the parts that changed, and deletes continuation comments a shorter text no longer needs. Re-running it after a failure finishes the job.
+
+It refuses before changing anything when the text needs more parts than the spec has, when someone else published the spec, or when an old spec's body has no opening comment. Then shorten the text, or publish a new issue and dismiss the old one — never post the extra part with `ogb issue comment`, which lands outside the publish burst.
+
+To fix a single comment you wrote: `ogb issue comment-edit <comment-id> --body-file fixed.md` (ids are in `ogb issue view 42 --json`).
 
 `ogb issue comment 42 --body-file note.md` adds a discussion comment (status, audit, follow-up). It does **not** change the mirrored spec.
 
@@ -97,4 +104,5 @@ ogb docs pull && git commit -m "docs: sync discussion #42"
 | Not logged in | Run `ogb auth login`; do not fall back to local-only |
 | Pull fails | Publish still counts; retry pull; warn user |
 | Pull writes `name-N.md` | Another file holds the slug path — usually a duplicate discussion; dismiss or retitle it on the forge |
-| Mirror lacks a late update | It was posted as a new comment; edit the spec comment instead and pull again |
+| Mirror lacks a late update | It was posted as a new comment; fold it into the spec with `ogb issue edit N --body-file spec.md` and pull again |
+| `issue edit` says the text needs more parts | Shorten the text, or publish a new issue with `ogb issue create` and dismiss the old one with `ogb issue close N --reason dismissed` |

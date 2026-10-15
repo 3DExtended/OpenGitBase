@@ -10,6 +10,10 @@ public interface IOutputWriter
 
     void WriteIssueComment(DiscussionCommentModel comment, int issueNumber);
 
+    void WriteIssueCommentEdited(DiscussionCommentModel comment);
+
+    void WriteIssueEdited(int issueNumber, string url, DiscussionSpecRewrite rewrite);
+
     void WriteIssueClosed(DiscussionModel discussion);
 
     void WriteIssueList(IReadOnlyList<DiscussionModel> discussions);

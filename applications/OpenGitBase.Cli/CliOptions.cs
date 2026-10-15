@@ -107,6 +107,12 @@ public static class CliOptions
             Description = "Issue number",
         };
 
+    public static Argument<Guid> CommentIdArgument { get; } =
+        new("COMMENT_ID")
+        {
+            Description = "Comment id (see `ogb issue view NUMBER --json`)",
+        };
+
     public static Argument<int> MergeRequestNumberArgument { get; } =
         new("NUMBER")
         {

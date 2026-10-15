@@ -43,6 +43,30 @@ public sealed class HumanOutputWriter : IOutputWriter
         _output.WriteLine($"Author: {comment.AuthorUsername ?? "unknown"}");
     }
 
+    public void WriteIssueCommentEdited(DiscussionCommentModel comment) =>
+        _output.WriteLine($"Edited comment {comment.Id}.");
+
+    public void WriteIssueEdited(int issueNumber, string url, DiscussionSpecRewrite rewrite)
+    {
+        if (rewrite.Edits.Count == 0 && rewrite.SurplusCommentIds.Count == 0)
+        {
+            _output.WriteLine($"The spec of issue #{issueNumber} already matches; nothing changed.");
+        }
+        else
+        {
+            _output.WriteLine(
+                $"Updated {rewrite.Edits.Count} of {rewrite.PartCount} spec part(s) of issue #{issueNumber}.");
+        }
+
+        if (rewrite.SurplusCommentIds.Count > 0)
+        {
+            _output.WriteLine(
+                $"Removed {rewrite.SurplusCommentIds.Count} spec comment(s) the shorter text no longer needs.");
+        }
+
+        _output.WriteLine(url);
+    }
+
     public void WriteIssueClosed(DiscussionModel discussion)
     {
         _output.WriteLine($"Issue #{discussion.Number} is now {discussion.Status}.");

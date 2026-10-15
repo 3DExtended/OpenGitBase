@@ -8,8 +8,6 @@ public static partial class DocsMirrorExporter
 {
     private static readonly string[] DefaultPrefixes = ["PRD", "ADR", "slice"];
 
-    private static readonly TimeSpan PublishBurstGap = TimeSpan.FromMinutes(10);
-
     private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
 
     public static IReadOnlyList<DiscussionModel> FilterByPrefix(
@@ -57,8 +55,10 @@ public static partial class DocsMirrorExporter
 
     public static string BuildFileContent(DiscussionModel discussion)
     {
-        var parts = CollectDocumentParts(discussion);
-        var text = parts.Count == 0 ? discussion.Title.Trim() : string.Join("\n\n", parts);
+        var parts = DiscussionSpec.CollectParts(discussion);
+        var text = parts.Count == 0
+            ? discussion.Title.Trim()
+            : string.Join("\n\n", parts.Select(part => part.Text));
         return $"{DocsMirrorMarker.Format(discussion.Number)}\n\n{text}\n";
     }
 
@@ -113,55 +113,6 @@ public static partial class DocsMirrorExporter
         }
 
         throw new InvalidOperationException($"Unsupported discussion title for export: {title}");
-    }
-
-    /// <summary>
-    /// The document is the discussion body followed by the creator's top-level comments posted in the
-    /// same publish burst (each within <see cref="PublishBurstGap"/> of the previous post). The API
-    /// echoes the body as the opening comment, and only comments are editable, so that echo replaces the
-    /// body when it matches or has been edited. Later comments (audits, status notes) and comments by
-    /// anyone else stay forge-only.
-    /// </summary>
-    private static List<string> CollectDocumentParts(DiscussionModel discussion)
-    {
-        var parts = new List<string>();
-        var body = discussion.Body?.Trim() ?? string.Empty;
-        if (body.Length > 0)
-        {
-            parts.Add(body);
-        }
-
-        var rootComments = (discussion.Comments ?? [])
-            .Where(comment => comment.ParentCommentId is null)
-            .OrderBy(comment => comment.CreatedAt);
-
-        var previousPostAt = discussion.CreatedAt;
-        var isOpeningComment = true;
-        foreach (var comment in rootComments)
-        {
-            if (!string.Equals(comment.AuthorUsername, discussion.CreatorUsername, StringComparison.Ordinal)
-                || comment.CreatedAt - previousPostAt > PublishBurstGap)
-            {
-                break;
-            }
-
-            previousPostAt = comment.CreatedAt;
-            var text = comment.BodyMarkdown.Trim();
-            var isBodyEcho = isOpeningComment
-                && body.Length > 0
-                && (comment.EditedAt is not null || string.Equals(text, body, StringComparison.Ordinal));
-            isOpeningComment = false;
-            if (isBodyEcho)
-            {
-                parts[0] = text;
-            }
-            else if (text.Length > 0)
-            {
-                parts.Add(text);
-            }
-        }
-
-        return parts;
     }
 
     private static IReadOnlyList<string> NormalizePrefixes(IReadOnlyList<string>? prefixFilters)

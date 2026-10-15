@@ -14,7 +14,12 @@ public static class DiscussionBodySplitter
     /// <summary>Mirrors <c>DiscussionEntityConfiguration</c>: comment <c>BodyMarkdown</c> HasMaxLength(16000).</summary>
     public const int MaxCommentLength = 16000;
 
-    public static IReadOnlyList<string> Split(string? body)
+    /// <param name="body">The full text.</param>
+    /// <param name="firstPartLimit">
+    /// The first part's limit: <see cref="MaxBodyLength"/> when it becomes a discussion body,
+    /// <see cref="MaxCommentLength"/> when it replaces the opening comment of an existing spec.
+    /// </param>
+    public static IReadOnlyList<string> Split(string? body, int firstPartLimit = MaxBodyLength)
     {
         var remaining = body?.Trim() ?? string.Empty;
         if (remaining.Length == 0)
@@ -23,7 +28,7 @@ public static class DiscussionBodySplitter
         }
 
         var parts = new List<string>();
-        var limit = MaxBodyLength;
+        var limit = firstPartLimit;
         while (remaining.Length > limit)
         {
             var cut = FindCut(remaining, limit);

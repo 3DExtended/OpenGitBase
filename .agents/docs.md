@@ -29,7 +29,7 @@ Optional tags on discussions when supported: `prd`, `adr`, `slice`.
 
 1. **Create** — `ogb issue create --title "[PRD] …" --body-file draft.md` (long drafts are split automatically, see below)
 2. **Link slices** — `ogb issue link 43 --parent 42` or `#N` references in bodies
-3. **Update the spec** — edit the opening or continuation comment on the forge (web UI). A *new* comment (`ogb issue comment N`) is discussion — status notes, audits, follow-ups — and stays forge-only.
+3. **Update the spec** — `ogb issue edit N --body-file spec.md` with the full new text (see *Rewriting a spec* below). A *new* comment (`ogb issue comment N`) is discussion — status notes, audits, follow-ups — and stays forge-only.
 4. **Mirror** — `ogb docs pull` → commit `docs/prd/`, `docs/adr/`, `docs/issues/`
 
 ## What a mirror file contains
@@ -45,6 +45,19 @@ The API copies the body into the opening comment. Only comments are editable, so
 **Forge-only (never mirrored):** comments posted after the burst (implementation audits, status and closing notes, `ogb issue comment` updates), comments by anyone other than the creator, and sub-thread replies.
 
 **Long drafts:** `ogb issue create` splits a body over 8000 characters into a body ≤ 8000 plus continuation comments ≤ 16000, cut at blank lines outside code fences, and posts them immediately. Do not split by hand.
+
+## Rewriting a spec
+
+`ogb issue edit N --body-file spec.md` replaces the spec with the full text of `spec.md`, keeping its parts inside the publish burst:
+
+- The text is split the same way, except that the first part goes into the opening comment, which holds up to 16000 characters like any comment. A one-part spec can grow to 16000 in place.
+- Parts are edited in order; parts whose text is unchanged are skipped, so re-running after a failure finishes the job.
+- If the new text needs **fewer** parts, the leftover continuation comments are deleted so the mirror drops them.
+- It refuses, before changing anything, text that needs **more** parts than the spec has (a comment posted now falls outside the burst and is never mirrored), specs you did not publish, and old specs whose body has no opening comment. For those, shorten the text, or publish a new issue and dismiss the old one.
+
+To fix one comment — a typo in a status note, say — use `ogb issue comment-edit <comment-id> --body-file note.md`. Comment ids are in `ogb issue view N --json`; only a comment's author can edit it.
+
+The web UI's card at the top of a discussion shows the original body, which the API cannot change. After an edit, the opening comment below it holds the current text.
 
 ## Where pulled files land
 
