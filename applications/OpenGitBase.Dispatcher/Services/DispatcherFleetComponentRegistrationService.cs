@@ -33,7 +33,16 @@ public sealed class DispatcherFleetComponentRegistrationService : BackgroundServ
         var instanceId = _options.DispatcherId;
         var probeUrl = ResolveProbeUrl(instanceId);
 
-        await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
+        try
+        {
+            await RegisterAsync(instanceId, probeUrl, stoppingToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The API may not be up yet; letting this escape would stop the host. The first heartbeat
+            // tick re-registers, since the API answers a heartbeat from an unknown instance with 404.
+            _logger.LogWarning(ex, "Initial fleet component registration failed for dispatcher {InstanceId}", instanceId);
+        }
 
         var interval = TimeSpan.FromSeconds(Math.Max(5, _options.FleetHeartbeatIntervalSeconds));
         using var timer = new PeriodicTimer(interval);
