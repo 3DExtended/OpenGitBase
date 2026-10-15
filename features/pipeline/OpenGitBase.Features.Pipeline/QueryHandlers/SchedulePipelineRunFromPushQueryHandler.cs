@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
@@ -21,19 +20,24 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
     // OGB_* entries in the job environment, so pipeline files must not be able to set them.
     private const string PlatformVariablePrefix = "OGB_";
 
+    private const string CiFilePath = ".opengitbase-ci.yml";
+
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IMapper _mapper;
     private readonly IJobAvailableEventPublisher _jobAvailableEventPublisher;
+    private readonly IRepositoryFileReader _repositoryFileReader;
 
     public SchedulePipelineRunFromPushQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IMapper mapper,
-        IJobAvailableEventPublisher jobAvailableEventPublisher
+        IJobAvailableEventPublisher jobAvailableEventPublisher,
+        IRepositoryFileReader repositoryFileReader
     )
     {
         _contextFactory = contextFactory;
         _mapper = mapper;
         _jobAvailableEventPublisher = jobAvailableEventPublisher;
+        _repositoryFileReader = repositoryFileReader;
     }
 
     public async Task<Option<PipelineRunId>> RunQueryAsync(
@@ -41,7 +45,11 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         CancellationToken cancellationToken
     )
     {
-        if (query.RepositoryId == Guid.Empty || !GitObjectIds.IsValid(query.AfterSha))
+        if (
+            query.RepositoryId == Guid.Empty
+            || !GitObjectIds.IsValid(query.AfterSha)
+            || GitObjectIds.IsNull(query.AfterSha)
+        )
         {
             return Option<PipelineRunId>.None;
         }
@@ -68,7 +76,14 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             return Option<PipelineRunId>.None;
         }
 
-        var yaml = await TryReadCiFileAsync(repository.PhysicalPath, query.AfterSha, cancellationToken)
+        var yaml = await _repositoryFileReader
+            .ReadTextAsync(
+                repository.Id,
+                repository.PhysicalPath,
+                query.AfterSha,
+                CiFilePath,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(yaml))
         {
@@ -254,33 +269,6 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         }
 
         return 0;
-    }
-
-    private static async Task<string?> TryReadCiFileAsync(
-        string physicalPath,
-        string afterSha,
-        CancellationToken cancellationToken
-    )
-    {
-        var info = new ProcessStartInfo("git")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        info.ArgumentList.Add("--git-dir");
-        info.ArgumentList.Add(physicalPath);
-        info.ArgumentList.Add("show");
-        info.ArgumentList.Add($"{afterSha}:.opengitbase-ci.yml");
-
-        using var process = Process.Start(info);
-        if (process is null)
-        {
-            return null;
-        }
-
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        return process.ExitCode == 0 ? output : null;
     }
 
     private sealed record RepositoryOwnerContext(string OwnerSlug, bool IsOrganization);

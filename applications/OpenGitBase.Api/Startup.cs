@@ -153,6 +153,7 @@ public class Startup
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
+        services.AddScoped<IRepositoryFileReader, StorageRepositoryFileReader>();
         services.AddHttpClient<ILayerStoreClient, LayerStoreClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
