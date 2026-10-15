@@ -9,4 +9,6 @@ public sealed class StorageContentEntryPayload
     public string Type { get; init; } = string.Empty;
 
     public long? Size { get; init; }
+
+    public DateTimeOffset? LastModifiedAt { get; init; }
 }

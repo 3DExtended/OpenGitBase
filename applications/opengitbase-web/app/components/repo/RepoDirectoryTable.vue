@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RepositoryContentEntry } from '~/utils/api'
-import { formatEntrySize, repoBlobPath, repoTreePath } from '~/utils/repoBrowse'
+import { repoBlobPath, repoTreePath } from '~/utils/repoBrowse'
 
 const props = defineProps<{
   owner: string
@@ -32,7 +32,7 @@ function entryIcon(entry: RepositoryContentEntry): string {
             {{ t('repo.browse.nameColumn') }}
           </th>
           <th class="px-4 py-2 font-medium text-right">
-            {{ t('repo.browse.sizeColumn') }}
+            {{ t('repo.browse.lastModifiedColumn') }}
           </th>
         </tr>
       </thead>
@@ -65,8 +65,14 @@ function entryIcon(entry: RepositoryContentEntry): string {
               {{ entry.name }}
             </NuxtLink>
           </td>
-          <td class="px-4 py-2 text-right font-mono text-[var(--ogb-text-muted)]">
-            {{ entry.type === 'tree' ? '—' : formatEntrySize(entry.size) }}
+          <td class="whitespace-nowrap px-4 py-2 text-right font-mono text-[var(--ogb-text-muted)]">
+            <RelativeTime
+              v-if="entry.lastModifiedAt"
+              :iso="entry.lastModifiedAt"
+            />
+            <template v-else>
+              —
+            </template>
           </td>
         </tr>
       </tbody>

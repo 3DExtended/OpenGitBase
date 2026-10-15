@@ -78,6 +78,61 @@ public class StorageContentClientTests
     }
 
     [Fact]
+    public async Task GetTreeAsync_ReadsEachEntrysLastModifiedDate()
+    {
+        const string responseJson =
+            """
+            {
+              "ref": "main",
+              "path": "",
+              "entries": [
+                {
+                  "name": "README.md",
+                  "path": "README.md",
+                  "type": "blob",
+                  "size": 12,
+                  "lastModifiedAt": "2025-02-03T04:05:06Z"
+                },
+                {
+                  "name": "src",
+                  "path": "src",
+                  "type": "tree",
+                  "size": null,
+                  "lastModifiedAt": null
+                }
+              ]
+            }
+            """;
+
+        var handler = new StubHttpMessageHandler(
+            (_, _) =>
+                Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(responseJson, Encoding.UTF8, "application/json"),
+                    }
+                )
+        );
+
+        var client = new StorageContentClient(new HttpClient(handler));
+        var result = await client.GetTreeAsync(
+            CreateTarget(),
+            "secret-token",
+            "/srv/git/repo.git",
+            "main",
+            string.Empty,
+            CancellationToken.None
+        );
+
+        Assert.NotNull(result);
+        Assert.Equal(
+            new DateTimeOffset(2025, 2, 3, 4, 5, 6, TimeSpan.Zero),
+            result!.Entries[0].LastModifiedAt
+        );
+        Assert.Null(result.Entries[1].LastModifiedAt);
+    }
+
+    [Fact]
     public async Task CheckMergeabilityAsync_WhenSuccessful_ReturnsStatus()
     {
         const string responseJson =

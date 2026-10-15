@@ -73,6 +73,13 @@ test.describe('Shell components @regression', () => {
     )
   })
 
+  test('repository directory table', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-repo-directory-table')).toHaveScreenshot(
+      'repo-directory-table.png',
+    )
+  })
+
   test('repository byte override panel', async ({ page }) => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-repo-byte-override')).toHaveScreenshot(

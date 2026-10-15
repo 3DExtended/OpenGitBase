@@ -9,6 +9,20 @@ const { t } = useI18n()
 const colorMode = useColorMode()
 import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
 
+const visualNow = Date.now()
+
+function visualAgo(seconds: number): string {
+  return new Date(visualNow - seconds * 1000).toISOString()
+}
+
+const sampleDirectoryEntries = [
+  { name: 'docs', path: 'docs', type: 'tree', size: null, lastModifiedAt: visualAgo(3 * 86_400) },
+  { name: 'src', path: 'src', type: 'tree', size: null, lastModifiedAt: visualAgo(5 * 3_600) },
+  { name: 'LICENSE', path: 'LICENSE', type: 'blob', size: 1_071, lastModifiedAt: visualAgo(400 * 86_400) },
+  { name: 'README.md', path: 'README.md', type: 'blob', size: 2_048, lastModifiedAt: visualAgo(120) },
+  { name: 'vendor.bin', path: 'vendor.bin', type: 'blob', size: 52_428_800, lastModifiedAt: null },
+]
+
 function memberLabel(userId: string): string {
   return userId === 'user-1' ? 'alice' : 'bob'
 }
@@ -681,6 +695,21 @@ const selfHostOptions = [
           maxAllowedOverride: 2147483648,
           orgContributedNodeCount: 3,
         }"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-repo-directory-table"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Repository directory
+      </h2>
+      <RepoDirectoryTable
+        owner="acme"
+        repo="platform"
+        ref-name="main"
+        :entries="sampleDirectoryEntries"
       />
     </section>
 

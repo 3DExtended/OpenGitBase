@@ -205,5 +205,158 @@ class StorageContentRefInjectionTests(StorageContentTests):
         self.assertEqual(len(resolve_ref(self.repo_path, "main")), 40)
 
 
+class StorageContentLastModifiedTests(unittest.TestCase):
+    """Each listed entry carries the date of the newest commit that changed it."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.mkdtemp()
+        self.repo_path = os.path.join(self.temp_dir, "dated.git")
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", self.repo_path],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.work = Path(self.temp_dir) / "work"
+        self.work.mkdir()
+        self._git("init", "-b", "main")
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _git(self, *args: str, when: str | None = None, check: bool = True) -> None:
+        env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Dated Tester",
+            "GIT_AUTHOR_EMAIL": "dated@example.com",
+            "GIT_COMMITTER_NAME": "Dated Tester",
+            "GIT_COMMITTER_EMAIL": "dated@example.com",
+        }
+        if when is not None:
+            env["GIT_AUTHOR_DATE"] = when
+            env["GIT_COMMITTER_DATE"] = when
+        subprocess.run(
+            ["git", *args],
+            cwd=self.work,
+            env=env,
+            check=check,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def _write(self, files: dict[str, str]) -> None:
+        for relative_path, content in files.items():
+            target = self.work / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+    def _commit(self, files: dict[str, str], when: str) -> None:
+        self._write(files)
+        self._git("add", "-A")
+        self._git("commit", "-m", f"change at {when}", when=when)
+
+    def _push(self) -> None:
+        self._git("push", self.repo_path, "main")
+
+    @staticmethod
+    def _dates(tree: dict) -> dict[str, str | None]:
+        return {entry["name"]: entry["lastModifiedAt"] for entry in tree["entries"]}
+
+    def _commit_history(self) -> None:
+        self._commit(
+            {"README.md": "# v1\n", "LICENSE": "MIT\n", "src/app.ts": "export {}\n"},
+            "2024-01-01T00:00:00+00:00",
+        )
+        self._commit({"src/util.ts": "export const util = 1\n"}, "2024-06-01T12:00:00+00:00")
+        self._commit({"README.md": "# v2\n"}, "2025-02-03T04:05:06+00:00")
+        self._push()
+
+    def test_root_entries_carry_their_last_commit_date(self) -> None:
+        self._commit_history()
+
+        tree = list_tree(self.repo_path, "main", "")
+
+        self.assertEqual(
+            self._dates(tree),
+            {
+                "LICENSE": "2024-01-01T00:00:00Z",
+                "README.md": "2025-02-03T04:05:06Z",
+                "src": "2024-06-01T12:00:00Z",
+            },
+        )
+
+    def test_subdirectory_entries_carry_their_last_commit_date(self) -> None:
+        self._commit_history()
+
+        tree = list_tree(self.repo_path, "main", "src")
+
+        self.assertEqual(
+            self._dates(tree),
+            {
+                "app.ts": "2024-01-01T00:00:00Z",
+                "util.ts": "2024-06-01T12:00:00Z",
+            },
+        )
+
+    def test_dates_follow_the_requested_ref_not_the_newest_branch(self) -> None:
+        self._commit_history()
+        self._git("--git-dir", self.repo_path, "tag", "before-readme", "main~1")
+
+        tree = list_tree(self.repo_path, "before-readme", "")
+
+        self.assertEqual(self._dates(tree)["README.md"], "2024-01-01T00:00:00Z")
+
+    def test_names_that_git_would_quote_are_listed_verbatim_with_dates(self) -> None:
+        self._commit(
+            {"über \"quoted\".md": "x\n", "docs/new\nline.txt": "y\n"},
+            "2024-03-04T05:06:07+00:00",
+        )
+        self._push()
+
+        root = list_tree(self.repo_path, "main", "")
+        docs = list_tree(self.repo_path, "main", "docs")
+
+        self.assertEqual(
+            self._dates(root),
+            {"docs": "2024-03-04T05:06:07Z", "über \"quoted\".md": "2024-03-04T05:06:07Z"},
+        )
+        self.assertEqual(
+            [(entry["name"], entry["path"]) for entry in docs["entries"]],
+            [("new\nline.txt", "docs/new\nline.txt")],
+        )
+        self.assertEqual(self._dates(docs), {"new\nline.txt": "2024-03-04T05:06:07Z"})
+
+    def test_merge_that_resolves_a_conflict_counts_as_a_change(self) -> None:
+        self._commit({"shared.txt": "base\n", "other.txt": "o\n"}, "2024-01-01T00:00:00+00:00")
+        self._git("checkout", "-b", "feature")
+        self._commit({"shared.txt": "feature\n"}, "2024-02-01T00:00:00+00:00")
+        self._git("checkout", "main")
+        self._commit({"shared.txt": "main\n"}, "2024-03-01T00:00:00+00:00")
+        self._git("merge", "feature", check=False)
+        self._write({"shared.txt": "resolved\n"})
+        self._git("add", "shared.txt")
+        self._git("commit", "--no-edit", when="2024-04-01T00:00:00+00:00")
+        self._push()
+
+        tree = list_tree(self.repo_path, "main", "")
+
+        self.assertEqual(
+            self._dates(tree),
+            {"other.txt": "2024-01-01T00:00:00Z", "shared.txt": "2024-04-01T00:00:00Z"},
+        )
+
+    def test_entries_stay_listed_without_dates_once_the_time_budget_runs_out(self) -> None:
+        self._commit_history()
+
+        tree = list_tree(self.repo_path, "main", "", last_modified_budget_seconds=0)
+
+        self.assertEqual(
+            self._dates(tree),
+            {"LICENSE": None, "README.md": None, "src": None},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

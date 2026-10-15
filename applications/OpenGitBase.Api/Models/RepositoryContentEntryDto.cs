@@ -9,4 +9,6 @@ public sealed class RepositoryContentEntryDto
     public string Type { get; init; } = string.Empty;
 
     public long? Size { get; init; }
+
+    public DateTimeOffset? LastModifiedAt { get; init; }
 }

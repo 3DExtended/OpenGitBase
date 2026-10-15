@@ -185,6 +185,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
                     Path = entry.Path,
                     Type = entry.Type,
                     Size = entry.Size,
+                    LastModifiedAt = entry.LastModifiedAt,
                 })
             ),
             ReplicationLag = context.ReplicationLag,

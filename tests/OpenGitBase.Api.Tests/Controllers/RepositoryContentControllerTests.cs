@@ -16,6 +16,8 @@ namespace OpenGitBase.Api.Tests.Controllers;
 
 public class RepositoryContentControllerTests
 {
+    private static readonly DateTimeOffset ReadmeLastModifiedAt = new(2025, 2, 3, 4, 5, 6, TimeSpan.Zero);
+
     [Fact]
     public async Task GetTree_PublicRepository_ReturnsOk()
     {
@@ -34,6 +36,24 @@ public class RepositoryContentControllerTests
         Assert.Equal("main", response.Ref);
         Assert.Single(response.Entries);
         Assert.Equal("README.md", response.Entries[0].Name);
+    }
+
+    [Fact]
+    public async Task GetTree_ReturnsWhenEachEntryWasLastModified()
+    {
+        var ownerId = UserId.From(Guid.NewGuid());
+        var repository = CreateRepository(ownerId, isPrivate: false);
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            configureStorage: ConfigureSuccessfulTree
+        );
+
+        var result = await controller.GetTree("owner", "repo", "main", string.Empty, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<RepositoryContentTreeResponse>(ok.Value);
+        Assert.Equal(ReadmeLastModifiedAt, response.Entries[0].LastModifiedAt);
     }
 
     [Fact]
@@ -138,6 +158,7 @@ public class RepositoryContentControllerTests
                             Path = "README.md",
                             Type = "blob",
                             Size = 12,
+                            LastModifiedAt = ReadmeLastModifiedAt,
                         },
                     ],
                 }

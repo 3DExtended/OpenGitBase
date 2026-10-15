@@ -764,7 +764,7 @@
       "refLabel": "Ref",
       "noRefs": "No refs",
       "nameColumn": "Name",
-      "sizeColumn": "Size",
+      "lastModifiedColumn": "Last modified",
       "emptyDirectory": "This directory is empty.",
       "emptyTitle": "This repository is empty",
       "emptyDescription": "Push commits to this repository to browse files here.",
