@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -50,6 +51,7 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('Shell components @regression', () => {
   test('visual gallery', async ({ page }) => {
+    await freezeClock(page)
     await waitForApp(page)
     await expect(page.getByTestId('visual-gallery')).toHaveScreenshot('visual-gallery.png', {
       fullPage: true,
@@ -171,6 +173,7 @@ test.describe('Discovery screens', () => {
   })
 
   test('profile', async ({ page }) => {
+    await freezeClock(page)
     await page.goto('/demo-user?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('profile.png', {
@@ -182,6 +185,7 @@ test.describe('Discovery screens', () => {
 test.describe('Repository screens', () => {
   test('dashboard', async ({ page }) => {
     await authenticate(page)
+    await freezeClock(page)
     await page.goto('/?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.locator('body')).toHaveScreenshot('dashboard.png', {

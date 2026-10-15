@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { blockServiceWorker, freezeClock } from './helpers'
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
@@ -169,6 +169,7 @@ test.describe('Commit change view', () => {
 
   test('commit page renders diff', async ({ page }) => {
     await installCommitRoutes(page)
+    await freezeClock(page)
     await page.goto(`${baseURL}/demo-user/hello-world/commit/abc123de?from=mr/7`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
     await expect(page.getByText('src/policy.ts')).toBeVisible()

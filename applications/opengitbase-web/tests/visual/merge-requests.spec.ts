@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { blockServiceWorker, freezeClock } from './helpers'
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
 
@@ -197,6 +197,7 @@ test.describe('Merge request visuals', () => {
     await page.addInitScript(() => {
       document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })
+    await freezeClock(page)
     await page.goto(`${baseURL}/__visual__/?msw=1`)
     await page.waitForLoadState('networkidle')
     await disableAnimations(page)
@@ -208,6 +209,7 @@ test.describe('Merge request visuals', () => {
   test('merge request detail page', async ({ page }) => {
     await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
+    await freezeClock(page)
     await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
