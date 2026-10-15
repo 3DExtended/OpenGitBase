@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test'
 import { blockServiceWorker } from './helpers'
 
+// The fixtures carry fixed timestamps that render as relative time ("2 months ago"). Pin the
+// browser clock to when the baselines were captured, as shell.spec.ts does, so that text does
+// not drift as real time passes.
+const VISUAL_NOW = new Date('2026-09-04T12:00:00Z')
+
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(VISUAL_NOW)
+})
+
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
     await document.fonts.ready
