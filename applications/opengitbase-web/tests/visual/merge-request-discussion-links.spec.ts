@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { blockServiceWorker } from './helpers'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 type DiscussionLink = {
   discussionNumber: number
   relationshipType: string
@@ -196,7 +194,7 @@ test.describe('Merge request linked discussions @regression', () => {
 
   test('renders grouped linked discussions sidebar', async ({ page }) => {
     await installLinkedDiscussionsRoutes(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
 
@@ -209,7 +207,7 @@ test.describe('Merge request linked discussions @regression', () => {
 
   test('filters open discussions in accordion picker', async ({ page }) => {
     await installLinkedDiscussionsRoutes(page, { authenticated: true })
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
 
@@ -222,7 +220,7 @@ test.describe('Merge request linked discussions @regression', () => {
 
   test('links another discussion from accordion picker', async ({ page }) => {
     await installLinkedDiscussionsRoutes(page, { authenticated: true })
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
 
@@ -235,7 +233,7 @@ test.describe('Merge request linked discussions @regression', () => {
 
   test('removes a linked discussion', async ({ page }) => {
     await installLinkedDiscussionsRoutes(page, { authenticated: true })
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
 
