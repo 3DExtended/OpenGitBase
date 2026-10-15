@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
+import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
+
 definePageMeta({
   layout: false,
   middleware: 'visual-dev-only',
@@ -7,7 +10,6 @@ definePageMeta({
 const { instanceName, instanceLogoUrl } = useInstanceBranding()
 const { t } = useI18n()
 const colorMode = useColorMode()
-import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
 
 const visualNow = Date.now()
 
@@ -373,39 +375,6 @@ const selfHostOptions = [
       </h2>
       <StorageUsageMeter
         :usage="{ bytesUsed: 900000000, bytesLimit: 1073741824, fileSizeLimit: 52428800 }"
-      />
-    </section>
-
-    <section
-      class="mt-10 max-w-3xl space-y-4"
-      data-testid="visual-discussion-sub-threads"
-    >
-      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
-        Discussion sub-threads
-      </h2>
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.open as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
-      />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.resolved as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
-      />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.orphan as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="false"
-        :can-reply="false"
       />
     </section>
 
@@ -881,6 +850,39 @@ const selfHostOptions = [
           </div>
         </div>
       </UCard>
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-discussion-sub-threads"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Discussion sub-threads
+      </h2>
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.open as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.resolved as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.orphan as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="false"
+        :can-reply="false"
+      />
     </section>
   </div>
 </template>
