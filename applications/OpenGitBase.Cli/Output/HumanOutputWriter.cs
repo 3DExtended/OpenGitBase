@@ -25,16 +25,46 @@ public sealed class HumanOutputWriter : IOutputWriter
         _output.WriteLine($"Logged in to {status.Hostname} as {status.Username}.");
     }
 
-    public void WriteIssueCreated(DiscussionModel discussion, string url)
+    public void WriteIssueCreated(DiscussionModel discussion, string url, int continuationComments)
     {
         _output.WriteLine($"Created issue #{discussion.Number}: {discussion.Title}");
         _output.WriteLine(url);
+        if (continuationComments > 0)
+        {
+            _output.WriteLine(
+                $"Body exceeded {DiscussionBodySplitter.MaxBodyLength} characters; "
+                + $"posted the rest as {continuationComments} continuation comment(s).");
+        }
     }
 
     public void WriteIssueComment(DiscussionCommentModel comment, int issueNumber)
     {
         _output.WriteLine($"Comment added to issue #{issueNumber}.");
         _output.WriteLine($"Author: {comment.AuthorUsername ?? "unknown"}");
+    }
+
+    public void WriteIssueCommentEdited(DiscussionCommentModel comment) =>
+        _output.WriteLine($"Edited comment {comment.Id}.");
+
+    public void WriteIssueEdited(int issueNumber, string url, DiscussionSpecRewrite rewrite)
+    {
+        if (rewrite.Edits.Count == 0 && rewrite.SurplusCommentIds.Count == 0)
+        {
+            _output.WriteLine($"The spec of issue #{issueNumber} already matches; nothing changed.");
+        }
+        else
+        {
+            _output.WriteLine(
+                $"Updated {rewrite.Edits.Count} of {rewrite.PartCount} spec part(s) of issue #{issueNumber}.");
+        }
+
+        if (rewrite.SurplusCommentIds.Count > 0)
+        {
+            _output.WriteLine(
+                $"Removed {rewrite.SurplusCommentIds.Count} spec comment(s) the shorter text no longer needs.");
+        }
+
+        _output.WriteLine(url);
     }
 
     public void WriteIssueClosed(DiscussionModel discussion)

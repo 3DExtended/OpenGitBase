@@ -19,13 +19,14 @@ public sealed class JsonOutputWriter : IOutputWriter
 
     public void WriteAuthStatus(AuthStatusOutput status) => WriteObject(status);
 
-    public void WriteIssueCreated(DiscussionModel discussion, string url) =>
+    public void WriteIssueCreated(DiscussionModel discussion, string url, int continuationComments) =>
         WriteObject(new
         {
             number = discussion.Number,
             title = discussion.Title,
             status = discussion.Status,
             url,
+            continuationComments,
         });
 
     public void WriteIssueComment(DiscussionCommentModel comment, int issueNumber) =>
@@ -35,6 +36,24 @@ public sealed class JsonOutputWriter : IOutputWriter
             commentId = comment.Id,
             author = comment.AuthorUsername,
             createdAt = comment.CreatedAt,
+        });
+
+    public void WriteIssueCommentEdited(DiscussionCommentModel comment) =>
+        WriteObject(new
+        {
+            commentId = comment.Id,
+            author = comment.AuthorUsername,
+            editedAt = comment.EditedAt,
+        });
+
+    public void WriteIssueEdited(int issueNumber, string url, DiscussionSpecRewrite rewrite) =>
+        WriteObject(new
+        {
+            number = issueNumber,
+            url,
+            parts = rewrite.PartCount,
+            updatedParts = rewrite.Edits.Count,
+            removedComments = rewrite.SurplusCommentIds.Count,
         });
 
     public void WriteIssueClosed(DiscussionModel discussion) =>

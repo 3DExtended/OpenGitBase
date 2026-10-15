@@ -267,6 +267,80 @@ public class StorageContentClientTests
         Assert.Equal("Merge has conflicts.", result.ErrorMessage);
     }
 
+    [Fact]
+    public async Task GetBlobAsync_WhenSuccessful_ReturnsPayload()
+    {
+        var handler = new StubHttpMessageHandler(
+            (request, _) =>
+            {
+                Assert.Contains("/internal/repos/content/blob?", request.RequestUri?.ToString());
+                Assert.Contains("path=src%2Fapp.ts", request.RequestUri?.ToString());
+                Assert.Equal("Bearer secret-token", request.Headers.Authorization?.ToString());
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(
+                            """{ "ref": "main", "path": "src/app.ts", "size": 5, "textContent": "hello" }""",
+                            Encoding.UTF8,
+                            "application/json"
+                        ),
+                    }
+                );
+            }
+        );
+
+        var client = new StorageContentClient(new HttpClient(handler));
+        var result = await client.GetBlobAsync(
+            CreateTarget(),
+            "secret-token",
+            "/srv/git/repo.git",
+            "main",
+            "src/app.ts",
+            CancellationToken.None
+        );
+
+        Assert.False(result.IsMissing);
+        Assert.Equal("hello", result.Payload?.TextContent);
+    }
+
+    // A storage node also answers 404 for a revision it lacks, e.g. a replica that has not caught
+    // up yet, and for a repository it does not hold. Only "not_found" says the file is missing.
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "path 'x' does not exist in 'main'", "code": "not_found" }""", true)]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "Unknown revision.", "code": "invalid_ref" }""", false)]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "Repository not found." }""", false)]
+    [InlineData(HttpStatusCode.InternalServerError, """{ "error": "boom", "code": "git_error" }""", false)]
+    [InlineData(HttpStatusCode.BadGateway, "<html>bad gateway</html>", false)]
+    public async Task GetBlobAsync_WhenStorageFails_ReportsMissingOnlyForNotFound(
+        HttpStatusCode status,
+        string body,
+        bool expectedMissing
+    )
+    {
+        var handler = new StubHttpMessageHandler(
+            (_, _) =>
+                Task.FromResult(
+                    new HttpResponseMessage(status)
+                    {
+                        Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                    }
+                )
+        );
+
+        var client = new StorageContentClient(new HttpClient(handler));
+        var result = await client.GetBlobAsync(
+            CreateTarget(),
+            "secret-token",
+            "/srv/git/repo.git",
+            "main",
+            "x",
+            CancellationToken.None
+        );
+
+        Assert.Null(result.Payload);
+        Assert.Equal(expectedMissing, result.IsMissing);
+    }
+
     private static RepositoryRoutingTargetDto CreateTarget() =>
         new()
         {

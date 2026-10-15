@@ -234,7 +234,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             return (RepositoryContentAccessResult.Unavailable(), null);
         }
 
-        var payload = await _storageContentClient
+        var blob = await _storageContentClient
             .GetBlobAsync(
                 context.Target,
                 context.ApiToken,
@@ -244,6 +244,12 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
                 cancellationToken
             )
             .ConfigureAwait(false);
+        if (blob.IsMissing)
+        {
+            return (RepositoryContentAccessResult.NotFound(), null);
+        }
+
+        var payload = blob.Payload;
         if (payload is null)
         {
             return (RepositoryContentAccessResult.Unavailable(), null);
@@ -392,8 +398,16 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
 
         if (!response.IsSuccessStatusCode)
         {
+            var isMissing = await StorageContentClient
+                .IsMissingFileAsync(response, cancellationToken)
+                .ConfigureAwait(false);
             response.Dispose();
-            return (RepositoryContentAccessResult.Unavailable(), null);
+            return (
+                isMissing
+                    ? RepositoryContentAccessResult.NotFound()
+                    : RepositoryContentAccessResult.Unavailable(),
+                null
+            );
         }
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
