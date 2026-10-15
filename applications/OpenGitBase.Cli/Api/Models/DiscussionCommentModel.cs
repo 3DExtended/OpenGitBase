@@ -11,4 +11,8 @@ public sealed class DiscussionCommentModel
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public DateTimeOffset? EditedAt { get; set; }
+
+    public Guid? ParentCommentId { get; set; }
 }

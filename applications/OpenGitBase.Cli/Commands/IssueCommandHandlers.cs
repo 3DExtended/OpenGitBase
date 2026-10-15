@@ -9,15 +9,35 @@ public static class IssueCommandHandlers
         try
         {
             var repo = RepoContextResolver.ResolveRepo(services);
-            var resolvedBody = BodyContentResolver.Resolve(body, bodyFile);
+            var bodyParts = DiscussionBodySplitter.Split(BodyContentResolver.Resolve(body, bodyFile));
             var discussion = await services.ApiClient
                 .CreateDiscussionAsync(
                     repo,
-                    new CreateDiscussionRequest { Title = title, Body = resolvedBody })
+                    new CreateDiscussionRequest { Title = title, Body = bodyParts.FirstOrDefault() })
                 .ConfigureAwait(false);
 
+            for (var index = 1; index < bodyParts.Count; index++)
+            {
+                try
+                {
+                    await services.ApiClient
+                        .CreateCommentAsync(
+                            repo,
+                            discussion.Number,
+                            new CreateDiscussionCommentRequest { BodyMarkdown = bodyParts[index] })
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Created issue #{discussion.Number}, but posting body part {index + 1} of {bodyParts.Count} "
+                        + $"as a comment failed: {ex.Message}",
+                        ex);
+                }
+            }
+
             var url = RepoContextResolver.BuildDiscussionUrl(services.Host, repo, discussion.Number);
-            services.OutputWriter.WriteIssueCreated(discussion, url);
+            services.OutputWriter.WriteIssueCreated(discussion, url, continuationComments: Math.Max(0, bodyParts.Count - 1));
             return CliExitCodes.Success;
         }
         catch (Exception ex)

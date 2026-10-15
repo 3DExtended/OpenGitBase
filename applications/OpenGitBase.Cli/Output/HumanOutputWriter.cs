@@ -25,10 +25,16 @@ public sealed class HumanOutputWriter : IOutputWriter
         _output.WriteLine($"Logged in to {status.Hostname} as {status.Username}.");
     }
 
-    public void WriteIssueCreated(DiscussionModel discussion, string url)
+    public void WriteIssueCreated(DiscussionModel discussion, string url, int continuationComments)
     {
         _output.WriteLine($"Created issue #{discussion.Number}: {discussion.Title}");
         _output.WriteLine(url);
+        if (continuationComments > 0)
+        {
+            _output.WriteLine(
+                $"Body exceeded {DiscussionBodySplitter.MaxBodyLength} characters; "
+                + $"posted the rest as {continuationComments} continuation comment(s).");
+        }
     }
 
     public void WriteIssueComment(DiscussionCommentModel comment, int issueNumber)
