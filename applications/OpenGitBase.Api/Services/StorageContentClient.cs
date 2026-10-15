@@ -36,7 +36,7 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
 ;
     }
 
-    public Task<StorageContentBlobPayload?> GetBlobAsync(
+    public async Task<StorageContentBlobResult> GetBlobAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -47,8 +47,26 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/blob?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
-        return GetJsonAsync<StorageContentBlobPayload>(uri, apiToken, cancellationToken)
-;
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        using var response = await httpClient.SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new StorageContentBlobResult
+            {
+                IsMissing = await IsMissingFileAsync(response, cancellationToken).ConfigureAwait(false),
+            };
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new StorageContentBlobResult
+        {
+            Payload = await JsonSerializer
+                .DeserializeAsync<StorageContentBlobPayload>(stream, JsonOptions, cancellationToken)
+                .ConfigureAwait(false),
+        };
     }
 
     public Task<StorageContentReadmePayload?> GetReadmeAsync(
@@ -280,6 +298,33 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
         using var response = await httpClient.SendAsync(httpRequest, cancellationToken)
             .ConfigureAwait(false);
         return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Whether a failed blob read means the file does not exist at that revision. A storage node
+    /// also answers 404 for a revision it lacks (a replica that has not caught up yet) and for a
+    /// repository it does not hold; only the "not_found" code says the file itself is missing.
+    /// </summary>
+    internal static async Task<bool> IsMissingFileAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        if (response.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return JsonSerializer.Deserialize<StorageContentErrorPayload>(body, JsonOptions)?.Code
+                == "not_found";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task<StorageContentRefsPayload?> GetCombinedRefsAsync(
