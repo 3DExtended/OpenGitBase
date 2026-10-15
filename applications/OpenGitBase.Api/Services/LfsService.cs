@@ -21,6 +21,7 @@ public sealed partial class LfsService
     private readonly LfsOptions _lfsOptions;
     private readonly GitOptions _gitOptions;
     private readonly RepositoryAccessCheckEvaluator _accessEvaluator;
+    private readonly RepositoryStorageQuotaOptions _quotaOptions;
     private readonly IQueryProcessor _queryProcessor;
     private readonly LfsActionTokenService _tokens;
     private readonly IStorageLfsClient _storage;
@@ -30,6 +31,7 @@ public sealed partial class LfsService
         LfsOptions lfsOptions,
         GitOptions gitOptions,
         RepositoryAccessCheckEvaluator accessEvaluator,
+        RepositoryStorageQuotaOptions quotaOptions,
         IQueryProcessor queryProcessor,
         LfsActionTokenService tokens,
         IStorageLfsClient storage,
@@ -39,6 +41,7 @@ public sealed partial class LfsService
         _lfsOptions = lfsOptions;
         _gitOptions = gitOptions;
         _accessEvaluator = accessEvaluator;
+        _quotaOptions = quotaOptions;
         _queryProcessor = queryProcessor;
         _tokens = tokens;
         _storage = storage;
@@ -80,16 +83,9 @@ public sealed partial class LfsService
             return Error(StatusCodes.Status401Unauthorized, "Credentials needed.", requestId);
         }
 
-        var evaluation = await _accessEvaluator
-            .EvaluateAsync(
-                new RepositoryAccessCheckRequest
-                {
-                    AccessToken = request.AccessToken,
-                    RepositoryPath = request.RepositoryPath,
-                    Operation = operation == LfsTransferOperation.Upload
-                        ? RepositoryOperation.WriteGit
-                        : RepositoryOperation.ReadGit,
-                },
+        var evaluation = await EvaluateAccessAsync(
+                request,
+                operation == LfsTransferOperation.Upload ? RepositoryOperation.WriteGit : RepositoryOperation.ReadGit,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -101,7 +97,17 @@ public sealed partial class LfsService
         var access = evaluation.Response!;
         if (!access.Allowed || access.RepositoryId is not { } repositoryId)
         {
-            return Denied(access.Reason, requestId);
+            return await DeniedAsync(request, operation, access.Reason, requestId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (request.Objects.Count > _lfsOptions.MaxBatchObjects)
+        {
+            return Error(
+                StatusCodes.Status413RequestEntityTooLarge,
+                $"Too many objects in one batch: {request.Objects.Count} (maximum {_lfsOptions.MaxBatchObjects}).",
+                requestId
+            );
         }
 
         var validOids = request
@@ -110,6 +116,16 @@ public sealed partial class LfsService
             .Distinct(StringComparer.Ordinal)
             .ToList();
         var recorded = await FindRecordedAsync(repositoryId, validOids, cancellationToken).ConfigureAwait(false);
+        if (operation == LfsTransferOperation.Upload)
+        {
+            var quotaFailure = await CheckQuotaAsync(request, recorded, requestId, cancellationToken)
+                .ConfigureAwait(false);
+            if (quotaFailure is not null)
+            {
+                return quotaFailure;
+            }
+        }
+
         var baseUrl = ResolveBaseUrl(request);
         var objects = request
             .Objects.Select(item =>
@@ -338,16 +354,8 @@ public sealed partial class LfsService
         }
 
         var claims = validation.Claims!;
-        var pathParts = repositoryPath.Split('/');
-        var repository = pathParts.Length == 2
-            ? await _queryProcessor
-                .RunQueryAsync(
-                    new GetRepositoryByOwnerSlugQuery { OwnerSlug = pathParts[0], Slug = pathParts[1] },
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
-            : Option<RepositoryDto>.None;
-        if (repository.IsNone || repository.Get().Id.Value != claims.RepositoryId)
+        var repository = await FindRepositoryAsync(repositoryPath, cancellationToken).ConfigureAwait(false);
+        if (repository is null || repository.Id.Value != claims.RepositoryId)
         {
             return (
                 null,
@@ -356,6 +364,114 @@ public sealed partial class LfsService
         }
 
         return (claims, null);
+    }
+
+    private Task<RepositoryAccessCheckEvaluation> EvaluateAccessAsync(
+        LfsBatchRequest request,
+        RepositoryOperation operation,
+        CancellationToken cancellationToken
+    ) =>
+        _accessEvaluator.EvaluateAsync(
+            new RepositoryAccessCheckRequest
+            {
+                AccessToken = request.AccessToken,
+                RepositoryPath = request.RepositoryPath,
+                Operation = operation,
+            },
+            cancellationToken
+        );
+
+    /// <summary>
+    /// An upload refused for lack of access answers 404 like a clone would, unless the caller can read the
+    /// repository: then its existence is no secret and 403 tells git-lfs (and the user) what is wrong.
+    /// </summary>
+    private async Task<LfsResult> DeniedAsync(
+        LfsBatchRequest request,
+        LfsTransferOperation operation,
+        string? reason,
+        string requestId,
+        CancellationToken cancellationToken
+    )
+    {
+        var denied = Denied(reason, requestId);
+        if (operation != LfsTransferOperation.Upload || denied.StatusCode != StatusCodes.Status404NotFound)
+        {
+            return denied;
+        }
+
+        var read = await EvaluateAccessAsync(request, RepositoryOperation.ReadGit, cancellationToken)
+            .ConfigureAwait(false);
+        var canRead = read.Response is { } response
+            && (response.Allowed || Denied(response.Reason, requestId).StatusCode == StatusCodes.Status503ServiceUnavailable);
+        return canRead
+            ? Error(StatusCodes.Status403Forbidden, "You do not have write access to this repository.", requestId)
+            : denied;
+    }
+
+    /// <summary>
+    /// Objects the repository does not hold yet (each oid once) must fit into what is left of its byte limit,
+    /// the same limit git pushes are checked against.
+    /// </summary>
+    private async Task<LfsResult?> CheckQuotaAsync(
+        LfsBatchRequest request,
+        IReadOnlyDictionary<string, long> recorded,
+        string requestId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_quotaOptions.Enabled)
+        {
+            return null;
+        }
+
+        var pendingBytes = request
+            .Objects.Where(item =>
+                IsValidObject(item) && item.Size <= _lfsOptions.MaxObjectBytes && !recorded.ContainsKey(item.Oid)
+            )
+            .GroupBy(item => item.Oid, StringComparer.Ordinal)
+            .Sum(group => group.Max(item => item.Size));
+        if (pendingBytes == 0)
+        {
+            return null;
+        }
+
+        var repository = await FindRepositoryAsync(request.RepositoryPath, cancellationToken).ConfigureAwait(false);
+        if (repository is null)
+        {
+            return Error(StatusCodes.Status404NotFound, "Repository not found.", requestId);
+        }
+
+        var limit = await _accessEvaluator
+            .ResolveRepositoryBytesLimitAsync(repository, cancellationToken)
+            .ConfigureAwait(false);
+        if (repository.StorageBytesUsed + pendingBytes <= limit)
+        {
+            return null;
+        }
+
+        var left = Math.Max(0, limit - repository.StorageBytesUsed);
+        return Error(
+            StatusCodes.Status507InsufficientStorage,
+            $"Repository storage quota exceeded: the upload needs {pendingBytes} bytes, but only {left} of {limit} bytes are left.",
+            requestId
+        );
+    }
+
+    private async Task<RepositoryDto?> FindRepositoryAsync(string repositoryPath, CancellationToken cancellationToken)
+    {
+        var pathParts = repositoryPath.Split('/');
+        if (pathParts.Length != 2)
+        {
+            return null;
+        }
+
+        var repository = await _queryProcessor
+            .RunQueryAsync(
+                new GetRepositoryByOwnerSlugQuery { OwnerSlug = pathParts[0], Slug = pathParts[1] },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return repository.IsSome ? repository.Get() : null;
     }
 
     private async Task<RepositoryRoutingTargetDto?> FindHealthyPrimaryAsync(
@@ -422,6 +538,15 @@ public sealed partial class LfsService
         if (recorded.TryGetValue(item.Oid, out var recordedSize))
         {
             return new LfsBatchObjectResponse { Oid = item.Oid, Size = recordedSize };
+        }
+
+        if (item.Size > _lfsOptions.MaxObjectBytes)
+        {
+            return ObjectError(
+                item,
+                StatusCodes.Status422UnprocessableEntity,
+                $"Object size {item.Size} bytes exceeds the maximum LFS object size of {_lfsOptions.MaxObjectBytes} bytes."
+            );
         }
 
         var issued = _tokens.Issue(repositoryId, item.Oid, item.Size, LfsTransferOperation.Upload, userId);

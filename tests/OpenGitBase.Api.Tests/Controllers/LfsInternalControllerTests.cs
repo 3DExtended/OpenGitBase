@@ -88,6 +88,7 @@ public class LfsInternalControllerTests
                 new RepositoryStorageQuotaOptions(),
                 new PlatformMergeIdentityOptions()
             ),
+            new RepositoryStorageQuotaOptions(),
             queryProcessor,
             new LfsActionTokenService(new JwtOptions(), lfsOptions, new SystemClock()),
             Substitute.For<IStorageLfsClient>(),

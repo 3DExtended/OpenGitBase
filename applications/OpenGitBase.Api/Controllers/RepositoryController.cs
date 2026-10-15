@@ -219,7 +219,9 @@ public class RepositoryController : ControllerBase
         {
             usage = new RepositoryUsageDto
             {
-                BytesUsed = liveBytes.Value,
+                BytesUsed = liveBytes.Value + usage.LfsBytes,
+                GitBytes = liveBytes.Value,
+                LfsBytes = usage.LfsBytes,
                 BytesLimit = usage.BytesLimit,
                 FileSizeLimit = usage.FileSizeLimit,
             };

@@ -487,6 +487,48 @@ public sealed class RepositoryAccessCheckEvaluator
         );
     }
 
+    /// <summary>
+    /// The byte limit for <paramref name="repositoryDto"/>: its own override, else its organization's quota, else
+    /// the platform default. Git pushes and LFS uploads are checked against the same limit.
+    /// </summary>
+    public async Task<long> ResolveRepositoryBytesLimitAsync(
+        RepositoryDto repositoryDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (repositoryDto.MaxBytesOverride is > 0)
+        {
+            return repositoryDto.MaxBytesOverride.Value;
+        }
+
+        var organizationResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationQuery
+                {
+                    ModelId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (organizationResult.IsNone)
+        {
+            return _quotaOptions.MaxBytes;
+        }
+
+        var quotaResult = await _queryProcessor
+            .RunQueryAsync(
+                new GetOrganizationStorageQuotaQuery
+                {
+                    OrganizationId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        return quotaResult.IsSome ? quotaResult.Get().BytesLimit : _quotaOptions.MaxBytes;
+    }
+
     private async Task<RepositoryAccessCheckResponse?> ResolveOrganizationRepositoryAccessAsync(
         RepositoryDto repositoryDto,
         UserId authenticatingUserId,
@@ -856,43 +898,5 @@ public sealed class RepositoryAccessCheckEvaluator
         }
 
         return RepositoryAccessCheckEvaluation.Completed(response);
-    }
-
-    private async Task<long> ResolveRepositoryBytesLimitAsync(
-        RepositoryDto repositoryDto,
-        CancellationToken cancellationToken
-    )
-    {
-        if (repositoryDto.MaxBytesOverride is > 0)
-        {
-            return repositoryDto.MaxBytesOverride.Value;
-        }
-
-        var organizationResult = await _queryProcessor
-            .RunQueryAsync(
-                new GetOrganizationQuery
-                {
-                    ModelId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-
-        if (organizationResult.IsNone)
-        {
-            return _quotaOptions.MaxBytes;
-        }
-
-        var quotaResult = await _queryProcessor
-            .RunQueryAsync(
-                new GetOrganizationStorageQuotaQuery
-                {
-                    OrganizationId = OrganizationId.From(repositoryDto.OwnerUserId.Value),
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-
-        return quotaResult.IsSome ? quotaResult.Get().BytesLimit : _quotaOptions.MaxBytes;
     }
 }

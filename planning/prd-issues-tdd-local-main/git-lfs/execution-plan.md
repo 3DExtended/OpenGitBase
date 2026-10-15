@@ -10,8 +10,8 @@ Branch strategy: **worktree branch `claude/lfs-implementation-difficulty-1a3fd2`
 
 | Order | ID | Title | Type | Status | Blocked by | Forge | Commit |
 |-------|-----|-------|------|--------|------------|-------|--------|
-| 1 | lfs-01 | Tracer bullet: git lfs push and clone round trip | AFK | done | — | #235 | |
-| 2 | lfs-02 | Permissions, size limits, batch cap and quota | AFK | pending | lfs-01 | #236 | |
+| 1 | lfs-01 | Tracer bullet: git lfs push and clone round trip | AFK | done | — | #235 | 927eaf1 |
+| 2 | lfs-02 | Permissions, size limits, batch cap and quota | AFK | done | lfs-01 | #236 | |
 | 3 | lfs-03 | Encrypted quorum on verify | AFK | pending | lfs-01 | #237 | |
 | 4 | lfs-04 | Pre-receive integrity gate for LFS pointers | AFK | pending | lfs-01 | #238 | |
 | 5 | lfs-05 | Reconciler repair from on-disk LFS inventory | AFK | pending | lfs-03 | #239 | |

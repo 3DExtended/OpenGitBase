@@ -30,10 +30,21 @@ public class LfsServiceTests
     private readonly RepositoryId _repositoryId = RepositoryId.From(Guid.NewGuid());
     private readonly Guid _primaryNodeId = Guid.NewGuid();
     private readonly LfsOptions _lfsOptions = new() { Enabled = true, ActionTokenLifetimeSeconds = 3600 };
+    private readonly RepositoryStorageQuotaOptions _quotaOptions = new() { Enabled = true, MaxBytes = 1_073_741_824 };
+    private readonly RepositoryDto _repository;
     private bool _primaryHealthy = true;
 
     public LfsServiceTests()
     {
+        _repository = new RepositoryDto
+        {
+            Id = _repositoryId,
+            OwnerUserId = _ownerUserId,
+            Slug = "repo",
+            Name = "Repo",
+            PhysicalPath = $"/srv/git/{_repositoryId.Value}.git",
+            StorageNodeId = StorageNodeId.From(_primaryNodeId),
+        };
         _clock.UtcNow.Returns(_ => Now);
         ConfigureOwnerWithToken(GitAccessTokenScopes.Write);
         _queryProcessor
@@ -200,6 +211,147 @@ public class LfsServiceTests
         var result = await CreateService().BatchAsync(request, RequestId, CancellationToken.None);
 
         Assert.Equal(409, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_ByAReadOnlyMember_Answers403()
+    {
+        ConfigureMember(RepositoryRole.Reader);
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(403, result.StatusCode);
+        Assert.Contains("write access", Assert.IsType<LfsErrorBody>(result.Body).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Download_ByAReadOnlyMember_OffersTheObject()
+    {
+        ConfigureMember(RepositoryRole.Reader);
+
+        var result = await CreateService().BatchAsync(DownloadBatch(RecordedOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
+        var body = Assert.IsType<LfsBatchResponseBody>(result.Body);
+        Assert.NotNull(Assert.Single(body.Objects).Actions?.Download);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_ByAnOrganizationMemberWithoutWriteAccess_Answers403()
+    {
+        var member = ConfigureOrganizationRepository(OrganizationMemberRole.Member);
+        ConfigureCaller(member);
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(403, result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("upload")]
+    [InlineData("download")]
+    public async Task BatchAsync_ByANonMemberOfAPrivateRepository_AnswersLikeAMissingRepository(string operation)
+    {
+        _repository.IsPrivate = true;
+        ConfigureMember(RepositoryRole.None);
+        var request = operation == "upload" ? UploadBatch(NewOid) : DownloadBatch(RecordedOid);
+
+        var result = await CreateService().BatchAsync(request, RequestId, CancellationToken.None);
+
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryDto>.None);
+        var missing = await CreateService().BatchAsync(request, RequestId, CancellationToken.None);
+        Assert.Equal(404, result.StatusCode);
+        Assert.Equal(missing.StatusCode, result.StatusCode);
+        Assert.Equal(
+            Assert.IsType<LfsErrorBody>(missing.Body).Message,
+            Assert.IsType<LfsErrorBody>(result.Body).Message
+        );
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_ObjectAboveTheMaximumObjectSize_ReportsAPerObject422WithTheLimit()
+    {
+        _lfsOptions.MaxObjectBytes = 4_000_000;
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
+        var item = Assert.Single(Assert.IsType<LfsBatchResponseBody>(result.Body).Objects);
+        Assert.Null(item.Actions);
+        Assert.Equal(422, item.Error?.Code);
+        Assert.Contains("4000000 bytes", item.Error?.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BatchAsync_WithMoreObjectsThanTheBatchLimit_Answers413()
+    {
+        _lfsOptions.MaxBatchObjects = 2;
+        var oids = Enumerable.Range(1, 3).Select(i => i.ToString("x64")).ToArray();
+
+        var result = await CreateService().BatchAsync(DownloadBatch(oids), RequestId, CancellationToken.None);
+
+        Assert.Equal(413, result.StatusCode);
+        Assert.Contains("2", Assert.IsType<LfsErrorBody>(result.Body).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_WhenNewObjectsExceedTheRepositoryQuota_Answers507WithTheLimit()
+    {
+        _repository.MaxBytesOverride = 4_000_000;
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(507, result.StatusCode);
+        Assert.Contains("4000000 bytes", Assert.IsType<LfsErrorBody>(result.Body).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_CountsEachMissingObjectOnceAgainstTheQuota()
+    {
+        _repository.StorageBytesUsed = 500_000;
+        _repository.MaxBytesOverride = 6_000_000;
+
+        var result = await CreateService()
+            .BatchAsync(UploadBatch(RecordedOid, NewOid, NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_UsesTheOrganizationQuotaWhenTheRepositoryHasNoOverride()
+    {
+        ConfigureOrganizationRepository(OrganizationMemberRole.Owner);
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationStorageQuotaQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(new OrganizationStorageQuotaDto { BytesLimit = 4_000_000 }));
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(507, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_WhenQuotasAreDisabled_IgnoresTheLimit()
+    {
+        _quotaOptions.Enabled = false;
+        _repository.MaxBytesOverride = 1;
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Download_IsAllowedWhenTheRepositoryIsOverQuota()
+    {
+        _repository.StorageBytesUsed = 10_000_000;
+        _repository.MaxBytesOverride = 1_000;
+
+        var result = await CreateService().BatchAsync(DownloadBatch(RecordedOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
     }
 
     [Fact]
@@ -415,9 +567,10 @@ public class LfsServiceTests
                     new WebReadReplicaSelector()
                 ),
                 NullLogger.Instance,
-                new RepositoryStorageQuotaOptions(),
+                _quotaOptions,
                 new PlatformMergeIdentityOptions()
             ),
+            _quotaOptions,
             _queryProcessor,
             CreateTokenService(),
             _storage,
@@ -430,6 +583,60 @@ public class LfsServiceTests
     private string IssueToken(string oid, long size, LfsTransferOperation operation) =>
         CreateTokenService().Issue(_repositoryId.Value, oid, size, operation, _ownerUserId.Value).Token;
 
+    private void ConfigureCaller(UserId caller)
+    {
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<ValidateGitAccessTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(new ValidateGitAccessTokenResult { UserId = caller, Scope = GitAccessTokenScopes.Write }));
+    }
+
+    private void ConfigureMember(RepositoryRole role)
+    {
+        var member = UserId.From(Guid.NewGuid());
+        ConfigureCaller(member);
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryMemberDto { RepositoryId = _repositoryId, UserId = member, Role = role }
+                )
+            );
+    }
+
+    /// <summary>Makes the repository organization-owned; returns a user with <paramref name="role"/> in it.</summary>
+    private UserId ConfigureOrganizationRepository(OrganizationMemberRole role)
+    {
+        var member = UserId.From(Guid.NewGuid());
+        _repository.OwnerKind = "organization";
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationDto
+                    {
+                        Id = OrganizationId.From(_ownerUserId.Value),
+                        Name = "Acme",
+                        Slug = "alice",
+                        OwnerUserId = Guid.NewGuid(),
+                    }
+                )
+            );
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new OrganizationMemberDto
+                    {
+                        OrganizationId = OrganizationId.From(_ownerUserId.Value),
+                        UserId = member,
+                        Role = role,
+                    }
+                )
+            );
+        ConfigureCaller(member);
+        return member;
+    }
+
     private void ConfigureOwnerWithToken(string scope)
     {
         _queryProcessor
@@ -437,19 +644,7 @@ public class LfsServiceTests
             .Returns(Option.From(new ValidateGitAccessTokenResult { UserId = _ownerUserId, Scope = scope }));
         _queryProcessor
             .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Option.From(
-                    new RepositoryDto
-                    {
-                        Id = _repositoryId,
-                        OwnerUserId = _ownerUserId,
-                        Slug = "repo",
-                        Name = "Repo",
-                        PhysicalPath = $"/srv/git/{_repositoryId.Value}.git",
-                        StorageNodeId = StorageNodeId.From(_primaryNodeId),
-                    }
-                )
-            );
+            .Returns(_ => Option.From(_repository));
         _queryProcessor
             .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option<OrganizationDto>.None);
