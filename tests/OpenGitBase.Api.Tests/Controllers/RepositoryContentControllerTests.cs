@@ -1,4 +1,6 @@
-﻿using System.Security.Claims;
+﻿using System.Net;
+using System.Net.Http.Json;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -100,11 +102,135 @@ public class RepositoryContentControllerTests
         Assert.IsType<BadRequestObjectResult>(result);
     }
 
+    [Fact]
+    public async Task GetBlob_WhenFileDoesNotExistAtRef_ReturnsNotFound()
+    {
+        var controller = CreateController(
+            CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false),
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, repository) =>
+            {
+                ConfigureStorageNode(queryProcessor);
+                storageContentClient
+                    .GetBlobAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        repository.PhysicalPath,
+                        "main",
+                        "missing.txt",
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(new StorageContentBlobResult { IsMissing = true });
+            }
+        );
+
+        var result = await controller.GetBlob("owner", "repo", "main", "missing.txt", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task GetBlob_WhenStorageCannotRead_ReturnsServiceUnavailable()
+    {
+        var controller = CreateController(
+            CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false),
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, _) =>
+            {
+                ConfigureStorageNode(queryProcessor);
+                storageContentClient
+                    .GetBlobAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(new StorageContentBlobResult());
+            }
+        );
+
+        var result = await controller.GetBlob("owner", "repo", "main", "README.md", CancellationToken.None);
+
+        Assert.Equal(
+            StatusCodes.Status503ServiceUnavailable,
+            Assert.IsType<StatusCodeResult>(result).StatusCode
+        );
+    }
+
+    // A storage node also answers 404 for a revision it lacks, e.g. a replica that has not caught
+    // up yet. Only "not_found" says the file does not exist; anything else stays unavailable.
+    [Theory]
+    [InlineData("not_found", StatusCodes.Status404NotFound)]
+    [InlineData("invalid_ref", StatusCodes.Status503ServiceUnavailable)]
+    public async Task GetRawBlob_WhenStorageAnswers404_MapsItByCode(string code, int expectedStatus)
+    {
+        var controller = CreateController(
+            CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false),
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, repository) =>
+            {
+                ConfigureStorageNode(queryProcessor);
+                storageContentClient
+                    .GetRawAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        repository.PhysicalPath,
+                        "main",
+                        "missing.txt",
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+                    {
+                        Content = JsonContent.Create(new { error = "Missing.", code }),
+                    });
+            }
+        );
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "missing.txt", CancellationToken.None);
+
+        Assert.Equal(expectedStatus, Assert.IsAssignableFrom<StatusCodeResult>(result).StatusCode);
+    }
+
     private static void ConfigureSuccessfulTree(
         IQueryProcessor queryProcessor,
         IStorageContentClient storageContentClient,
         RepositoryDto repository
     )
+    {
+        ConfigureStorageNode(queryProcessor);
+
+        storageContentClient
+            .GetTreeAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                repository.PhysicalPath,
+                "main",
+                string.Empty,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new StorageContentTreePayload
+                {
+                    Ref = "main",
+                    Path = string.Empty,
+                    Entries =
+                    [
+                        new StorageContentEntryPayload
+                        {
+                            Name = "README.md",
+                            Path = "README.md",
+                            Type = "blob",
+                            Size = 12,
+                            LastModifiedAt = ReadmeLastModifiedAt,
+                        },
+                    ],
+                }
+            );
+    }
+
+    private static void ConfigureStorageNode(IQueryProcessor queryProcessor)
     {
         var storageNodeId = Guid.NewGuid();
         queryProcessor
@@ -135,34 +261,6 @@ public class RepositoryContentControllerTests
         queryProcessor
             .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
             .Returns(Option.From("storage-token"));
-
-        storageContentClient
-            .GetTreeAsync(
-                Arg.Any<RepositoryRoutingTargetDto>(),
-                Arg.Any<string>(),
-                repository.PhysicalPath,
-                "main",
-                string.Empty,
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(
-                new StorageContentTreePayload
-                {
-                    Ref = "main",
-                    Path = string.Empty,
-                    Entries =
-                    [
-                        new StorageContentEntryPayload
-                        {
-                            Name = "README.md",
-                            Path = "README.md",
-                            Type = "blob",
-                            Size = 12,
-                            LastModifiedAt = ReadmeLastModifiedAt,
-                        },
-                    ],
-                }
-            );
     }
 
     private static RepositoryContentController CreateController(

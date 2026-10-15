@@ -21,7 +21,7 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
-    Task<StorageContentBlobPayload?> GetBlobAsync(
+    Task<StorageContentBlobResult> GetBlobAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,

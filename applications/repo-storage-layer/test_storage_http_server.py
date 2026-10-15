@@ -378,6 +378,90 @@ class StorageHttpServerTests(unittest.TestCase):
         self.assertEqual(2, storage_http_server.on_disk_artifact_watermark(repository_id))
 
 
+class StorageHttpMissingBlobTests(unittest.TestCase):
+    """The file endpoints answer 404 for a file that does not exist, never 500.
+
+    The body's code tells a path absent at a revision this node holds (not_found) from a
+    revision the node lacks (invalid_ref), as a replica that has not caught up reports it.
+    """
+
+    def setUp(self) -> None:
+        import subprocess
+        import threading
+        from http.server import ThreadingHTTPServer
+        from unittest import mock
+
+        self.temp_dir = tempfile.mkdtemp()
+        repos_root = Path(self.temp_dir) / "git"
+        self.repo_path = repos_root / "sample.git"
+        work = Path(self.temp_dir) / "work"
+        subprocess.run(
+            ["git", "init", "--bare", "--initial-branch=main", str(self.repo_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(["git", "clone", str(self.repo_path), str(work)], check=True, capture_output=True)
+        (work / "README").write_text("hi", encoding="utf-8")
+        for command in (
+            ["add", "README"],
+            ["-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "init"],
+            ["push", "origin", "main"],
+        ):
+            subprocess.run(["git", "-C", str(work), *command], check=True, capture_output=True)
+
+        for name, value in (
+            ("REPOS_ROOT", repos_root),
+            ("STORAGE_API_TOKEN", "test-token"),
+            ("STORAGE_TOKEN_FILE", str(Path(self.temp_dir) / "no-token-file")),
+        ):
+            patcher = mock.patch.object(storage_http_server, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        quiet = mock.patch.object(storage_http_server.StorageHttpHandler, "log_message")
+        quiet.start()
+        self.addCleanup(quiet.stop)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), storage_http_server.StorageHttpHandler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self) -> None:
+        import shutil
+
+        self.server.shutdown()
+        self.server.server_close()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _get(self, endpoint: str, ref: str, path: str) -> tuple[int, dict]:
+        import json
+        import urllib.error
+        import urllib.request
+        from urllib.parse import urlencode
+
+        query = urlencode({"physicalPath": str(self.repo_path), "ref": ref, "path": path})
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.server.server_address[1]}{endpoint}?{query}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.status, {}
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read())
+
+    def _assert_status(self, ref: str, path: str, status: int, code: str) -> None:
+        for endpoint in ("/internal/repos/content/blob", "/internal/repos/content/blob/raw"):
+            with self.subTest(endpoint=endpoint):
+                actual_status, body = self._get(endpoint, ref, path)
+                self.assertEqual((status, code), (actual_status, body.get("code")))
+
+    def test_a_missing_file_is_404_not_found(self) -> None:
+        self._assert_status("main", "missing.txt", 404, "not_found")
+
+    def test_a_commit_the_node_lacks_is_404_invalid_ref(self) -> None:
+        self._assert_status("1" * 40, "README", 404, "invalid_ref")
+
+
 class StorageImageTests(unittest.TestCase):
     def test_the_image_trusts_repositories_owned_by_the_git_user(self) -> None:
         # Root runs git in repositories that belong to git (create-artifact, content, merges).
