@@ -183,6 +183,17 @@ public class Startup
             Configuration.GetSection("PlatformMergeIdentity").Get<PlatformMergeIdentityOptions>()
                 ?? new PlatformMergeIdentityOptions()
         );
+        services.AddSingleton(Configuration.GetSection("Lfs").Get<LfsOptions>() ?? new LfsOptions());
+        services.AddSingleton<LfsActionTokenService>();
+        services.AddScoped(sp => new RepositoryAccessCheckEvaluator(
+            sp.GetRequiredService<IQueryProcessor>(),
+            sp.GetRequiredService<ISshKeyService>(),
+            sp.GetRequiredService<GitPushEnforcementService>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<RepositoryAccessCheckEvaluator>(),
+            sp.GetRequiredService<RepositoryStorageQuotaOptions>(),
+            sp.GetRequiredService<PlatformMergeIdentityOptions>()
+        ));
+        services.AddScoped<LfsService>();
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()
@@ -379,6 +390,8 @@ public class Startup
         services.AddScoped<IUserContext, UserContextProvider>();
         services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
+            client.Timeout = TimeSpan.FromMinutes(5));
+        services.AddHttpClient<IStorageLfsClient, StorageLfsClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
         services.AddTransient<
             IQueryHandler<

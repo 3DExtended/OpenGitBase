@@ -62,6 +62,18 @@ public class InternalNetworkMiddlewareIntegrationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/api/v1/internal/lfs/batch")]
+    [InlineData("/api/v1/internal/lfs/transfer-check")]
+    [InlineData("/api/v1/internal/lfs/verify")]
+    public async Task LfsInternalPath_ExternalClientForwardedByTrustedProxy_Returns403(string path)
+    {
+        // These take a PAT or an action token from the dispatcher; only the internal network may call them.
+        var response = await SendAsync(path, "203.0.113.10");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     [Fact]
     public async Task E2ePath_ExternalClientForwardedByTrustedProxy_Returns403()
     {

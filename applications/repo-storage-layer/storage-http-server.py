@@ -33,6 +33,7 @@ from storage_content import (
     resolve_ref,
 )
 from storage_commit import get_commit
+import storage_lfs
 from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
@@ -46,6 +47,13 @@ REPLICATE_SCRIPT = os.environ.get("STORAGE_REPLICATE_SCRIPT", "/usr/local/bin/st
 # Serialises artifact swaps against reads, so nobody sees one write's manifest with another's bundle.
 _ARTIFACT_LOCK = threading.Lock()
 REPOS_ROOT = Path("/srv/git")
+# Outside every bare repository directory: import-bundle and cold recovery replace that directory whole.
+LFS_ROOT = Path(os.environ.get("STORAGE_LFS_ROOT", "/srv/git/.lfs"))
+# Loopback only: nginx forwards /lfs/... from the git HTTP port here (see nginx-git-http.conf).
+LFS_TRANSFER_PORT = int(os.environ.get("STORAGE_LFS_TRANSFER_PORT", "8083"))
+INTERNAL_LFS_OBJECT_PATH_PATTERN = re.compile(
+    r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/objects/(?P<oid>[0-9a-f]{64})$"
+)
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
 )
@@ -69,6 +77,15 @@ SYNC_ALLOWED_HOSTS = {
 }
 
 
+def lfs_store() -> storage_lfs.LfsObjectStore:
+    return storage_lfs.LfsObjectStore(LFS_ROOT)
+
+
+def _is_inside_lfs_root(resolved: Path) -> bool:
+    lfs_root = LFS_ROOT.resolve()
+    return resolved == lfs_root or lfs_root in resolved.parents
+
+
 def _is_valid_physical_path(physical_path: str) -> bool:
     if not physical_path:
         return False
@@ -79,6 +96,8 @@ def _is_valid_physical_path(physical_path: str) -> bool:
     except OSError:
         return False
 
+    if _is_inside_lfs_root(resolved):
+        return False
     return resolved == repos_root or repos_root in resolved.parents
 
 
@@ -92,6 +111,8 @@ def _is_deletable_repo_path(physical_path: str) -> bool:
     except OSError:
         return False
 
+    if _is_inside_lfs_root(resolved):
+        return False
     return resolved != repos_root and repos_root in resolved.parents
 
 
@@ -461,12 +482,32 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(500, {"error": exc.message, "code": exc.code})
 
+    def do_HEAD(self) -> None:
+        if not self._check_auth():
+            self.send_error(401)
+            return
+
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(urlparse(self.path).path)
+        if lfs_match:
+            storage_lfs.send_object(
+                self, lfs_store(), lfs_match.group("repository_id").lower(), lfs_match.group("oid"), False
+            )
+            return
+
+        self.send_error(404)
+
     def do_GET(self) -> None:
         if not self._check_auth():
             self.send_error(401)
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            storage_lfs.send_object(
+                self, lfs_store(), lfs_match.group("repository_id").lower(), lfs_match.group("oid"), True
+            )
+            return
         if parsed.path == "/internal/repos/content/branches":
             self._handle_list_branches()
             return
@@ -1228,6 +1269,12 @@ def main() -> None:
         raise SystemExit("STORAGE_API_TOKEN is required")
 
     _backfill_replication_hooks()
+    transfer_server = ThreadingHTTPServer(
+        ("127.0.0.1", LFS_TRANSFER_PORT),
+        storage_lfs.make_transfer_handler(lfs_store(), _is_encrypted_replica),
+    )
+    threading.Thread(target=transfer_server.serve_forever, name="lfs-transfer", daemon=True).start()
+    print(f"storage-http: LFS transfers on 127.0.0.1:{LFS_TRANSFER_PORT}")
     server = ThreadingHTTPServer(("0.0.0.0", STORAGE_HTTP_PORT), StorageHttpHandler)
     print(f"storage-http: listening on 0.0.0.0:{STORAGE_HTTP_PORT}")
     server.serve_forever()
