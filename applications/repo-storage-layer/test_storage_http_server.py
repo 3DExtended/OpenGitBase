@@ -472,6 +472,27 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertNotIn(storage_http_server.LFS_ROOT.resolve(), physical_path.resolve().parents)
 
+    def test_importing_a_bundle_makes_a_former_encrypted_replica_the_plaintext_primary(self) -> None:
+        # Cold recovery may pick a node that held the repository's encrypted copy; once the bundle is imported it is
+        # the primary, so it must take plaintext LFS objects and serve git again.
+        self._set_role("EncryptedReplica")
+        physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        content = b"restored after cold recovery" * 100
+        oid = hashlib.sha256(content).hexdigest()
+
+        status, _, body = self._request(
+            "POST",
+            "/internal/repos/import-bundle",
+            json.dumps(
+                {"physicalPath": str(physical_path), "bundleBase64": base64.b64encode(self._bundle_with_one_commit()).decode()}
+            ).encode(),
+        )
+        put, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", content)
+
+        self.assertEqual(201, status, body)
+        self.assertFalse(storage_http_server._is_encrypted_replica(self.REPOSITORY_ID))
+        self.assertEqual(200, put)
+
     def test_put_stores_a_plaintext_object_verified_against_its_oid(self) -> None:
         content = b"read replica copy" * 500
         oid = hashlib.sha256(content).hexdigest()

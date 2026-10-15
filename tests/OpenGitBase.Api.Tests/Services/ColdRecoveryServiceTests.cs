@@ -110,6 +110,27 @@ public sealed class ColdRecoveryServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task TryRecoverAsync_PrefersANodeWithoutACopyOverOneOfTheEncryptedReplicas()
+    {
+        // The encrypted copies sit on storage-2 and storage-4 (placement follows free space, not node names), so
+        // only storage-3 holds nothing of the repository. Recovering onto storage-4 would leave one encrypted copy.
+        await SeedAsync(encryptedB: Target);
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<ListHealthyStorageNodesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From<IReadOnlyList<StorageNodeDto>>([Node(Target), Node(EncryptedA), Node(EncryptedB)]));
+
+        Assert.True(await CreateService().TryRecoverAsync(_repositoryId));
+
+        await using var context = await CreateContextAsync();
+        var repository = await context.Set<RepositoryEntity>().Include(entity => entity.Replicas).SingleAsync();
+        Assert.Equal(NodeId(EncryptedB), repository.PrimaryStorageNodeId);
+        Assert.Equal(
+            2,
+            repository.Replicas.Count(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)
+        );
+    }
+
+    [Fact]
     public async Task TryRecoverAsync_OnANodeWithoutAReplicaRow_RecordsItAsThePrimaryReplica()
     {
         await SeedAsync();
@@ -228,9 +249,9 @@ public sealed class ColdRecoveryServiceTests : IAsyncDisposable
 
     /// <summary>
     /// RF4 with its plaintext node lost: storage-1 held primary and read replica, storage-2 and storage-3 hold
-    /// encrypted copies, and storage-4 is healthy but holds nothing of the repository.
+    /// encrypted copies (unless given others), and storage-4 is healthy but holds nothing of the repository.
     /// </summary>
-    private async Task SeedAsync()
+    private async Task SeedAsync(string encryptedA = EncryptedA, string encryptedB = EncryptedB)
     {
         await using var context = await CreateContextAsync();
         await context.Database.EnsureCreatedAsync();
@@ -274,14 +295,14 @@ public sealed class ColdRecoveryServiceTests : IAsyncDisposable
                     new RepositoryReplicaEntity
                     {
                         RepositoryId = _repositoryId,
-                        StorageNodeId = NodeId(EncryptedA),
+                        StorageNodeId = NodeId(encryptedA),
                         Role = RepositoryReplicaRole.EncryptedReplica,
                         ArtifactWatermark = Watermark,
                     },
                     new RepositoryReplicaEntity
                     {
                         RepositoryId = _repositoryId,
-                        StorageNodeId = NodeId(EncryptedB),
+                        StorageNodeId = NodeId(encryptedB),
                         Role = RepositoryReplicaRole.EncryptedReplica,
                         ArtifactWatermark = Watermark,
                     },
@@ -300,8 +321,8 @@ public sealed class ColdRecoveryServiceTests : IAsyncDisposable
         );
         context.Set<LfsObjectCopyEntity>().AddRange(
             Copy(LostPrimary, LfsObjectCopyKind.Plaintext),
-            Copy(EncryptedA, LfsObjectCopyKind.Encrypted),
-            Copy(EncryptedB, LfsObjectCopyKind.Encrypted)
+            Copy(encryptedA, LfsObjectCopyKind.Encrypted),
+            Copy(encryptedB, LfsObjectCopyKind.Encrypted)
         );
         await context.SaveChangesAsync();
     }

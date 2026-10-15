@@ -141,10 +141,7 @@ public sealed class ColdRecoveryService : IColdRecoveryService
             .RunQueryAsync(new ListHealthyStorageNodesQuery(), cancellationToken)
             .ConfigureAwait(false);
         var nodes = healthyNodes.IsSome ? healthyNodes.Get() : Array.Empty<StorageNodeDto>();
-        var targetNode = nodes.FirstOrDefault(node =>
-            !string.Equals(node.NodeId, PlatformRf4FleetLayout.EncryptedReplicaNodeIdA, StringComparison.Ordinal)
-            && !string.Equals(node.NodeId, PlatformRf4FleetLayout.EncryptedReplicaNodeIdB, StringComparison.Ordinal)
-        ) ?? nodes.FirstOrDefault();
+        var targetNode = SelectTarget(nodes, entity);
 
         if (targetNode is null)
         {
@@ -208,6 +205,29 @@ public sealed class ColdRecoveryService : IColdRecoveryService
         _lfsRepairs.Schedule(repositoryId);
         return true;
     }
+
+    /// <summary>
+    /// A node that holds no encrypted copy of the repository comes first, so the recovery keeps both encrypted
+    /// copies; placement follows free space, so an encrypted replica can sit on any node. Among those, nodes outside
+    /// the platform's encrypted layout come first. Only when every healthy node holds an encrypted copy does one of
+    /// them become the primary (with one encrypted copy left until backfill adds another).
+    /// </summary>
+    private static StorageNodeDto? SelectTarget(IReadOnlyList<StorageNodeDto> nodes, RepositoryEntity entity)
+    {
+        var encryptedReplicas = entity
+            .Replicas.Where(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)
+            .Select(replica => replica.StorageNodeId)
+            .ToHashSet();
+        var withoutEncryptedCopy = nodes.Where(node => !encryptedReplicas.Contains(node.Id.Value)).ToList();
+        return withoutEncryptedCopy.FirstOrDefault(node => !IsPlatformEncryptedNode(node))
+            ?? withoutEncryptedCopy.FirstOrDefault()
+            ?? nodes.FirstOrDefault(node => !IsPlatformEncryptedNode(node))
+            ?? nodes.FirstOrDefault();
+    }
+
+    private static bool IsPlatformEncryptedNode(StorageNodeDto node) =>
+        string.Equals(node.NodeId, PlatformRf4FleetLayout.EncryptedReplicaNodeIdA, StringComparison.Ordinal)
+        || string.Equals(node.NodeId, PlatformRf4FleetLayout.EncryptedReplicaNodeIdB, StringComparison.Ordinal);
 
     /// <summary>
     /// The plaintext copies on the other nodes went with the git data, so their rows go too: the copy rows then

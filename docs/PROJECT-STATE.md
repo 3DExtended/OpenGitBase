@@ -2,7 +2,7 @@
 
 **Purpose:** Baseline for planning encryption improvements and distributed-system evolution.  
 **Audience:** Agents and engineers entering the codebase cold.  
-**Last updated:** 2026-07-10
+**Last updated:** 2026-10-15
 
 For local setup and ports, see [README.md](../README.md). For feature-level design specs, see [prd/](prd/).
 
@@ -136,6 +136,7 @@ flowchart TB
 | Admin replication dashboard | Done | Web + API |
 | Git HTTPS via HAProxy | Done | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) |
 | Optional SSH git (`--profile ssh`) | Done | Port 2211 via HAProxy |
+| Git LFS over HTTPS | Done, off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
 
 ### 3.4 Testing and ops
 
@@ -259,6 +260,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 | User emails | AES-256-GCM + HMAC lookup hash | [EmailProtectionService.cs](../common/OpenGitBase.Common/Services/EmailProtectionService.cs) → `UserCredentialsEntity.EmailCiphertext` |
 | Storage node API tokens | Same AES-GCM (`EncryptSecret`) | `StorageNodeEntity.ApiTokenProtected` |
 | Fleet dispatcher SSH private key | Same AES-GCM (`EncryptSecret`, stored byte-for-byte, never email-normalized) | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
+| Git LFS objects on encrypted replicas | Segmented AES-256-GCM (1 MiB segments) with the Repository Key, encrypted and decrypted only in the API | [LfsObjectCipher.cs](../applications/OpenGitBase.Api/Services/LfsObjectCipher.cs), `/var/lib/opengitbase/lfs/` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
 | Transport: storage peer sync | mTLS (per-node X.509) | nginx :8443, [docker/pki/](../docker/pki/) |
@@ -269,6 +271,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 ### 6.2 What is NOT encrypted
 
 - **Git repository contents at rest** — plain bare repos on storage node disk (`/srv/git/{repositoryId}.git`)
+- **Git LFS objects on the primary and read replica** — plaintext under `/srv/git/.lfs/{repositoryId}/`
 - **Postgres row data** beyond the fields above (repo metadata, discussions, MRs, etc. are plaintext in DB)
 - **Redis cache** (if used for content cache) — plaintext
 - **Dispatcher ↔ storage git traffic** on :8082/:22 — not mTLS (relies on private network + SSH key or network isolation)
@@ -323,6 +326,8 @@ Registration: [FeatureRegistration.cs](../applications/OpenGitBase.Api/FeatureRe
 | Document | Topic |
 |----------|-------|
 | [ha-storage-replication.md](prd/ha-storage-replication.md) | RF=3 design, watermarks, failover |
+| [git-lfs.md](prd/git-lfs.md) | Git LFS design: four-copy layout, LFS Quorum, encryption format |
+| [git-lfs-operations.md](deployment/git-lfs-operations.md) | LFS sizing, limits (HAProxy, Cloudflare), rollout and rollback |
 | [git-storage-proxy.md](prd/git-storage-proxy.md) | Dispatcher architecture |
 | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) | HTTPS git auth |
 | [merge-requests.md](prd/merge-requests.md) | MR lifecycle design |

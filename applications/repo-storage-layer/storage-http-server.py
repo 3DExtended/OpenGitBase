@@ -1302,6 +1302,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         finally:
             os.unlink(bundle_path)
 
+        # Only cold recovery imports a bundle, and the node it imports to is the repository's new primary. The node
+        # may have held its encrypted copy before; that role must not keep refusing plaintext and git content.
+        _write_repo_role(_repository_id_from_path(physical_path), "Primary")
         self._send_json(201, {"physicalPath": physical_path})
 
     def do_DELETE(self) -> None:
