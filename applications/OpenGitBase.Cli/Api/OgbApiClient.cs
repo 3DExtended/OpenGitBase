@@ -53,6 +53,27 @@ public sealed class OgbApiClient : IOgbApiClient
             request,
             cancellationToken);
 
+    public Task<DiscussionCommentModel> UpdateCommentAsync(
+        RepoSlug repo,
+        Guid commentId,
+        UpdateDiscussionCommentRequest request,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<DiscussionCommentModel>(
+            HttpMethod.Patch,
+            $"{OgbApiClientHelpers.BuildDiscussionsPath(repo)}/comments/{commentId}",
+            request,
+            cancellationToken);
+
+    public Task DeleteCommentAsync(
+        RepoSlug repo,
+        Guid commentId,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<object>(
+            HttpMethod.Delete,
+            $"{OgbApiClientHelpers.BuildDiscussionsPath(repo)}/comments/{commentId}",
+            body: null,
+            cancellationToken);
+
     public Task<DiscussionModel> ResolveDiscussionAsync(
         RepoSlug repo,
         int number,

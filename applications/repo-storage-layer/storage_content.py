@@ -83,9 +83,18 @@ def _run_git_bytes(git_dir: str, *args: str) -> bytes:
     )
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or b"").decode("utf-8", errors="replace").strip()
-        if "bad object" in stderr or "Not a valid object name" in stderr:
+        if (
+            "bad object" in stderr
+            or "Not a valid object name" in stderr
+            or "invalid object name" in stderr
+            or "Needed a single revision" in stderr
+        ):
             raise GitContentError("invalid_ref", stderr or "Invalid ref.")
-        if "exists on disk, but not in" in stderr or "did not match any file" in stderr:
+        if (
+            "does not exist in '" in stderr
+            or "exists on disk, but not in" in stderr
+            or "did not match any file" in stderr
+        ):
             raise GitContentError("not_found", stderr or "Path not found.")
         raise GitContentError("git_error", stderr or "Git command failed.")
     return result.stdout
@@ -186,8 +195,21 @@ def _list_tree_entries(git_dir: str, ref: str, path: str = "") -> dict[str, Any]
     ref = require_rev(ref)
     normalized_path = _normalize_repo_path(path)
     tree_ref = f"{ref}:{normalized_path}" if normalized_path else ref
-    # -z keeps names verbatim; without it git quotes non-ASCII names.
-    output = _run_git_bytes(git_dir, "ls-tree", "-z", tree_ref)
+    try:
+        # -z keeps names verbatim; without it git quotes non-ASCII names.
+        output = _run_git_bytes(git_dir, "ls-tree", "-z", tree_ref)
+    except GitContentError as exc:
+        # ls-tree says "Not a valid object name <rev>:<path>" for a directory the revision
+        # lacks and "not a tree object" for a path naming a file, but words a revision this
+        # repository lacks the same way, e.g. on a replica that has not caught up yet. Only
+        # a revision the repository holds proves the directory is missing.
+        if exc.code != "invalid_ref" and "not a tree object" not in exc.message:
+            raise
+        if not _has_tree(git_dir, ref):
+            raise GitContentError("invalid_ref", f"Unknown revision '{ref}'.") from exc
+        if not normalized_path:
+            raise
+        raise GitContentError("not_found", "Path is not a directory.") from exc
     entries: list[dict[str, Any]] = []
     for record in output.split(b"\0"):
         if not record:
@@ -316,17 +338,39 @@ def _preview_kind(path: str, is_binary: bool) -> str:
     return "text"
 
 
+def _require_blob(git_dir: str, ref: str, path: str) -> str:
+    """Return ``<ref>:<path>`` once it names a file, else raise not_found or invalid_ref."""
+    object_ref = f"{ref}:{path}"
+    try:
+        object_type = _run_git(git_dir, "cat-file", "-t", object_ref).strip()
+    except GitContentError as exc:
+        # Git words a commit this repository lacks like a path that commit lacks ("path 'x'
+        # does not exist in '<sha>'"), e.g. on a replica that has not caught up yet. Only a
+        # revision the repository holds proves the file is missing.
+        if exc.code == "not_found" and not _has_tree(git_dir, ref):
+            raise GitContentError("invalid_ref", f"Unknown revision '{ref}'.") from exc
+        raise
+    if object_type != "blob":
+        raise GitContentError("not_found", "Path is not a file.")
+    return object_ref
+
+
+def _has_tree(git_dir: str, ref: str) -> bool:
+    result = subprocess.run(
+        ["git", "--git-dir", git_dir, "rev-parse", "--verify", "--quiet", f"{ref}^{{tree}}"],
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
 def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
     ref = require_rev(ref)
     normalized_path = _normalize_repo_path(unquote(path))
     if not normalized_path:
         raise GitContentError("invalid_path", "Blob path is required.")
 
-    object_ref = f"{ref}:{normalized_path}"
-    object_type = _run_git(git_dir, "cat-file", "-t", object_ref).strip()
-    if object_type != "blob":
-        raise GitContentError("not_found", "Path is not a file.")
-
+    object_ref = _require_blob(git_dir, ref, normalized_path)
     size = int(_run_git(git_dir, "cat-file", "-s", object_ref).strip())
     raw = subprocess.run(
         ["git", "--git-dir", git_dir, "cat-file", "-p", object_ref],
@@ -360,10 +404,7 @@ def get_raw_bytes(git_dir: str, ref: str, path: str, *, max_bytes: int = RAW_MAX
     normalized_path = _normalize_repo_path(unquote(path))
     if not normalized_path:
         raise GitContentError("invalid_path", "Blob path is required.")
-    object_ref = f"{ref}:{normalized_path}"
-    object_type = _run_git(git_dir, "cat-file", "-t", object_ref).strip()
-    if object_type != "blob":
-        raise GitContentError("not_found", "Path is not a file.")
+    object_ref = _require_blob(git_dir, ref, normalized_path)
     size = int(_run_git(git_dir, "cat-file", "-s", object_ref).strip())
     if size > max_bytes:
         raise GitContentError(

@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',
   repositoryId: '11111111-1111-1111-1111-111111111111',
@@ -99,7 +97,7 @@ test.describe('Discussion detail page blocked /comments path', () => {
     })
 
     const routes = await installBlockedCommentsRoutes(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/discussions/1`)
+    await page.goto('/demo-user/hello-world/discussions/1')
     await page.waitForLoadState('networkidle')
 
     await expect(page.getByRole('heading', { name: 'Architecture review' })).toBeVisible()

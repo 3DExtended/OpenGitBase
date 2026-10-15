@@ -30,6 +30,8 @@ ogb issue create --title "[PRD] Feature name" --body-file /path/to/draft.md
 
 Draft the body locally in a temp file if needed; **publish is the write**. Do not treat `docs/prd/` as the authoring surface.
 
+Bodies over 8000 characters are split by `ogb issue create` into a body plus continuation comments (≤ 16000 each, cut at blank lines outside code fences) and posted immediately — never split by hand.
+
 ## Create ADR
 
 Same as PRD with `[ADR] NNNN — …` title. Link to related PRDs when applicable.
@@ -59,12 +61,35 @@ git add docs/prd docs/adr docs/issues
 git commit -m "docs: sync discussions #42–#48"
 ```
 
+## What gets mirrored
+
+`ogb docs pull` writes, after `<!-- forge: #N -->`:
+
+1. The discussion body.
+2. The creator's top-level comments from the **publish burst** — each posted within 10 minutes of the previous post; the burst ends at the first longer gap or the first comment by someone else.
+
+Parts are joined by one blank line. The API copies the body into the opening comment; that copy replaces the body when it matches or has been edited, so it never appears twice.
+
+Comments posted later (audits, status/closing notes, `ogb issue comment` updates), other authors' comments, and sub-thread replies stay **forge-only**.
+
+The pull updates the file whose first `<!-- forge: #N -->` marker matches, anywhere under `docs/prd`, `docs/adr`, or `docs/issues`. Only discussions without such a file get a new slug path from the title (with a `-N` suffix if that path is taken).
+
 ## Update existing spec
 
+Write the **full** new spec to a file, then rewrite it in place and pull:
+
 ```bash
-ogb issue comment 42 --body-file update.md
+ogb issue edit 42 --body-file spec.md
 ogb docs pull && git commit -m "docs: sync discussion #42"
 ```
+
+`ogb issue edit` splits the text like `create` (but the first part may hold 16000 characters, since it replaces the opening comment), edits only the parts that changed, and deletes continuation comments a shorter text no longer needs. Re-running it after a failure finishes the job.
+
+It refuses before changing anything when the text needs more parts than the spec has, when someone else published the spec, or when an old spec's body has no opening comment. Then shorten the text, or publish a new issue and dismiss the old one — never post the extra part with `ogb issue comment`, which lands outside the publish burst.
+
+To fix a single comment you wrote: `ogb issue comment-edit <comment-id> --body-file fixed.md` (ids are in `ogb issue view 42 --json`).
+
+`ogb issue comment 42 --body-file note.md` adds a discussion comment (status, audit, follow-up). It does **not** change the mirrored spec.
 
 ## Skills that use this workflow
 
@@ -78,3 +103,6 @@ ogb docs pull && git commit -m "docs: sync discussion #42"
 |-----------|--------|
 | Not logged in | Run `ogb auth login`; do not fall back to local-only |
 | Pull fails | Publish still counts; retry pull; warn user |
+| Pull writes `name-N.md` | Another file holds the slug path — usually a duplicate discussion; dismiss or retitle it on the forge |
+| Mirror lacks a late update | It was posted as a new comment; fold it into the spec with `ogb issue edit N --body-file spec.md` and pull again |
+| `issue edit` says the text needs more parts | Shorten the text, or publish a new issue with `ogb issue create` and dismiss the old one with `ogb issue close N --reason dismissed` |

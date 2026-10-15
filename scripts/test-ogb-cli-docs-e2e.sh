@@ -79,11 +79,23 @@ LINKS_OUT="$(ogb --hostname "${API_URL}" issue -R "${OWNER}/${REPO_SLUG}" links 
 echo "${LINKS_OUT}"
 echo "${LINKS_OUT}" | grep -q '#1'
 
+echo "==> ogb issue create with a body over the 8000-character limit"
+LONG_BODY_FILE="${OUTPUT_DIR}/long-prd-body.md"
+for i in $(seq 1 50); do
+  printf '## Section %s\n\n%s\n\n' "${i}" "$(seq 80 | sed "s/.*/word${i}/" | paste -sd' ' -)"
+done > "${LONG_BODY_FILE}"
+printf 'End of long PRD.\n' >> "${LONG_BODY_FILE}"
+LONG_OUT="$(ogb --hostname "${API_URL}" issue -R "${OWNER}/${REPO_SLUG}" create \
+  --title "[PRD] CLI docs long smoke" --body-file "${LONG_BODY_FILE}")"
+echo "${LONG_OUT}"
+echo "${LONG_OUT}" | grep -q 'continuation comment'
+
 echo "==> ogb docs pull"
 PULL_OUT="$(ogb --hostname "${API_URL}" docs -R "${OWNER}/${REPO_SLUG}" pull --output-dir "${OUTPUT_DIR}")"
 echo "${PULL_OUT}"
 test -f "${OUTPUT_DIR}/docs/prd/cli-docs-smoke.md"
 test -f "${OUTPUT_DIR}/docs/issues/docs-01.md"
 grep -q 'forge: #1' "${OUTPUT_DIR}/docs/prd/cli-docs-smoke.md"
+diff <(printf '<!-- forge: #3 -->\n\n'; cat "${LONG_BODY_FILE}") "${OUTPUT_DIR}/docs/prd/cli-docs-long-smoke.md"
 
 echo "All ogb docs/link CLI smoke checks passed."

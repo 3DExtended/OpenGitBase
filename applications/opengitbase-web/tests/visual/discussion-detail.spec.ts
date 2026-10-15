@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',
   repositoryId: '11111111-1111-1111-1111-111111111111',
@@ -180,7 +178,7 @@ async function waitForApp(
     )
   })
   await installDiscussionRoutes(page, detail)
-  await page.goto(`${baseURL}/demo-user/hello-world/discussions/1`)
+  await page.goto('/demo-user/hello-world/discussions/1')
   await page.waitForLoadState('networkidle')
 }
 

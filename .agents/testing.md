@@ -66,3 +66,4 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/check-docs-mirror-freshness.sh` | Compare pull inventory vs git mirror |
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
+| `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |

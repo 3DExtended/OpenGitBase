@@ -6,9 +6,13 @@ public interface IOutputWriter
 {
     void WriteAuthStatus(AuthStatusOutput status);
 
-    void WriteIssueCreated(DiscussionModel discussion, string url);
+    void WriteIssueCreated(DiscussionModel discussion, string url, int continuationComments);
 
     void WriteIssueComment(DiscussionCommentModel comment, int issueNumber);
+
+    void WriteIssueCommentEdited(DiscussionCommentModel comment);
+
+    void WriteIssueEdited(int issueNumber, string url, DiscussionSpecRewrite rewrite);
 
     void WriteIssueClosed(DiscussionModel discussion);
 

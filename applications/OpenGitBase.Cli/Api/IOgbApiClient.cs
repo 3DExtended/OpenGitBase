@@ -16,6 +16,17 @@ public interface IOgbApiClient
         CreateDiscussionCommentRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<DiscussionCommentModel> UpdateCommentAsync(
+        RepoSlug repo,
+        Guid commentId,
+        UpdateDiscussionCommentRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteCommentAsync(
+        RepoSlug repo,
+        Guid commentId,
+        CancellationToken cancellationToken = default);
+
     Task<DiscussionModel> ResolveDiscussionAsync(
         RepoSlug repo,
         int number,
