@@ -159,7 +159,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             return (RepositoryContentAccessResult.Unavailable(), null);
         }
 
-        var payload = await _storageContentClient
+        var tree = await _storageContentClient
             .GetTreeAsync(
                 context.Target,
                 context.ApiToken,
@@ -169,6 +169,12 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
                 cancellationToken
             )
             .ConfigureAwait(false);
+        if (tree.IsMissing)
+        {
+            return (RepositoryContentAccessResult.NotFound(), null);
+        }
+
+        var payload = tree.Payload;
         if (payload is null)
         {
             return (RepositoryContentAccessResult.Unavailable(), null);
@@ -399,7 +405,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
         if (!response.IsSuccessStatusCode)
         {
             var isMissing = await StorageContentClient
-                .IsMissingFileAsync(response, cancellationToken)
+                .IsMissingPathAsync(response, cancellationToken)
                 .ConfigureAwait(false);
             response.Dispose();
             return (

@@ -238,6 +238,59 @@ class StorageContentMissingBlobTests(unittest.TestCase):
         self._assert_read_fails("no-such-branch", "README.md", "invalid_ref")
 
 
+class StorageContentMissingTreeTests(unittest.TestCase):
+    """A listing calls a directory that is absent at a revision this repository holds not_found.
+
+    ls-tree words a revision the repository lacks like a missing directory ("Not a valid
+    object name", "not a tree object"), for example on a replica that has not caught up
+    yet. That case stays invalid_ref, so a lagging replica never claims the directory does
+    not exist.
+    """
+
+    # Shares the sample repository without running StorageContentTests' tests again.
+    setUp = StorageContentTests.setUp
+    tearDown = StorageContentTests.tearDown
+
+    def _assert_listing_fails(self, ref: str, path: str, code: str) -> None:
+        with self.subTest(ref=ref, path=path):
+            with self.assertRaises(GitContentError) as ctx:
+                list_tree(self.repo_path, ref, path)
+            self.assertEqual(ctx.exception.code, code)
+
+    def test_a_directory_missing_at_a_branch_is_not_found(self) -> None:
+        for path in ("missing-dir", "src/missing", "README.md/child"):
+            self._assert_listing_fails("main", path, "not_found")
+
+    def test_a_path_naming_a_file_is_not_found(self) -> None:
+        for path in ("README.md", "src/app.ts"):
+            self._assert_listing_fails("main", path, "not_found")
+
+    def test_a_directory_missing_at_a_commit_sha_is_not_found(self) -> None:
+        self._assert_listing_fails(resolve_ref(self.repo_path, "main"), "missing-dir", "not_found")
+
+    def test_a_commit_the_repository_lacks_is_an_invalid_ref(self) -> None:
+        for path in ("", "src"):
+            self._assert_listing_fails("1" * 40, path, "invalid_ref")
+
+    def test_an_unknown_branch_is_an_invalid_ref(self) -> None:
+        for path in ("", "src"):
+            self._assert_listing_fails("no-such-branch", path, "invalid_ref")
+
+
+class StorageContentResolveRefTests(unittest.TestCase):
+    """resolve_ref calls a revision the repository lacks invalid_ref, not a git failure."""
+
+    setUp = StorageContentTests.setUp
+    tearDown = StorageContentTests.tearDown
+
+    def test_an_unknown_revision_is_an_invalid_ref(self) -> None:
+        for ref in ("no-such-branch", "main~5"):
+            with self.subTest(ref=ref):
+                with self.assertRaises(GitContentError) as ctx:
+                    resolve_ref(self.repo_path, ref)
+                self.assertEqual(ctx.exception.code, "invalid_ref")
+
+
 class StorageContentLastModifiedTests(unittest.TestCase):
     """Each listed entry carries the date of the newest commit that changed it."""
 

@@ -462,6 +462,39 @@ class StorageHttpMissingBlobTests(unittest.TestCase):
         self._assert_status("1" * 40, "README", 404, "invalid_ref")
 
 
+class StorageHttpMissingTreeTests(unittest.TestCase):
+    """The tree and resolve-ref endpoints answer 404 for what does not exist, never 500.
+
+    As for files, the body's code tells a directory absent at a revision this node holds
+    (not_found) from a revision the node lacks (invalid_ref).
+    """
+
+    # Shares the sample repository and server without running the blob tests again.
+    setUp = StorageHttpMissingBlobTests.setUp
+    tearDown = StorageHttpMissingBlobTests.tearDown
+    _get = StorageHttpMissingBlobTests._get
+
+    def _assert_tree_status(self, ref: str, path: str, status: int, code: str) -> None:
+        actual_status, body = self._get("/internal/repos/content/tree", ref, path)
+        self.assertEqual((status, code), (actual_status, body.get("code")))
+
+    def test_a_missing_directory_is_404_not_found(self) -> None:
+        self._assert_tree_status("main", "missing-dir", 404, "not_found")
+
+    def test_a_path_naming_a_file_is_404_not_found(self) -> None:
+        self._assert_tree_status("main", "README", 404, "not_found")
+
+    def test_a_commit_the_node_lacks_is_404_invalid_ref(self) -> None:
+        self._assert_tree_status("1" * 40, "", 404, "invalid_ref")
+
+    def test_an_unknown_branch_is_404_invalid_ref(self) -> None:
+        self._assert_tree_status("no-such-branch", "", 404, "invalid_ref")
+
+    def test_resolving_an_unknown_branch_is_404_invalid_ref(self) -> None:
+        actual_status, body = self._get("/internal/repos/content/resolve-ref", "no-such-branch", "")
+        self.assertEqual((404, "invalid_ref"), (actual_status, body.get("code")))
+
+
 class StorageImageTests(unittest.TestCase):
     def test_the_image_trusts_repositories_owned_by_the_git_user(self) -> None:
         # Root runs git in repositories that belong to git (create-artifact, content, merges).

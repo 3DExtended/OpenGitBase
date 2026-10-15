@@ -83,7 +83,12 @@ def _run_git_bytes(git_dir: str, *args: str) -> bytes:
     )
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or b"").decode("utf-8", errors="replace").strip()
-        if "bad object" in stderr or "Not a valid object name" in stderr or "invalid object name" in stderr:
+        if (
+            "bad object" in stderr
+            or "Not a valid object name" in stderr
+            or "invalid object name" in stderr
+            or "Needed a single revision" in stderr
+        ):
             raise GitContentError("invalid_ref", stderr or "Invalid ref.")
         if (
             "does not exist in '" in stderr
@@ -190,8 +195,21 @@ def _list_tree_entries(git_dir: str, ref: str, path: str = "") -> dict[str, Any]
     ref = require_rev(ref)
     normalized_path = _normalize_repo_path(path)
     tree_ref = f"{ref}:{normalized_path}" if normalized_path else ref
-    # -z keeps names verbatim; without it git quotes non-ASCII names.
-    output = _run_git_bytes(git_dir, "ls-tree", "-z", tree_ref)
+    try:
+        # -z keeps names verbatim; without it git quotes non-ASCII names.
+        output = _run_git_bytes(git_dir, "ls-tree", "-z", tree_ref)
+    except GitContentError as exc:
+        # ls-tree says "Not a valid object name <rev>:<path>" for a directory the revision
+        # lacks and "not a tree object" for a path naming a file, but words a revision this
+        # repository lacks the same way, e.g. on a replica that has not caught up yet. Only
+        # a revision the repository holds proves the directory is missing.
+        if exc.code != "invalid_ref" and "not a tree object" not in exc.message:
+            raise
+        if not _has_tree(git_dir, ref):
+            raise GitContentError("invalid_ref", f"Unknown revision '{ref}'.") from exc
+        if not normalized_path:
+            raise
+        raise GitContentError("not_found", "Path is not a directory.") from exc
     entries: list[dict[str, Any]] = []
     for record in output.split(b"\0"):
         if not record:

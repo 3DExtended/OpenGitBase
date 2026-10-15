@@ -12,7 +12,7 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
-    Task<StorageContentTreePayload?> GetTreeAsync(
+    Task<StorageContentTreeResult> GetTreeAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
