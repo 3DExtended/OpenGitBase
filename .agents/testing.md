@@ -67,3 +67,4 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |
+| `applications/OpenGitBase.Dispatcher/scripts/ssh-git-session-test.sh` | SSH git through the dispatcher's sshd to a stub storage node: login, session environment, key permissions (builds the image; needs Docker) |

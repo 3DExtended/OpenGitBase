@@ -18,6 +18,13 @@ if [ -z "$SSH_KEY_FP" ]; then
     exit 1
 fi
 
+# sshd runs this hook with a minimal environment; entrypoint.sh saves the container settings here.
+SESSION_ENV_FILE=/etc/opengitbase/dispatcher-session.env
+if [ -r "$SESSION_ENV_FILE" ]; then
+    # shellcheck source=/dev/null
+    . "$SESSION_ENV_FILE"
+fi
+
 API_URL="${DISPATCHER_API_URL:-http://api:8080}"
 RESPONSE_FILE="$(mktemp)"
 trap 'rm -f "$RESPONSE_FILE"' EXIT

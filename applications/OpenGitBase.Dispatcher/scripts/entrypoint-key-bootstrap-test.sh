@@ -171,6 +171,30 @@ assert_failed_bootstrap() {
   fi
 }
 
+# sshd runs SSH git sessions as git: git may read the key (group, 640) but not replace it.
+assert_key_readable_by_session_user() {
+  local name="$1" key_mode dir_mode
+  key_mode=$(docker exec "${name}" stat -c '%a %U:%G' "${KEY_PATH}" 2>/dev/null || echo unknown)
+  dir_mode=$(docker exec "${name}" stat -c '%a %U:%G' "$(dirname "${KEY_PATH}")" 2>/dev/null || echo unknown)
+  if [ "${key_mode}" = "640 root:git" ] && [ "${dir_mode}" = "750 root:git" ]; then
+    pass "${name}: key 640 root:git in a 750 root:git directory"
+  else
+    fail "${name}: key ${key_mode}, directory ${dir_mode}; want 640 root:git and 750 root:git"
+  fi
+}
+
+# The entrypoint writes the session environment file after it has secured the key.
+wait_for_session_env() {
+  local name="$1" i
+  for i in $(seq 1 "${WAIT_SECONDS}"); do
+    if docker exec "${name}" test -f /etc/opengitbase/dispatcher-session.env 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 assert_installed_key() {
   local name="$1" mode stray
   if ! wait_for_bootstrap_outcome "${name}"; then
@@ -188,12 +212,7 @@ assert_installed_key() {
   else
     fail "${name}: key file differs from the served key"
   fi
-  mode=$(docker exec "${name}" stat -c '%a' "${KEY_PATH}" 2>/dev/null || echo unknown)
-  if [ "${mode}" = "600" ]; then
-    pass "${name}: key file mode 600"
-  else
-    fail "${name}: key file mode ${mode}, want 600"
-  fi
+  assert_key_readable_by_session_user "${name}"
   stray=$(stray_key_dir_files "${name}")
   if [ -z "${stray}" ]; then
     pass "${name}: no temp files left"
@@ -208,7 +227,7 @@ require_cmd ssh-keygen
 require_cmd mktemp
 
 TMP=$(mktemp -d)
-mkdir -p "${TMP}/stub" "${TMP}/empty-key/secrets"
+mkdir -p "${TMP}/stub" "${TMP}/empty-key/secrets" "${TMP}/root-only-key/secrets"
 
 echo "==> Generating a throwaway storage SSH key and the stub responses"
 ssh-keygen -q -t ed25519 -N '' -C "entrypoint-test" -f "${TMP}/key"
@@ -239,6 +258,10 @@ chmod 755 "${TMP}/stub"
 chmod 644 "${TMP}/stub/"*
 # An empty key file as the old entrypoint left it after a failed fetch.
 : >"${TMP}/empty-key/secrets/dispatcher_storage_ssh"
+# A valid key as older entrypoints installed it: root-only, so SSH sessions (git) could not read it.
+cp "${TMP}/key" "${TMP}/root-only-key/secrets/dispatcher_storage_ssh"
+chmod 700 "${TMP}/root-only-key/secrets"
+chmod 600 "${TMP}/root-only-key/secrets/dispatcher_storage_ssh"
 
 echo "==> Building ${IMAGE_TAG}"
 docker build -q -t "${IMAGE_TAG}" "${APP_DIR}" >/dev/null
@@ -259,6 +282,9 @@ create_dispatcher "${RUN_ID}-corrupt-key" corrupt-key-token "${STUB_API_URL}"
 create_dispatcher "${RUN_ID}-unreachable" valid-token "${UNREACHABLE_API_URL}"
 create_dispatcher "${RUN_ID}-empty-file" valid-token "${STUB_API_URL}"
 docker cp "${TMP}/empty-key/secrets" "${RUN_ID}-empty-file:/run/" >/dev/null
+# used-token: the key is already there, so the entrypoint must not fetch.
+create_dispatcher "${RUN_ID}-root-only-key" used-token "${STUB_API_URL}"
+docker cp "${TMP}/root-only-key/secrets" "${RUN_ID}-root-only-key:/run/" >/dev/null
 for name in "${CONTAINERS[@]}"; do
   if [ "${name}" != "${RUN_ID}-api" ]; then
     docker start "${name}" >/dev/null
@@ -282,6 +308,26 @@ assert_failed_bootstrap "${RUN_ID}-unreachable" "could not reach"
 
 echo "==> Empty key file from an earlier failed fetch is fetched again"
 assert_installed_key "${RUN_ID}-empty-file"
+
+echo "==> Root-only key from an older entrypoint is kept and made readable for SSH sessions"
+name="${RUN_ID}-root-only-key"
+if wait_for_session_env "${name}"; then
+  if docker exec "${name}" cat "${KEY_PATH}" | cmp -s - "${TMP}/key"; then
+    pass "${name}: key kept byte-for-byte"
+  else
+    fail "${name}: key changed"
+  fi
+  assert_key_readable_by_session_user "${name}"
+  if grep -q "^entrypoint: WARNING" <<<"$(container_logs "${name}")"; then
+    fail "${name}: fetched although a key was present"
+    show_logs "${name}"
+  else
+    pass "${name}: no fetch"
+  fi
+else
+  fail "${name}: entrypoint never wrote the session environment"
+  show_logs "${name}"
+fi
 
 if [ "${FAILURES}" -gt 0 ]; then
   echo "FAILED: ${FAILURES} check(s)" >&2

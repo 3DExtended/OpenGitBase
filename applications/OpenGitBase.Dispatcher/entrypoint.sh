@@ -4,11 +4,43 @@ set -euo pipefail
 
 API_URL="${DISPATCHER_API_URL:-http://api:8080}"
 FLEET_BOOTSTRAP_TOKEN="${FLEET_BOOTSTRAP_TOKEN:-}"
-PRIVATE_KEY_PATH="${DISPATCHER_STORAGE_SSH_KEY_PATH:-/run/secrets/dispatcher_storage_ssh}"
+PRIVATE_KEY_PATH="${DISPATCHER_STORAGE_SSH_KEY_PATH:-${Dispatcher__StorageSshPrivateKeyPath:-/run/secrets/dispatcher_storage_ssh}}"
 GIT_SSH_ENABLED="${GIT_SSH_ENABLED:-false}"
+# ssh-auth-hook.sh and dispatcher-wrapper.sh source this file.
+SESSION_ENV_FILE=/etc/opengitbase/dispatcher-session.env
+# sshd runs SSH git sessions as this user; it must read the storage SSH key.
+SESSION_USER=git
 
 log() {
   echo "entrypoint: $*" >&2
+}
+
+# sshd starts AuthorizedKeysCommand and SSH sessions with a minimal environment, so the container's
+# settings never reach ssh-auth-hook.sh, dispatcher-wrapper.sh or the .NET session. Save them for
+# those scripts to source. Only DISPATCHER_API_URL and Dispatcher__* settings: no secrets, so the
+# file is world-readable. The session reads the key from where this script installs it.
+write_session_env() {
+  local name
+  install -d -m 755 "$(dirname "${SESSION_ENV_FILE}")"
+  {
+    printf 'export DISPATCHER_API_URL=%q\n' "${API_URL}"
+    for name in $(compgen -e); do
+      case "${name}" in
+        Dispatcher__*) printf 'export %s=%q\n' "${name}" "${!name}" ;;
+      esac
+    done
+    printf 'export Dispatcher__StorageSshPrivateKeyPath=%q\n' "${PRIVATE_KEY_PATH}"
+  } >"${SESSION_ENV_FILE}.tmp"
+  chmod 644 "${SESSION_ENV_FILE}.tmp"
+  mv -f "${SESSION_ENV_FILE}.tmp" "${SESSION_ENV_FILE}"
+}
+
+# The session user may read the key but not replace it. Also applied to a key an older entrypoint
+# left root-only.
+secure_storage_ssh_key() {
+  chown "root:${SESSION_USER}" "$(dirname "${PRIVATE_KEY_PATH}")" "${PRIVATE_KEY_PATH}"
+  chmod 750 "$(dirname "${PRIVATE_KEY_PATH}")"
+  chmod 640 "${PRIVATE_KEY_PATH}"
 }
 
 # Fetches the key into a temp dir next to PRIVATE_KEY_PATH and moves it into place only when the
@@ -18,7 +50,7 @@ log() {
 fetch_storage_ssh_key() (
   umask 077
   key_dir="$(dirname "${PRIVATE_KEY_PATH}")"
-  install -d -m 700 "${key_dir}" || exit 1
+  install -d -m 750 -g "${SESSION_USER}" "${key_dir}" || exit 1
   work_dir="$(mktemp -d "${key_dir}/.bootstrap.XXXXXX")" || exit 1
   trap 'rm -rf "${work_dir}"' EXIT
 
@@ -52,6 +84,9 @@ fetch_storage_ssh_key() (
     exit 1
   fi
 
+  # Readable by the session user before it becomes visible at PRIVATE_KEY_PATH.
+  chgrp "${SESSION_USER}" "${work_dir}/key" || exit 1
+  chmod 640 "${work_dir}/key" || exit 1
   mv -f "${work_dir}/key" "${PRIVATE_KEY_PATH}" || exit 1
   log "installed the storage SSH key at ${PRIVATE_KEY_PATH}."
 )
@@ -80,6 +115,12 @@ if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -s "${PRIVATE_KEY_PATH}" ]; then
       "storage until the key is provisioned (docs/deployment/fleet-dispatcher-ssh-key.md)."
   fi
 fi
+
+if [ -s "${PRIVATE_KEY_PATH}" ]; then
+  secure_storage_ssh_key
+fi
+
+write_session_env
 
 if [ "${GIT_SSH_ENABLED}" = "true" ]; then
   exec /usr/sbin/sshd -D -e

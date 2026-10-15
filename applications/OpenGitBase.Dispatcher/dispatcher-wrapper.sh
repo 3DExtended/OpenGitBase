@@ -5,6 +5,14 @@ cd /app
 
 echo "dispatcher-wrapper.sh: executing..."
 
+# sshd starts the session with a minimal environment; entrypoint.sh saves the container settings
+# (DISPATCHER_API_URL, Dispatcher__*) here. They are exported, so the .NET session reads them too.
+SESSION_ENV_FILE=/etc/opengitbase/dispatcher-session.env
+if [ -r "$SESSION_ENV_FILE" ]; then
+    # shellcheck source=/dev/null
+    . "$SESSION_ENV_FILE"
+fi
+
 SSH_ORIGINAL_COMMAND="${SSH_ORIGINAL_COMMAND:-}"
 SSH_KEY_FINGERPRINT="${SSH_KEY_FINGERPRINT:-}"
 SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-}"
