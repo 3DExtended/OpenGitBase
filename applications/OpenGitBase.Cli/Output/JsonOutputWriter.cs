@@ -19,13 +19,14 @@ public sealed class JsonOutputWriter : IOutputWriter
 
     public void WriteAuthStatus(AuthStatusOutput status) => WriteObject(status);
 
-    public void WriteIssueCreated(DiscussionModel discussion, string url) =>
+    public void WriteIssueCreated(DiscussionModel discussion, string url, int continuationComments) =>
         WriteObject(new
         {
             number = discussion.Number,
             title = discussion.Title,
             status = discussion.Status,
             url,
+            continuationComments,
         });
 
     public void WriteIssueComment(DiscussionCommentModel comment, int issueNumber) =>

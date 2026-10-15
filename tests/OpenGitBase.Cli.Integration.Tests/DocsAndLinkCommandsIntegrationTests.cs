@@ -109,6 +109,64 @@ public sealed class DocsAndLinkCommandsIntegrationTests : ControllerTestBase
         Directory.Delete(outputDir.FullName, recursive: true);
     }
 
+    [Fact]
+    public async Task Long_prd_created_by_cli_round_trips_through_docs_pull()
+    {
+        var username = "cli-long-" + Guid.NewGuid().ToString("N")[..8];
+        var token = await RegisterUserAsync(username, $"{username}@example.com").ConfigureAwait(false);
+        await MarkEmailVerifiedAsync(username).ConfigureAwait(false);
+        var slug = "cli-long-repo-" + Guid.NewGuid().ToString("N")[..8];
+
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var createRepo = await Client.PostAsJsonAsync(
+            $"/repository/{slug}",
+            new CreateRepositoryRequest("CLI Long Repo", false)).ConfigureAwait(false);
+        createRepo.EnsureSuccessStatusCode();
+
+        var host = Client.BaseAddress!.ToString().TrimEnd('/');
+        var configDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var outputDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var mirrorPath = Path.Combine(outputDir.FullName, "docs", "prd", "long.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(mirrorPath)!);
+        await File.WriteAllTextAsync(mirrorPath, "<!-- forge: #1 -->\n\nStale\n").ConfigureAwait(false);
+        var overrides = BuildOverrides(host, token, configDir.FullName);
+        var body = string.Join(
+            "\n\n",
+            Enumerable.Range(1, 50).Select(index => $"## Section {index}\n\n{string.Join(' ', Enumerable.Repeat($"word{index}", 80))}"));
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var createExit = await CliApp.RunAsync(
+            [
+                "--hostname", host,
+                "issue", "-R", $"{username}/{slug}",
+                "create", "--title", "[PRD] Long spec published in parts", "--body", body,
+            ],
+            output,
+            error,
+            overrides).ConfigureAwait(false);
+        Assert.Equal(0, createExit);
+        Assert.Contains("continuation comment(s)", output.ToString(), StringComparison.Ordinal);
+
+        var pullExit = await CliApp.RunAsync(
+            [
+                "--hostname", host,
+                "docs", "-R", $"{username}/{slug}",
+                "pull", "--output-dir", outputDir.FullName,
+            ],
+            output,
+            error,
+            overrides).ConfigureAwait(false);
+        Assert.Equal(0, pullExit);
+
+        Assert.Equal($"<!-- forge: #1 -->\n\n{body}\n", await File.ReadAllTextAsync(mirrorPath).ConfigureAwait(false));
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(mirrorPath)!));
+
+        Directory.Delete(configDir.FullName, recursive: true);
+        Directory.Delete(outputDir.FullName, recursive: true);
+    }
+
     private CliServiceOverrides BuildOverrides(string host, string token, string configDir)
     {
         var credentialStore = new InMemoryCredentialStore();

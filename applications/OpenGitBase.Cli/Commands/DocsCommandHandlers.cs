@@ -17,18 +17,16 @@ public static class DocsCommandHandlers
                 .ConfigureAwait(false);
 
             var candidates = DocsMirrorExporter.FilterByPrefix(discussions, prefixFilters);
-            var exported = new List<DocsPullFileModel>();
+            var detailed = new List<DiscussionModel>(candidates.Count);
 
             foreach (var summary in candidates)
             {
-                var discussion = await services.ApiClient
-                    .GetDiscussionAsync(repo, summary.Number, includeComments: false)
-                    .ConfigureAwait(false);
-
-                exported.Add(
-                    DocsMirrorExporter.BuildExportFile(discussion, outputDir.FullName));
+                detailed.Add(await services.ApiClient
+                    .GetDiscussionAsync(repo, summary.Number, includeComments: true)
+                    .ConfigureAwait(false));
             }
 
+            var exported = DocsMirrorExporter.Export(detailed, outputDir.FullName);
             services.OutputWriter.WriteDocsPull(exported);
             return CliExitCodes.Success;
         }
