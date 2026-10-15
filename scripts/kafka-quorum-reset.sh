@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=docker-env.sh
 source "${SCRIPT_DIR}/docker-env.sh"
+# shellcheck source=kafka-storage.sh
+source "${SCRIPT_DIR}/kafka-storage.sh"
 
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
@@ -22,7 +24,8 @@ Usage: $(basename "$0") [--restart|--wipe] [--no-republish] [--help]
 Manage the OpenGitBase Kafka quorum as one unit.
 
   --restart       Stop and start kafka-1/2/3 together (default; keeps volumes)
-  --wipe          Remove broker containers AND named volumes, then bootstrap fresh
+  --wipe          Remove broker containers, empty the Kafka data dirs (named volumes, or the
+                  SSD cache pool bind mounts on Tower), then bootstrap fresh
   --no-republish  Skip POST /api/v1/internal/pipelines/kafka-wake-republish after init
   -h, --help      Show this help
 
@@ -68,7 +71,8 @@ compose() {
 }
 
 BROKERS=(kafka-1 kafka-2 kafka-3)
-# Compose volume keys (project prefix added by Docker).
+# Compose volume keys (project prefix added by Docker). Tower bind-mounts the SSD cache pool
+# instead (#232), so there these are only stale copies from before the move, if still present.
 VOLUME_KEYS=(kafka1_data kafka2_data kafka3_data)
 # Legacy names from the first durable deploy (safe to remove on wipe).
 LEGACY_VOLUME_KEYS=(opengitbase_kafka1_data opengitbase_kafka2_data opengitbase_kafka3_data)
@@ -197,11 +201,18 @@ republish_wakes() {
 
 echo "==> Kafka quorum ${MODE} in ${REPO_ROOT}"
 
+# Before touching the brokers: recreating them from compose files without Tower's SSD mounts
+# would restart the quorum on the array (#232), and a wipe would empty the wrong dirs.
+kafka_require_ssd_mounts
+
 compose stop "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
 compose rm -f "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
 
 if [ "${MODE}" = "wipe" ]; then
   remove_kafka_volumes
+  # Removing named volumes does not reach bind mounts; empty whatever kafka-vol-init mounts.
+  echo "==> Emptying Kafka data dirs"
+  kafka_empty_data_dirs
 fi
 
 # Create volumes (if needed) and chown before brokers start.

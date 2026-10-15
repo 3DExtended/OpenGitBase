@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=docker-env.sh
 source "${SCRIPT_DIR}/docker-env.sh"
+# shellcheck source=kafka-storage.sh
+source "${SCRIPT_DIR}/kafka-storage.sh"
 
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
@@ -17,6 +19,8 @@ fi
 compose() {
   docker-compose "${COMPOSE_ARGS[@]}" "$@"
 }
+
+kafka_require_ssd_mounts
 
 echo "==> Ensuring Kafka brokers are up"
 compose up -d --no-deps kafka-1 kafka-2 kafka-3

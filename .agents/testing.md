@@ -67,3 +67,4 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |
+| `scripts/test-kafka-data-placement.sh` | Kafka data placement: named volumes on dev/CI/E2E, SSD bind mounts in the prod overlay and Tower override template, placement guard, wipe (needs Docker) |
