@@ -149,7 +149,9 @@ frontend api
   http-request return status 404
 CFG
 
-# Storage node stand-in: sshd that only accepts the storage key and echoes the command it got.
+# Storage node stand-in: sshd that only accepts the storage key and echoes the command it got. It
+# reads stdin to EOF first, as git-upload-pack does; GitSessionProxyService opens the remote stdin
+# after starting the command and fails when the command has already exited.
 cat "${TMP}/stub/storage_key.pub" >"${TMP}/stub/authorized_keys"
 cat >"${TMP}/stub/storage_sshd_config" <<'CFG'
 Port 22
@@ -162,7 +164,7 @@ PubkeyAuthentication yes
 AuthorizedKeysFile .ssh/authorized_keys
 AllowUsers git
 PidFile /var/run/sshd.pid
-ForceCommand echo "storage reached: ${SSH_ORIGINAL_COMMAND}"
+ForceCommand cat >/dev/null; echo "storage reached: ${SSH_ORIGINAL_COMMAND}"
 CFG
 chmod 755 "${TMP}/stub"
 chmod 644 "${TMP}/stub/"*

@@ -10,9 +10,38 @@ GIT_SSH_ENABLED="${GIT_SSH_ENABLED:-false}"
 SESSION_ENV_FILE=/etc/opengitbase/dispatcher-session.env
 # sshd runs SSH git sessions as this user; it must read the storage SSH key.
 SESSION_USER=git
+# The bootstrap token works once, and all dispatchers share the key directory (a named volume in
+# docker-compose.yml): one fetch serves every dispatcher and every recreate. The SHA-256 of the
+# token the key came from is kept next to it, so a new token (key rotation) fetches once more.
+TOKEN_HASH_PATH="${PRIVATE_KEY_PATH}.token-sha256"
+# After HTTP 401, how long to wait for another dispatcher that just used the token to install the key.
+PEER_WAIT_SECONDS="${DISPATCHER_KEY_PEER_WAIT_SECONDS:-30}"
 
 log() {
   echo "entrypoint: $*" >&2
+}
+
+token_hash() {
+  printf '%s' "${FLEET_BOOTSTRAP_TOKEN}" | sha256sum | cut -d' ' -f1
+}
+
+# -s: an empty file left by an older entrypoint's failed fetch counts as missing.
+key_matches_token() {
+  [ -s "${PRIVATE_KEY_PATH}" ] && [ -s "${TOKEN_HASH_PATH}" ] \
+    && [ "$(cat "${TOKEN_HASH_PATH}")" = "$(token_hash)" ]
+}
+
+wait_for_peer_fetch() {
+  local i
+  log "waiting up to ${PEER_WAIT_SECONDS}s for another dispatcher sharing" \
+    "$(dirname "${PRIVATE_KEY_PATH}") to install the key fetched with this token."
+  for ((i = 0; i < PEER_WAIT_SECONDS; i++)); do
+    if key_matches_token; then
+      return 0
+    fi
+    sleep 1
+  done
+  key_matches_token
 }
 
 # sshd starts AuthorizedKeysCommand and SSH sessions with a minimal environment, so the container's
@@ -46,7 +75,7 @@ secure_storage_ssh_key() {
 # Fetches the key into a temp dir next to PRIVATE_KEY_PATH and moves it into place only when the
 # response parses and ssh-keygen accepts the key, so a failed fetch never leaves a file that the
 # next start would take for a key. Runs in a subshell: errexit is off when called from `if`, so
-# every step checks its own status, and the EXIT trap removes the temp dir.
+# every step checks its own status, and the EXIT trap removes the temp dir. Exits 2 on HTTP 401.
 fetch_storage_ssh_key() (
   umask 077
   key_dir="$(dirname "${PRIVATE_KEY_PATH}")"
@@ -69,6 +98,9 @@ fetch_storage_ssh_key() (
       *) reason="unexpected status" ;;
     esac
     log "WARNING: ${API_URL} answered HTTP ${http_status} for the storage SSH key: ${reason}."
+    if [ "${http_status}" = "401" ]; then
+      exit 2
+    fi
     exit 1
   fi
 
@@ -87,7 +119,10 @@ fetch_storage_ssh_key() (
   # Readable by the session user before it becomes visible at PRIVATE_KEY_PATH.
   chgrp "${SESSION_USER}" "${work_dir}/key" || exit 1
   chmod 640 "${work_dir}/key" || exit 1
+  token_hash >"${work_dir}/token-sha256" || exit 1
   mv -f "${work_dir}/key" "${PRIVATE_KEY_PATH}" || exit 1
+  # After the key: whoever sees this hash also sees the key it belongs to.
+  mv -f "${work_dir}/token-sha256" "${TOKEN_HASH_PATH}" || exit 1
   log "installed the storage SSH key at ${PRIVATE_KEY_PATH}."
 )
 
@@ -108,11 +143,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# -s: an empty file left by an older entrypoint's failed fetch counts as missing.
-if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -s "${PRIVATE_KEY_PATH}" ]; then
-  if ! fetch_storage_ssh_key; then
-    log "WARNING: running without a storage SSH key. Smart HTTP git works; SSH git cannot reach" \
-      "storage until the key is provisioned (docs/deployment/fleet-dispatcher-ssh-key.md)."
+# Fetch only when the key in place did not come from this token: missing, or a new token after a
+# key rotation. A failed fetch never removes a key that is already there.
+if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && ! key_matches_token; then
+  fetch_status=0
+  fetch_storage_ssh_key || fetch_status=$?
+  # 401: another dispatcher sharing the key directory may have just used the token.
+  if [ "${fetch_status}" -eq 2 ] && wait_for_peer_fetch; then
+    log "using the storage SSH key another dispatcher fetched with this token."
+    fetch_status=0
+  fi
+  if [ "${fetch_status}" -ne 0 ]; then
+    if [ -s "${PRIVATE_KEY_PATH}" ]; then
+      log "WARNING: keeping the storage SSH key already at ${PRIVATE_KEY_PATH}; it was not fetched" \
+        "with the current FLEET_BOOTSTRAP_TOKEN."
+    else
+      log "WARNING: running without a storage SSH key. Smart HTTP git works; SSH git cannot reach" \
+        "storage until the key is provisioned (docs/deployment/fleet-dispatcher-ssh-key.md)."
+    fi
   fi
 fi
 

@@ -135,6 +135,9 @@ x-dispatcher-common: &dispatcher-common
   image: opengitbase-dispatcher
   restart: unless-stopped
   build: *dispatcher-build
+  volumes:
+    # Storage SSH key, shared by every dispatcher (see opengitbase_dispatcher_ssh below).
+    - opengitbase_dispatcher_ssh:/run/secrets
   depends_on:
     api-1:
       condition: service_healthy
@@ -578,3 +581,7 @@ volumes:
   opengitbase_storage2_data:
   opengitbase_storage3_data:
   opengitbase_storage4_data:
+  # Dispatcher -> storage SSH key (/run/secrets/dispatcher_storage_ssh), shared by dispatcher-1 and
+  # dispatcher-2. The fleet bootstrap token works once: the first dispatcher to start fetches the
+  # key, the other and every recreate find it here (docs/deployment/fleet-dispatcher-ssh-key.md).
+  opengitbase_dispatcher_ssh:

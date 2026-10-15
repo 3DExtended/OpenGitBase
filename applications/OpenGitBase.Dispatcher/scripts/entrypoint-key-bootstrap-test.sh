@@ -24,12 +24,17 @@ KEY_PATH="/run/secrets/dispatcher_storage_ssh"
 RUN_ID="ogb-dispatcher-entrypoint-$$"
 NETWORK="${RUN_ID}"
 STUB_API_URL="http://${RUN_ID}-api:8080"
+# Answers 401 to every bootstrap call: the shared single-use token the other dispatcher already used.
+USED_API_URL="http://${RUN_ID}-api:8081"
+# Named volume the shared-volume cases mount as the key directory, like docker-compose.yml.
+KEY_VOLUME="${RUN_ID}-keys"
 # Nothing listens here, so curl fails to connect.
 UNREACHABLE_API_URL="http://127.0.0.1:9"
 WAIT_SECONDS="${WAIT_SECONDS:-90}"
 
 # Set during the run; used by the EXIT trap for cleanup.
 CONTAINERS=()
+VOLUME_CREATED=false
 NETWORK_CREATED=false
 TMP=""
 FAILURES=0
@@ -46,6 +51,9 @@ cleanup() {
   for name in "${CONTAINERS[@]+"${CONTAINERS[@]}"}"; do
     docker rm -f "${name}" >/dev/null 2>&1 || true
   done
+  if [ "${VOLUME_CREATED}" = "true" ]; then
+    docker volume rm "${KEY_VOLUME}" >/dev/null 2>&1 || true
+  fi
   if [ "${NETWORK_CREATED}" = "true" ]; then
     docker network rm "${NETWORK}" >/dev/null 2>&1 || true
   fi
@@ -65,11 +73,17 @@ fail() {
 }
 
 # Creates (does not start) a dispatcher container whose entrypoint fetches the key with the given
-# token from bootstrap_url. The .NET dispatcher always talks to the stub: it exits when its API is
-# unreachable at startup, which is not what this test covers.
+# token from bootstrap_url. The .NET dispatcher always talks to the stub. With a volume, it is
+# mounted as the key directory; peer_wait is how long a 401 waits for another dispatcher's fetch.
 create_dispatcher() {
-  local name="$1" token="$2" bootstrap_url="$3"
+  local name="$1" token="$2" bootstrap_url="$3" volume="${4:-}" peer_wait="${5:-3}"
+  local volume_args=()
+  if [ -n "${volume}" ]; then
+    volume_args=(-v "${volume}:$(dirname "${KEY_PATH}")")
+  fi
   docker create --name "${name}" --network "${NETWORK}" \
+    "${volume_args[@]+"${volume_args[@]}"}" \
+    -e DISPATCHER_KEY_PEER_WAIT_SECONDS="${peer_wait}" \
     -e FLEET_BOOTSTRAP_TOKEN="${token}" \
     -e DISPATCHER_API_URL="${bootstrap_url}" \
     -e Dispatcher__ApiUrl="${STUB_API_URL}" \
@@ -128,7 +142,7 @@ key_file_state() {
 
 # Files in the key directory other than the key itself, e.g. leftover temp files.
 stray_key_dir_files() {
-  docker exec "$1" sh -c 'ls -A "$(dirname "$1")" 2>/dev/null | grep -v -x "$(basename "$1")" || true' \
+  docker exec "$1" sh -c 'ls -A "$(dirname "$1")" 2>/dev/null | grep -v -x -e "$(basename "$1")" -e "$(basename "$1").token-sha256" || true' \
     sh "${KEY_PATH}" 2>/dev/null || echo "unknown (container stopped)"
 }
 
@@ -183,6 +197,21 @@ assert_key_readable_by_session_user() {
   fi
 }
 
+# Waits until a log line matches the extended regex. Fails early when the container stops.
+wait_for_log() {
+  local name="$1" pattern="$2" i
+  for i in $(seq 1 "${WAIT_SECONDS}"); do
+    if grep -q -E "${pattern}" <<<"$(container_logs "${name}")"; then
+      return 0
+    fi
+    if ! is_running "${name}"; then
+      return 1
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 # The entrypoint writes the session environment file after it has secured the key.
 wait_for_session_env() {
   local name="$1" i
@@ -196,7 +225,7 @@ wait_for_session_env() {
 }
 
 assert_installed_key() {
-  local name="$1" mode stray
+  local name="$1" expected_key="${2:-${TMP}/key}" stray
   if ! wait_for_bootstrap_outcome "${name}"; then
     fail "${name}: no bootstrap outcome logged (running=$(is_running "${name}" && echo yes || echo no))"
     show_logs "${name}"
@@ -207,7 +236,7 @@ assert_installed_key() {
   else
     fail "${name}: Smart HTTP does not answer /health"
   fi
-  if docker exec "${name}" cat "${KEY_PATH}" | cmp -s - "${TMP}/key"; then
+  if docker exec "${name}" cat "${KEY_PATH}" | cmp -s - "${expected_key}"; then
     pass "${name}: key file matches the served key byte-for-byte"
   else
     fail "${name}: key file differs from the served key"
@@ -232,6 +261,9 @@ mkdir -p "${TMP}/stub" "${TMP}/empty-key/secrets" "${TMP}/root-only-key/secrets"
 echo "==> Generating a throwaway storage SSH key and the stub responses"
 ssh-keygen -q -t ed25519 -N '' -C "entrypoint-test" -f "${TMP}/key"
 jq -n --rawfile key "${TMP}/key" '{privateKey: $key}' >"${TMP}/stub/valid.json"
+# The key pair after a regenerate, served for its new token.
+ssh-keygen -q -t ed25519 -N '' -C "entrypoint-test-rotated" -f "${TMP}/rotated_key"
+jq -n --rawfile key "${TMP}/rotated_key" '{privateKey: $key}' >"${TMP}/stub/rotated.json"
 # The corruption the old EncryptEmail path produced: the key lower-cased.
 jq -n --rawfile key "${TMP}/key" '{privateKey: ($key | ascii_downcase)}' >"${TMP}/stub/corrupt-key.json"
 echo '<html><body>Bad Gateway</body></html>' >"${TMP}/stub/not-json.html"
@@ -249,9 +281,15 @@ frontend api
   bind :8080
   acl bootstrap path /api/v1/fleet/bootstrap/dispatcher-ssh-private-key
   http-request return status 200 content-type application/json file /stub/valid.json if bootstrap { req.hdr(X-Fleet-Bootstrap-Token) -m str valid-token }
+  http-request return status 200 content-type application/json file /stub/rotated.json if bootstrap { req.hdr(X-Fleet-Bootstrap-Token) -m str rotated-token }
   http-request return status 200 content-type application/json file /stub/corrupt-key.json if bootstrap { req.hdr(X-Fleet-Bootstrap-Token) -m str corrupt-key-token }
   http-request return status 200 content-type text/html file /stub/not-json.html if bootstrap { req.hdr(X-Fleet-Bootstrap-Token) -m str not-json-token }
   http-request return status 401 if bootstrap
+  http-request return status 404
+
+frontend used_token_api
+  bind :8081
+  http-request return status 401 if { path /api/v1/fleet/bootstrap/dispatcher-ssh-private-key }
   http-request return status 404
 CFG
 chmod 755 "${TMP}/stub"
@@ -282,8 +320,8 @@ create_dispatcher "${RUN_ID}-corrupt-key" corrupt-key-token "${STUB_API_URL}"
 create_dispatcher "${RUN_ID}-unreachable" valid-token "${UNREACHABLE_API_URL}"
 create_dispatcher "${RUN_ID}-empty-file" valid-token "${STUB_API_URL}"
 docker cp "${TMP}/empty-key/secrets" "${RUN_ID}-empty-file:/run/" >/dev/null
-# used-token: the key is already there, so the entrypoint must not fetch.
-create_dispatcher "${RUN_ID}-root-only-key" used-token "${STUB_API_URL}"
+# No token: this case is about permissions only, so the entrypoint must not fetch.
+create_dispatcher "${RUN_ID}-root-only-key" "" "${STUB_API_URL}"
 docker cp "${TMP}/root-only-key/secrets" "${RUN_ID}-root-only-key:/run/" >/dev/null
 for name in "${CONTAINERS[@]}"; do
   if [ "${name}" != "${RUN_ID}-api" ]; then
@@ -327,6 +365,92 @@ if wait_for_session_env "${name}"; then
 else
   fail "${name}: entrypoint never wrote the session environment"
   show_logs "${name}"
+fi
+
+# The bootstrap token works once. Both dispatchers share the key directory as a named volume, so
+# one fetch serves both and every later recreate; a new token (key rotation) fetches once more.
+echo "==> docker-compose.yml: both dispatchers mount one named volume as the key directory"
+key_volumes=$(docker compose -f "${REPO_ROOT}/docker-compose.yml" config --format json 2>/dev/null \
+  | jq -r --arg dir "$(dirname "${KEY_PATH}")" '.services | [.["dispatcher-1"], .["dispatcher-2"]]
+      | map([.volumes[]? | select(.type == "volume" and .target == $dir) | .source][0] // "none")
+      | join(" ")' || echo "unknown")
+read -r volume_1 volume_2 <<<"${key_volumes}"
+if [ "${volume_1:-none}" != "none" ] && [ "${volume_1}" = "${volume_2:-}" ]; then
+  pass "dispatcher-1 and dispatcher-2 share volume ${volume_1} at $(dirname "${KEY_PATH}")"
+else
+  fail "dispatcher key directory volumes: ${key_volumes}; want one named volume shared by both"
+fi
+
+docker volume create "${KEY_VOLUME}" >/dev/null
+VOLUME_CREATED=true
+
+echo "==> Shared key volume: after HTTP 401 a dispatcher uses the key the other one fetched"
+second="${RUN_ID}-shared-second"
+first="${RUN_ID}-shared-first"
+# Its fetch gets 401, as when the other dispatcher has just used the token.
+create_dispatcher "${second}" valid-token "${USED_API_URL}" "${KEY_VOLUME}" "${WAIT_SECONDS}"
+docker start "${second}" >/dev/null
+if wait_for_log "${second}" "^entrypoint: waiting up to"; then
+  pass "${second}: waits for another dispatcher after HTTP 401"
+  create_dispatcher "${first}" valid-token "${STUB_API_URL}" "${KEY_VOLUME}"
+  docker start "${first}" >/dev/null
+  assert_installed_key "${first}"
+  if wait_for_log "${second}" "^entrypoint: using the storage SSH key another dispatcher fetched"; then
+    pass "${second}: uses the key the other dispatcher fetched"
+  else
+    fail "${second}: did not pick up the other dispatcher's key"
+    show_logs "${second}"
+  fi
+else
+  fail "${second}: did not wait for another dispatcher after HTTP 401"
+  show_logs "${second}"
+fi
+docker rm -f "${second}" "${first}" >/dev/null 2>&1 || true
+
+echo "==> Shared key volume: a recreated dispatcher keeps the key without fetching"
+name="${RUN_ID}-recreated"
+create_dispatcher "${name}" valid-token "${USED_API_URL}" "${KEY_VOLUME}"
+docker start "${name}" >/dev/null
+if wait_for_session_env "${name}"; then
+  if grep -q "^entrypoint: " <<<"$(container_logs "${name}")"; then
+    fail "${name}: fetched although the key on the volume came from this token"
+    show_logs "${name}"
+  else
+    pass "${name}: no fetch"
+  fi
+  if docker exec "${name}" cat "${KEY_PATH}" | cmp -s - "${TMP}/key"; then
+    pass "${name}: key kept byte-for-byte"
+  else
+    fail "${name}: key changed"
+  fi
+  assert_key_readable_by_session_user "${name}"
+else
+  fail "${name}: entrypoint never wrote the session environment"
+  show_logs "${name}"
+fi
+docker rm -f "${name}" >/dev/null 2>&1 || true
+
+echo "==> Shared key volume: a new token (key rotation) fetches the new key once"
+name="${RUN_ID}-rotated"
+create_dispatcher "${name}" rotated-token "${STUB_API_URL}" "${KEY_VOLUME}"
+docker start "${name}" >/dev/null
+assert_installed_key "${name}" "${TMP}/rotated_key"
+docker rm -f "${name}" >/dev/null 2>&1 || true
+
+echo "==> Shared key volume: a failed fetch keeps the key already there"
+name="${RUN_ID}-keeps-key"
+create_dispatcher "${name}" unknown-token "${STUB_API_URL}" "${KEY_VOLUME}"
+docker start "${name}" >/dev/null
+if wait_for_log "${name}" "^entrypoint: WARNING: keeping the storage SSH key"; then
+  pass "${name}: keeps the existing key after HTTP 401"
+else
+  fail "${name}: did not report keeping the existing key"
+  show_logs "${name}"
+fi
+if docker exec "${name}" cat "${KEY_PATH}" 2>/dev/null | cmp -s - "${TMP}/rotated_key"; then
+  pass "${name}: key kept byte-for-byte"
+else
+  fail "${name}: key changed or removed"
 fi
 
 if [ "${FAILURES}" -gt 0 ]; then

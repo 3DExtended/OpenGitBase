@@ -7,12 +7,12 @@ The API holds one dispatcher→storage SSH key pair in the `FleetSecrets` table.
 | Consumer | What it does | When |
 |----------|--------------|------|
 | `POST /api/admin/fleet/dispatcher-ssh-keys/generate` (admin) | Replaces the key pair **and** the fleet bootstrap token. Returns the public key and the token; the private key stays in the API | On demand (`scripts/bootstrap-fleet.sh`) |
-| Dispatcher [`entrypoint.sh`](../../applications/OpenGitBase.Dispatcher/entrypoint.sh) | Fetches the private key from `GET /api/v1/fleet/bootstrap/dispatcher-ssh-private-key` with `X-Fleet-Bootstrap-Token`, parses it with `jq`, checks it with `ssh-keygen -y`, and only then moves it to `/run/secrets/dispatcher_storage_ssh`, as `root:git` mode `640` in a `root:git` `750` directory. The SSH session runs as `git`, so it can read the key but not replace it. The fetch is skipped when that file exists and is not empty; ownership and mode are reapplied on every start. On any failure it logs `entrypoint: WARNING: …`, writes nothing, and keeps Smart HTTP running. The token works **once** | Container start, after Smart HTTP is up |
+| Dispatcher [`entrypoint.sh`](../../applications/OpenGitBase.Dispatcher/entrypoint.sh) | Fetches the private key from `GET /api/v1/fleet/bootstrap/dispatcher-ssh-private-key` with `X-Fleet-Bootstrap-Token`, parses it with `jq`, checks it with `ssh-keygen -y`, and only then moves it to `/run/secrets/dispatcher_storage_ssh`, as `root:git` mode `640` in a `root:git` `750` directory. The SSH session runs as `git`, so it can read the key but not replace it. Next to the key it writes the SHA-256 of the token it used (`dispatcher_storage_ssh.token-sha256`). It fetches only when the key is missing or came from a different token, which happens after a rotation. On HTTP 401 it waits up to `DISPATCHER_KEY_PEER_WAIT_SECONDS` (default 30) for the other dispatcher to install the key fetched with the same token. On any failure it logs `entrypoint: WARNING: …`, keeps a key that is already there, and keeps Smart HTTP running. Ownership and mode are reapplied on every start. The token works **once** | Container start, after Smart HTTP is up |
 | Dispatcher SSH session (`GitSessionProxyService`) | Uses the key to SSH into a storage node as `git` | SSH git only (`GIT_SSH_ENABLED=true`). Smart HTTP never reads it |
 | Dispatcher `ssh-auth-hook.sh`, `dispatcher-wrapper.sh` | sshd starts both with a minimal environment, so neither sees the container's env vars. On every start, `entrypoint.sh` writes `DISPATCHER_API_URL` and every `Dispatcher__*` setting to `/etc/opengitbase/dispatcher-session.env`, and both scripts source that file. It also sets `Dispatcher__StorageSshPrivateKeyPath` to the path where the entrypoint installed the key. The wrapper execs the .NET session with these settings exported. The file holds no secrets; `FLEET_BOOTSTRAP_TOKEN` is not copied | SSH login and every SSH git session |
 | Storage [`entrypoint.sh`](../../applications/repo-storage-layer/entrypoint.sh) | Writes `DISPATCHER_SSH_PUBLIC_KEY` (or the public key fetched from the API when that is empty) to `/home/git/.ssh/authorized_keys` | Every container start |
 
-The dispatcher key file lives in the container's writable layer (no volume). `docker restart` keeps it; `--force-recreate` drops it and the entrypoint fetches again.
+`/run/secrets` is the named volume `opengitbase_dispatcher_ssh` (Compose prefixes the project name), which both dispatchers mount. Because the token works once, only one fetch happens: whichever dispatcher starts first fetches, and the other one and every later recreate (`scripts/remote-rolling-update.sh --full` included) find the key on the volume. A new `FLEET_BOOTSTRAP_TOKEN` (after a regenerate) makes the next dispatcher to start fetch once more.
 
 ## Keys generated before the normalization fix are unusable
 
@@ -54,7 +54,7 @@ Do **not** rerun `scripts/bootstrap-fleet.sh` for this. Besides the key, it mint
 
 2. In `docker-compose.override.yml`, set:
    - `DISPATCHER_SSH_PUBLIC_KEY` on `storage-1` … `storage-4` to the new public key
-   - `FLEET_BOOTSTRAP_TOKEN` on `dispatcher-1` to the new token
+   - `FLEET_BOOTSTRAP_TOKEN` on `dispatcher-1` **and** `dispatcher-2` to the new token
 
 3. Recreate the storage nodes **one at a time** so each rewrites `authorized_keys`. Wait for `(healthy)` before the next:
 
@@ -62,19 +62,20 @@ Do **not** rerun `scripts/bootstrap-fleet.sh` for this. Besides the key, it mint
    docker compose up -d --no-deps --force-recreate storage-1
    ```
 
-4. Recreate `dispatcher-1`. Do not use `restart`, which keeps the old key file and skips the fetch:
+4. Recreate the dispatchers one at a time. `dispatcher-1` sees the new token and fetches the new key into the shared volume. `dispatcher-2` finds that key with the matching token hash and does not fetch:
 
    ```bash
    docker compose up -d --no-deps --force-recreate dispatcher-1
+   docker compose up -d --no-deps --force-recreate dispatcher-2
    ```
 
-   Then run the dispatcher check above. Expect `valid`. `docker exec opengitbase_dispatcher_1 ssh-keygen -y -f /run/secrets/dispatcher_storage_ssh` must print the new public key (without the comment).
+   Recreate, not `docker restart`: a restart keeps the old environment, so it never sees the new token.
 
-5. `dispatcher-2` cannot fetch the key: the token was used up in step 4. See below.
+   Then run the dispatcher check above on both. Expect `valid`. `docker exec opengitbase_dispatcher_1 ssh-keygen -y -f /run/secrets/dispatcher_storage_ssh` must print the new public key (without the comment).
+   `entrypoint: WARNING: keeping the storage SSH key …` means a dispatcher still has the old token: fix the override and recreate it.
 
-## Known gaps in the SSH bootstrap path
+## Turning on SSH git
 
-Both showed up on prod and are not fixed yet. Fix them before turning on `GIT_SSH_ENABLED=true`. Until then, keep SSH git disabled even after you regenerate the key. The rest of the SSH path (sshd login, the session environment, key permissions, the proxy to storage) is covered end to end by [`ssh-git-session-test.sh`](../../applications/OpenGitBase.Dispatcher/scripts/ssh-git-session-test.sh).
+`GIT_SSH_ENABLED=true` (`docker-compose.ssh.yml`) needs a usable key on the shared volume. On prod that means running [Regenerating](#regenerating) first: the stored key predates the normalization fix, and its token was used up in June 2026.
 
-- **One single-use token, two dispatchers.** The API clears the bootstrap token after the first successful fetch, but `bootstrap-fleet.sh` writes the same token to `dispatcher-1` and `dispatcher-2`. Whichever starts second gets `401`.
-- **Every recreate needs the token again.** The key file lives in the writable layer, so each `--force-recreate` (every `scripts/remote-rolling-update.sh --full`) fetches again with a token that is already used, and gets `401`. On prod (2026-10-14) both dispatchers logged `401`: `FleetSecrets` dates from 2026-06-18 and its token hash is empty. The image never had `python3`, which the entrypoint used to parse the response until the jq fix, so the first successful fetch most likely threw its key away and used up the token.
+[`ssh-git-session-test.sh`](../../applications/OpenGitBase.Dispatcher/scripts/ssh-git-session-test.sh) covers the SSH path end to end: sshd login, the session environment, key permissions and the proxy to storage. [`entrypoint-key-bootstrap-test.sh`](../../applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh) covers the key bootstrap, including the shared volume, recreates and rotation.
