@@ -364,3 +364,23 @@ The protocol work (dispatcher routes, batch planning, web UI) is small and follo
 11. `lfs-11` Compose E2E with `git-lfs`, including chaos scenarios.
 
 Enable `Lfs:Enabled` in production only after slices 1–8 and 11.
+
+---
+
+## Update: slice breakdown
+
+The "Suggested slice order" above is replaced by nine vertical slices. Each slice delivers something that runs end to end; the segmented AEAD is part of lfs-03, and the storage, API and dispatcher groundwork is part of the lfs-01 tracer bullet.
+
+| ID | Slice | Type | Blocked by |
+|----|-------|------|------------|
+| lfs-01 | #235 Tracer bullet: git lfs push and clone round trip | AFK | — |
+| lfs-02 | #236 Permissions, size limits, batch cap and quota | AFK | #235 |
+| lfs-03 | #237 Encrypted quorum on verify | AFK | #235 |
+| lfs-04 | #238 Pre-receive integrity gate for LFS pointers | AFK | #235 |
+| lfs-05 | #239 Reconciler repair from on-disk LFS inventory | AFK | #237 |
+| lfs-06 | #240 Cold recovery and post-promotion LFS restore | AFK | #239 |
+| lfs-07 | #241 Web UI: LFS files in blob view and raw downloads | AFK | #235, #236 |
+| lfs-08 | #242 Repository deletion cleanup and admin LFS figures | AFK | #239 |
+| lfs-09 | #243 LFS chaos E2E and production rollout | HITL | #237–#242 |
+
+`Lfs:Enabled` stays off in production until lfs-09.
