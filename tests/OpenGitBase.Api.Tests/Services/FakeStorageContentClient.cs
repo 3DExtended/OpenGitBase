@@ -22,14 +22,14 @@ internal sealed class FakeStorageContentClient : IStorageContentClient
         CancellationToken cancellationToken) =>
         Task.FromResult<StorageContentTreePayload?>(null);
 
-    public Task<StorageContentBlobPayload?> GetBlobAsync(
+    public Task<StorageContentBlobResult> GetBlobAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
         string refName,
         string path,
         CancellationToken cancellationToken) =>
-        Task.FromResult<StorageContentBlobPayload?>(null);
+        Task.FromResult(new StorageContentBlobResult());
 
     public Task<StorageContentReadmePayload?> GetReadmeAsync(
         RepositoryRoutingTargetDto target,

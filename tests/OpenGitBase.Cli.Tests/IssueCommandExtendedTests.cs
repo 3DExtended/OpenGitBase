@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using OpenGitBase.Cli.Auth;
 using OpenGitBase.Cli.Tests.TestSupport;
 
@@ -6,6 +7,10 @@ namespace OpenGitBase.Cli.Tests;
 
 public sealed class IssueCommandExtendedTests : IDisposable
 {
+    private const string CommentJson = """
+        {"id":"22222222-2222-2222-2222-222222222222","bodyMarkdown":"continued","createdAt":"2026-07-12T10:00:01Z","authorUsername":"alice"}
+        """;
+
     private readonly List<string> _tempPaths = [];
 
     public void Dispose()
@@ -278,5 +283,78 @@ public sealed class IssueCommandExtendedTests : IDisposable
 
         Assert.NotEqual(0, exitCode);
         Assert.Contains("\"httpStatus\":403", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Issue_create_splits_long_body_into_continuation_comments()
+    {
+        var body = string.Join("\n\n", Enumerable.Range(1, 40).Select(index => $"## Part {index}\n\n{new string('x', 600)}"));
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueResponse(
+            HttpStatusCode.Created,
+            """
+            {"id":"11111111-1111-1111-1111-111111111111","number":42,"title":"[PRD] Long","status":0,"createdAt":"2026-07-12T10:00:00Z","updatedAt":"2026-07-12T10:00:00Z","tags":[]}
+            """);
+        handler.EnqueueResponse(HttpStatusCode.Created, CommentJson);
+        handler.EnqueueResponse(HttpStatusCode.Created, CommentJson);
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var exitCode = await CliApp.RunAsync(
+            [
+                "--hostname", "https://forge.example.com",
+                "issue", "-R", "acme/demo", "create", "--title", "[PRD] Long", "--body", body,
+            ],
+            output,
+            error,
+            CliTestSupport.CreateOverrides(handler, "https://forge.example.com"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            [
+                "/api/repository/by-slug/acme/demo/discussions",
+                "/api/repository/by-slug/acme/demo/discussions/42/comments",
+                "/api/repository/by-slug/acme/demo/discussions/42/comments",
+            ],
+            handler.Requests.Select(request => request.RequestUri!.AbsolutePath));
+        var openingBody = ReadJsonString(handler.RequestBodies[0], "body");
+        var continuations = handler.RequestBodies.Skip(1).Select(json => ReadJsonString(json, "bodyMarkdown")).ToList();
+        Assert.True(openingBody.Length <= DiscussionBodySplitter.MaxBodyLength);
+        Assert.Equal(body, string.Join("\n\n", [openingBody, .. continuations]));
+        Assert.Contains("2 continuation comment(s)", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Issue_create_names_created_issue_when_continuation_comment_fails()
+    {
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueResponse(
+            HttpStatusCode.Created,
+            """
+            {"id":"11111111-1111-1111-1111-111111111111","number":42,"title":"[PRD] Long","status":0,"createdAt":"2026-07-12T10:00:00Z","updatedAt":"2026-07-12T10:00:00Z","tags":[]}
+            """);
+        handler.EnqueueResponse(HttpStatusCode.InternalServerError, """{"error":"Boom"}""");
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var exitCode = await CliApp.RunAsync(
+            [
+                "--hostname", "https://forge.example.com",
+                "issue", "-R", "acme/demo", "create", "--title", "[PRD] Long",
+                "--body", $"{new string('a', 7000)}\n\n{new string('b', 7000)}",
+            ],
+            output,
+            error,
+            CliTestSupport.CreateOverrides(handler, "https://forge.example.com"));
+
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("#42", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("part 2 of 2", error.ToString(), StringComparison.Ordinal);
+    }
+
+    private static string ReadJsonString(string json, string property)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.GetProperty(property).GetString()!;
     }
 }

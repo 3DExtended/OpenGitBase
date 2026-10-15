@@ -1,12 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
-  await page.goto(`${baseURL}/__visual__/?msw=1`)
+  await page.goto('/__visual__/?msw=1')
   await page.waitForLoadState('networkidle')
   await page.evaluate(async () => {
     await document.fonts.ready

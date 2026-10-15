@@ -73,4 +73,3 @@ Auto-banner from windows; editing times/merge/split; Message bus→Kafka rename;
 ## Further Notes
 
 Incremental on Public Status Dashboard. Follow code's six groups (incl. Message bus). Locked: Unhealthy min **5m**; Healthy merge **<=2m**; public default **7d**; retention **90d**. Order: detector+entity → aggregator+snapshot → windows API → public UI+visuals → admin suppress/annotate.
-

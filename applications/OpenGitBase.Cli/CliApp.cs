@@ -116,6 +116,40 @@ public static class CliApp
                 parse.GetValue(CliOptions.BodyFileOption)).ConfigureAwait(false);
         });
 
+        var editCommand = new Command(
+            "edit",
+            "Rewrite an issue's published spec (body and continuation comments) in place")
+        {
+            CliOptions.IssueNumberArgument,
+            CliOptions.BodyOption,
+            CliOptions.BodyFileOption,
+        };
+        editCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await IssueCommandHandlers.EditAsync(
+                services,
+                parse.GetValue(CliOptions.IssueNumberArgument),
+                parse.GetValue(CliOptions.BodyOption),
+                parse.GetValue(CliOptions.BodyFileOption)).ConfigureAwait(false);
+        });
+
+        var commentEditCommand = new Command("comment-edit", "Replace the text of a comment you wrote")
+        {
+            CliOptions.CommentIdArgument,
+            CliOptions.BodyOption,
+            CliOptions.BodyFileOption,
+        };
+        commentEditCommand.SetAction(async (parse, _) =>
+        {
+            var services = CreateServices(parse, output, error, overrides);
+            return await IssueCommandHandlers.CommentEditAsync(
+                services,
+                parse.GetValue(CliOptions.CommentIdArgument),
+                parse.GetValue(CliOptions.BodyOption),
+                parse.GetValue(CliOptions.BodyFileOption)).ConfigureAwait(false);
+        });
+
         var closeCommand = new Command("close", "Close an issue")
         {
             CliOptions.IssueNumberArgument,
@@ -218,6 +252,8 @@ public static class CliApp
 
         issueCommand.Subcommands.Add(createCommand);
         issueCommand.Subcommands.Add(commentCommand);
+        issueCommand.Subcommands.Add(commentEditCommand);
+        issueCommand.Subcommands.Add(editCommand);
         issueCommand.Subcommands.Add(closeCommand);
         issueCommand.Subcommands.Add(listCommand);
         issueCommand.Subcommands.Add(viewCommand);

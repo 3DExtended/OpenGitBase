@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { blockServiceWorker, freezeClock } from './helpers'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
     await document.fonts.ready
@@ -198,7 +196,7 @@ test.describe('Merge request visuals', () => {
       document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })
     await freezeClock(page)
-    await page.goto(`${baseURL}/__visual__/?msw=1`)
+    await page.goto('/__visual__/?msw=1')
     await page.waitForLoadState('networkidle')
     await disableAnimations(page)
     await expect(page.getByTestId('visual-merge-requests-overview')).toHaveScreenshot('visual-merge-requests-overview.png')
@@ -210,7 +208,7 @@ test.describe('Merge request visuals', () => {
     await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
     await freezeClock(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
     await expect(page.locator('body')).toHaveScreenshot('merge-request-detail-overview.png', {
@@ -221,7 +219,7 @@ test.describe('Merge request visuals', () => {
   test('linked discussions sidebar', async ({ page }) => {
     await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)
     await expect(page.getByTestId('mr-linked-discussions')).toHaveScreenshot('merge-request-linked-discussions.png')

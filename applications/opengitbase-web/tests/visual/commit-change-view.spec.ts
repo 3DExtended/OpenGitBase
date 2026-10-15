@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { blockServiceWorker, freezeClock } from './helpers'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'
-
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
     await document.fonts.ready
@@ -156,7 +154,7 @@ test('gallery unified diff fixture', async ({ page }) => {
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
-  await page.goto(`${baseURL}/__visual__/?msw=1`)
+  await page.goto('/__visual__/?msw=1')
   await page.waitForLoadState('networkidle')
   await disableAnimations(page)
   await expect(page.getByTestId('visual-commit-unified-diff')).toHaveScreenshot('visual-commit-unified-diff.png')
@@ -170,7 +168,7 @@ test.describe('Commit change view', () => {
   test('commit page renders diff', async ({ page }) => {
     await installCommitRoutes(page)
     await freezeClock(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/commit/abc123de?from=mr/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/commit/abc123de?from=mr/7', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
     await expect(page.getByText('src/policy.ts')).toBeVisible()
     await disableAnimations(page)
@@ -179,7 +177,7 @@ test.describe('Commit change view', () => {
 
   test('click-through from merge request commits tab', async ({ page }) => {
     await installCommitRoutes(page)
-    await page.goto(`${baseURL}/demo-user/hello-world/merge-requests/7`, { waitUntil: 'domcontentloaded' })
+    await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await page.getByRole('tab', { name: 'Commits' }).click()
     await page.getByText(commitDetailPayload.message).click()
     await expect(page).toHaveURL(/\/demo-user\/hello-world\/commit\//)
@@ -190,7 +188,7 @@ test.describe('Commit change view', () => {
   test('abbreviated SHA in URL is replaced with canonical SHA', async ({ page }) => {
     await installCommitRoutes(page)
     await page.goto(
-      `${baseURL}/demo-user/hello-world/commit/${commitDetailPayload.shortSha}?from=mr/7`,
+      `/demo-user/hello-world/commit/${commitDetailPayload.shortSha}?from=mr/7`,
       { waitUntil: 'networkidle' },
     )
     await expect(page).toHaveURL(

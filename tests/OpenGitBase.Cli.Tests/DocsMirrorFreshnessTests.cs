@@ -46,6 +46,39 @@ public sealed class DocsMirrorFreshnessTests : IDisposable
         Assert.Equal("docs/prd/stale.md", stale[0]);
     }
 
+    [Fact]
+    public void Pull_into_existing_mirror_keeps_renamed_files_fresh()
+    {
+        var root = CreateTempRepo();
+        WriteMirrorFile(root, "docs/prd/merge-requests.md", "<!-- forge: #18 -->\n\nOld");
+        WriteMirrorFile(root, "docs/issues/merge-requests/04-git-push-enforcement.md", "<!-- forge: #164 -->\n\nOld");
+
+        var pulled = DocsMirrorExporter.Export(
+            [
+                new DiscussionModel { Number = 18, Title = "[PRD] Merge Requests (Branch Protection, Review, and Server-Side Merge)", Body = "New" },
+                new DiscussionModel { Number = 164, Title = "[slice] mr-04 — Git push enforcement", Body = "New" },
+            ],
+            root);
+
+        Assert.Empty(DocsMirrorFreshnessChecker.FindStaleMirrorPaths(pulled, root));
+        Assert.Empty(DocsMirrorFreshnessChecker.FindMirrorFilesMissingForgeMarker(root));
+    }
+
+    [Fact]
+    public void FindStaleMirrorPaths_FlagsSecondFileWithSameMarker()
+    {
+        var root = CreateTempRepo();
+        WriteMirrorFile(root, "docs/prd/a-merge-requests.md", "<!-- forge: #18 -->\n\nFirst");
+        WriteMirrorFile(root, "docs/prd/b-merge-requests.md", "<!-- forge: #18 -->\n\nSecond");
+
+        var pulled = DocsMirrorExporter.Export(
+            [new DiscussionModel { Number = 18, Title = "[PRD] Merge Requests", Body = "New" }],
+            root);
+
+        Assert.Equal("docs/prd/a-merge-requests.md", Assert.Single(pulled).Path);
+        Assert.Equal(["docs/prd/b-merge-requests.md"], DocsMirrorFreshnessChecker.FindStaleMirrorPaths(pulled, root));
+    }
+
     private static void WriteMirrorFile(string root, string relativePath, string content)
     {
         var absolutePath = Path.Combine(root, relativePath);
