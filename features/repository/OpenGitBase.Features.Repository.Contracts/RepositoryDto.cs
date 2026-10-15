@@ -21,6 +21,9 @@ public class RepositoryDto : ModelBase<RepositoryId, Guid>
 
     public long StorageBytesUsed { get; set; }
 
+    /// <summary>The git part of <see cref="StorageBytesUsed"/>, as last measured on the primary.</summary>
+    public long GitBytesUsed { get; set; }
+
     public string OwnerKind { get; set; } = "user";
 
     public string OwnerSlug { get; set; } = string.Empty;

@@ -1293,6 +1293,9 @@ namespace OpenGitBase.Common.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<long>("GitBytesUsed")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
 

@@ -148,6 +148,7 @@ public class Startup
         services.AddScoped<MergeRequestCompareService>();
         services.AddScoped<MergeRequestMergeService>();
         services.AddScoped<GitPushEnforcementService>();
+        services.AddScoped<RepositoryGitUsageMeter>();
         services.AddSingleton<WebReadReplicaSelector>();
         services.AddScoped<RepositoryContentService>();
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());

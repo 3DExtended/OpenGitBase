@@ -24,9 +24,12 @@ namespace OpenGitBase.Api.Controllers;
 [Route("api/v1/access-checks/repositories")]
 public sealed class RepositoryAccessChecksController : ControllerBase
 {
+    private const string PlatformMergeRole = "PlatformMerge";
+
     private readonly IQueryProcessor _queryProcessor;
     private readonly ISshKeyService _sshKeyService;
     private readonly GitPushEnforcementService _gitPushEnforcementService;
+    private readonly RepositoryGitUsageMeter _gitUsageMeter;
     private readonly ILogger<RepositoryAccessChecksController> _logger;
     private readonly RepositoryStorageQuotaOptions _quotaOptions;
     private readonly PlatformMergeIdentityOptions _platformMergeOptions;
@@ -35,6 +38,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         IQueryProcessor queryProcessor,
         ISshKeyService sshKeyService,
         GitPushEnforcementService gitPushEnforcementService,
+        RepositoryGitUsageMeter gitUsageMeter,
         ILogger<RepositoryAccessChecksController> logger,
         RepositoryStorageQuotaOptions quotaOptions,
         PlatformMergeIdentityOptions platformMergeOptions
@@ -43,6 +47,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         _queryProcessor = queryProcessor;
         _sshKeyService = sshKeyService;
         _gitPushEnforcementService = gitPushEnforcementService;
+        _gitUsageMeter = gitUsageMeter;
         _logger = logger;
         _quotaOptions = quotaOptions;
         _platformMergeOptions = platformMergeOptions;
@@ -238,7 +243,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 Allowed = true,
                 ResolvedUserId = resolvedUserId,
                 RepositoryId = repositoryDto.Id.Value,
-                EffectiveRole = "PlatformMerge",
+                EffectiveRole = PlatformMergeRole,
             };
             var platformPushDenied = await TryBuildDeniedPushResponseAsync(
                 request,
@@ -283,24 +288,9 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 );
             }
 
-            if (
-                request.PackSizeBytes > 0
-                && repositoryDto.StorageBytesUsed + request.PackSizeBytes
-                    > await ResolveRepositoryBytesLimitAsync(repositoryDto, cancellationToken)
-                        .ConfigureAwait(false)
-            )
-            {
-                return OkWithLog(
-                    request,
-                    new RepositoryAccessCheckResponse
-                    {
-                        Allowed = false,
-                        ResolvedUserId = resolvedUserId,
-                        RepositoryId = repositoryDto.Id.Value,
-                        Reason = "Repository storage quota exceeded.",
-                    }
-                );
-            }
+            // The repository's byte quota is checked in ApplyStorageRoutingAsync, once the push
+            // is otherwise allowed: it measures the repository on its primary, and its answer
+            // must not tell someone without access how large a repository is.
         }
 
         if (repositoryDto.OwnerUserId == authenticatingUserId.Get())
@@ -697,6 +687,33 @@ public sealed class RepositoryAccessChecksController : ControllerBase
                 EffectiveRole = response.EffectiveRole,
                 Reason = "Write quorum unavailable: encrypted replication quorum cannot be met.",
             };
+        }
+
+        if (
+            operation == RepositoryOperation.WriteGit
+            && packSizeBytes > 0
+            && _quotaOptions.Enabled
+            && response.EffectiveRole != PlatformMergeRole
+        )
+        {
+            var storageBytesUsed = await _gitUsageMeter
+                .MeasureStorageBytesUsedAsync(repositoryDto, primary, cancellationToken)
+                .ConfigureAwait(false);
+            if (
+                storageBytesUsed + packSizeBytes
+                > await ResolveRepositoryBytesLimitAsync(repositoryDto, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                return new RepositoryAccessCheckResponse
+                {
+                    Allowed = false,
+                    ResolvedUserId = response.ResolvedUserId,
+                    RepositoryId = response.RepositoryId,
+                    EffectiveRole = response.EffectiveRole,
+                    Reason = "Repository storage quota exceeded.",
+                };
+            }
         }
 
         if (operation == RepositoryOperation.WriteGit && packSizeBytes > 0)

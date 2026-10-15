@@ -654,6 +654,52 @@ public class RepositoryControllerTests
     }
 
     [Fact]
+    public async Task UpdateMetadata_KeepsStorageUsageAndItsGitPartTogether()
+    {
+        // The update overwrites the whole row; a git part reset to 0 under an unchanged total
+        // would be counted twice by the next measurement.
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "my-repo",
+                        Name = DefaultRepositoryName,
+                        StorageBytesUsed = 7_000,
+                        GitBytesUsed = 5_000,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UpdateRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(Unit.Value));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        await controller.UpdateMetadata(
+            repositoryId.Value,
+            CreateUpdateRequest("Updated name"),
+            CancellationToken.None
+        );
+
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<UpdateRepositoryQuery>(query =>
+                    query.UpdatedModel.StorageBytesUsed == 7_000
+                    && query.UpdatedModel.GitBytesUsed == 5_000
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task UpdateMetadata_WhenUpdateQueryFails_ReturnsNotFound()
     {
         var userId = UserId.From(Guid.NewGuid());
