@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Discussion, DiscussionComment } from './api'
-import { findDiscussionBodyEcho, shouldShowDiscussionBody } from './discussionBodyEcho'
+import { findDiscussionBodyEcho, resolveDiscussionOpening } from './discussionBodyEcho'
 
 const creatorUserId = 'user-creator'
 const openedAt = '2026-06-24T10:00:00.000Z'
@@ -100,22 +100,39 @@ describe('findDiscussionBodyEcho', () => {
   })
 })
 
-describe('shouldShowDiscussionBody', () => {
-  it('hides the stored body once the opening comment carries it', () => {
+describe('resolveDiscussionOpening', () => {
+  it('opens with the echo comment and lists the remaining comments without it', () => {
     const opening = comment('c-1', 'Revised spec', { editedAt: '2026-06-25T09:00:00.000Z' })
+    const remark = comment('c-2', 'Looks good', {
+      authorUserId: 'user-reviewer',
+      createdAt: '2026-06-24T11:00:00.000Z',
+    })
+    const later = comment('c-3', 'Follow-up', { createdAt: '2026-06-24T12:00:00.000Z' })
 
-    expect(shouldShowDiscussionBody(discussion('Original spec'), [opening])).toBe(false)
+    expect(resolveDiscussionOpening(discussion('Original spec'), [opening, remark, later])).toEqual({
+      body: null,
+      comment: opening,
+      comments: [remark, later],
+    })
   })
 
-  it('shows the stored body when no comment echoes it', () => {
+  it('opens with the stored body when no comment echoes it', () => {
     const remark = comment('c-1', 'First!', { authorUserId: 'user-reviewer' })
 
-    expect(shouldShowDiscussionBody(discussion('Original spec'), [remark])).toBe(true)
-    expect(shouldShowDiscussionBody(discussion('Original spec'), [])).toBe(true)
+    expect(resolveDiscussionOpening(discussion('Original spec'), [remark])).toEqual({
+      body: 'Original spec',
+      comment: null,
+      comments: [remark],
+    })
   })
 
-  it('shows nothing for a blank body', () => {
-    expect(shouldShowDiscussionBody(discussion(null), [])).toBe(false)
-    expect(shouldShowDiscussionBody(discussion(' \n'), [])).toBe(false)
+  it('has no opening for a blank body', () => {
+    const remark = comment('c-1', 'First!')
+
+    expect(resolveDiscussionOpening(discussion(' \n'), [remark])).toEqual({
+      body: null,
+      comment: null,
+      comments: [remark],
+    })
   })
 })

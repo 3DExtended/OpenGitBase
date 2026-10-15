@@ -28,10 +28,23 @@ export function findDiscussionBodyEcho(
   return opening.editedAt || opening.bodyMarkdown.trim() === body ? opening : null
 }
 
-/** Whether the page renders the stored body on its own, above the comments. */
-export function shouldShowDiscussionBody(
+/** What the discussion page shows above everything else, and the comments it lists below. */
+export interface DiscussionOpening {
+  /** The stored body, when no comment carries it. */
+  body: string | null
+  /** The comment that carries the body; its whole thread opens the page. */
+  comment: DiscussionComment | null
+  /** Every other comment, for the comments list. */
+  comments: DiscussionComment[]
+}
+
+export function resolveDiscussionOpening(
   discussion: Discussion,
   comments: readonly DiscussionComment[],
-): boolean {
-  return Boolean(discussion.body?.trim()) && !findDiscussionBodyEcho(discussion, comments)
+): DiscussionOpening {
+  const echo = findDiscussionBodyEcho(discussion, comments)
+  if (echo) {
+    return { body: null, comment: echo, comments: comments.filter(comment => comment !== echo) }
+  }
+  return { body: discussion.body?.trim() ? discussion.body : null, comment: null, comments: [...comments] }
 }

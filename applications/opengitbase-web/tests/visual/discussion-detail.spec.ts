@@ -49,7 +49,7 @@ const mockDiscussionDetail = {
   ],
 }
 
-const reviewerReply = {
+const reviewerComment = {
   id: 'comment-spec-reply-1',
   discussionId: 'disc-0001-0000-0000-000000000001',
   authorUserId: '33333333-3333-3333-3333-333333333333',
@@ -81,11 +81,27 @@ const mockEditedSpecDetail = {
       editedAt: '2026-06-24T11:30:00.000Z',
       isDeleted: false,
       isResolved: false,
-      replyCount: 0,
+      replyCount: 1,
       orphanedFromDeletedRoot: false,
-      replies: [],
+      replies: [
+        {
+          id: 'comment-spec-opening-reply',
+          discussionId: 'disc-0001-0000-0000-000000000001',
+          parentCommentId: 'comment-spec-opening',
+          authorUserId: '33333333-3333-3333-3333-333333333333',
+          authorUsername: 'reviewer',
+          bodyMarkdown: '30 matches what CI bursts need.',
+          createdAt: '2026-06-24T11:45:00.000Z',
+          updatedAt: '2026-06-24T11:45:00.000Z',
+          isDeleted: false,
+          isResolved: false,
+          replyCount: 0,
+          orphanedFromDeletedRoot: false,
+          replies: [],
+        },
+      ],
     },
-    reviewerReply,
+    reviewerComment,
   ],
 }
 
@@ -94,7 +110,7 @@ const mockUnechoedBodyDetail = {
   ...mockDiscussionDetail,
   title: 'Rate limit spec',
   body: '## Goal\n\nOriginal spec: limit pushes to 10 per minute.',
-  comments: [reviewerReply],
+  comments: [reviewerComment],
 }
 
 type MockDiscussionDetail = Omit<typeof mockDiscussionDetail, 'body' | 'comments'> & {
@@ -199,7 +215,7 @@ test.describe('Discussion detail page', () => {
     await expect(page.locator('time[datetime]').first()).toBeVisible()
   })
 
-  test('shows the edited opening comment instead of the stale body', async ({ page }) => {
+  test('opens with the edited opening thread instead of the stale body', async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-06-25T12:00:00.000Z'))
     await waitForApp(page, mockEditedSpecDetail)
 
@@ -207,7 +223,17 @@ test.describe('Discussion detail page', () => {
     await expect(page.getByText('Revised spec: limit pushes to 30 per minute.')).toHaveCount(1)
     await expect(page.getByText('Original spec: limit pushes to 10 per minute.')).toHaveCount(0)
     await expect(page.getByTestId('discussion-body')).toHaveCount(0)
-    await expect(page.getByTestId('discussion-sub-thread')).toHaveCount(2)
+
+    const opening = page.getByTestId('discussion-opening')
+    await expect(opening).toContainText('Revised spec: limit pushes to 30 per minute.')
+    await expect(opening.getByTestId('discussion-sub-thread-reply')).toContainText('30 matches what CI bursts need.')
+    const openingBox = await opening.boundingBox()
+    const linkedBox = await page.getByRole('heading', { name: 'Linked discussions' }).boundingBox()
+    expect(openingBox!.y).toBeLessThan(linkedBox!.y)
+
+    const listed = page.getByTestId('discussion-comments').getByTestId('discussion-sub-thread')
+    await expect(listed).toHaveCount(1)
+    await expect(listed).toContainText('Do we need a migration for the existing rows?')
 
     await settleForScreenshot(page)
     await expect(page.getByTestId('discussion-detail-main')).toHaveScreenshot('discussion-detail-edited-spec.png')
