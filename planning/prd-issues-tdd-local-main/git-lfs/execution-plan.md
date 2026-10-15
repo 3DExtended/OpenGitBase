@@ -15,7 +15,7 @@ Branch strategy: **worktree branch `claude/lfs-implementation-difficulty-1a3fd2`
 | 3 | lfs-03 | Encrypted quorum on verify | AFK | done | lfs-01 | #237 | f4d1e44 |
 | 4 | lfs-04 | Pre-receive integrity gate for LFS pointers | AFK | done | lfs-01 | #238 | ea8e6da |
 | 5 | lfs-05 | Reconciler repair from on-disk LFS inventory | AFK | done | lfs-03 | #239 | baa1dfd |
-| 6 | lfs-06 | Cold recovery and post-promotion LFS restore | AFK | done | lfs-05 | #240 | (pending) |
+| 6 | lfs-06 | Cold recovery and post-promotion LFS restore | AFK | done | lfs-05 | #240 | 53e640e |
 | 7 | lfs-07 | Web UI: LFS files in blob view and raw downloads | AFK | pending | lfs-01, lfs-02 | #241 | |
 | 8 | lfs-08 | Repository deletion cleanup and admin LFS figures | AFK | pending | lfs-05 | #242 | |
 | 9 | lfs-09 | LFS chaos E2E and production rollout | HITL | pending | lfs-03..lfs-08 | #243 | |
