@@ -7,7 +7,7 @@ The API holds one dispatcher→storage SSH key pair in the `FleetSecrets` table.
 | Consumer | What it does | When |
 |----------|--------------|------|
 | `POST /api/admin/fleet/dispatcher-ssh-keys/generate` (admin) | Replaces the key pair **and** the fleet bootstrap token. Returns the public key and the token; the private key stays in the API | On demand (`scripts/bootstrap-fleet.sh`) |
-| Dispatcher [`entrypoint.sh`](../../applications/OpenGitBase.Dispatcher/entrypoint.sh) | Fetches the private key from `GET /api/v1/fleet/bootstrap/dispatcher-ssh-private-key` with `X-Fleet-Bootstrap-Token` and writes it to `/run/secrets/dispatcher_storage_ssh`. Skipped when the file exists. The token works **once** | Container start |
+| Dispatcher [`entrypoint.sh`](../../applications/OpenGitBase.Dispatcher/entrypoint.sh) | Fetches the private key from `GET /api/v1/fleet/bootstrap/dispatcher-ssh-private-key` with `X-Fleet-Bootstrap-Token`, parses it with `jq`, checks it with `ssh-keygen -y`, and only then moves it to `/run/secrets/dispatcher_storage_ssh`. Skipped when that file exists and is not empty. On any failure it logs `entrypoint: WARNING: …`, writes nothing, and keeps Smart HTTP running. The token works **once** | Container start, after Smart HTTP is up |
 | Dispatcher SSH session (`GitSessionProxyService`) | Uses the key to SSH into a storage node as `git` | SSH git only (`GIT_SSH_ENABLED=true`). Smart HTTP never reads it |
 | Storage [`entrypoint.sh`](../../applications/repo-storage-layer/entrypoint.sh) | Writes `DISPATCHER_SSH_PUBLIC_KEY` (or the public key fetched from the API when that is empty) to `/home/git/.ssh/authorized_keys` | Every container start |
 
@@ -73,9 +73,9 @@ Do **not** rerun `scripts/bootstrap-fleet.sh` for this. Besides the key, it mint
 
 ## Known gaps in the SSH bootstrap path
 
-These came from reading the code while fixing the normalization bug. They are not fixed yet and were not reproduced on a running stack. Fix them before turning on `GIT_SSH_ENABLED=true`. Until then, keep SSH git disabled even after you regenerate the key.
+These came from reading the code while fixing the normalization bug. They are not fixed yet. The two token gaps showed up on prod; the other two were not reproduced on a running stack. Fix them before turning on `GIT_SSH_ENABLED=true`. Until then, keep SSH git disabled even after you regenerate the key.
 
 - **One single-use token, two dispatchers.** The API clears the bootstrap token after the first successful fetch, but `bootstrap-fleet.sh` writes the same token to `dispatcher-1` and `dispatcher-2`. Whichever starts second gets `401`.
-- **A failed fetch leaves an empty key file.** The `> "${PRIVATE_KEY_PATH}"` redirect creates the file before the fetch fails. After the automatic restart the file exists, so the fetch is skipped and the dispatcher runs with an empty key.
+- **Every recreate needs the token again.** The key file lives in the writable layer, so each `--force-recreate` (every `scripts/remote-rolling-update.sh --full`) fetches again with a token that is already used, and gets `401`. On prod (2026-10-14) both dispatchers logged `401`: `FleetSecrets` dates from 2026-06-18 and its token hash is empty. The image never had `python3`, which the entrypoint used to parse the response until the jq fix, so the first successful fetch most likely threw its key away and used up the token.
 - **The SSH session cannot read the key.** sshd runs the session as `git`, but the entrypoint runs as root and creates `/run/secrets` with mode `700` and the key file with mode `600`.
 - **The SSH session probably looks in a different place.** sshd does not pass the container environment to sessions. `Dispatcher__StorageSshPrivateKeyPath` therefore likely never reaches `SshSessionRunner`, which falls back to `/run/secrets/storage_ssh_key` from `appsettings.json`.

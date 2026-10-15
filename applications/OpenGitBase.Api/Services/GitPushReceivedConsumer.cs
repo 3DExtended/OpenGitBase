@@ -23,6 +23,42 @@ public sealed class GitPushReceivedConsumer : BackgroundService
         _logger = logger;
     }
 
+    internal async Task ScheduleAsync(string messageValue, CancellationToken stoppingToken)
+    {
+        var payload = JsonSerializer.Deserialize<GitPushPayload>(messageValue);
+        if (payload is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            var queryProcessor = scope.ServiceProvider.GetRequiredService<IQueryProcessor>();
+            await queryProcessor
+                .RunQueryAsync(
+                    new SchedulePipelineRunFromPushQuery
+                    {
+                        RepositoryId = payload.RepositoryId,
+                        Ref = payload.Ref,
+                        AfterSha = payload.AfterSha,
+                    },
+                    stoppingToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The push outbox schedules durably and retries; this fan-out is best effort.
+            _logger.LogWarning(
+                ex,
+                "Scheduling a pipeline for push {AfterSha} to repository {RepositoryId} failed.",
+                payload.AfterSha,
+                payload.RepositoryId
+            );
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (string.IsNullOrWhiteSpace(_kafkaOptions.BootstrapServers))
@@ -57,25 +93,7 @@ public sealed class GitPushReceivedConsumer : BackgroundService
                 continue;
             }
 
-            var payload = JsonSerializer.Deserialize<GitPushPayload>(message.Message.Value);
-            if (payload is null)
-            {
-                continue;
-            }
-
-            await using var scope = _serviceProvider.CreateAsyncScope();
-            var queryProcessor = scope.ServiceProvider.GetRequiredService<IQueryProcessor>();
-            await queryProcessor
-                .RunQueryAsync(
-                    new SchedulePipelineRunFromPushQuery
-                    {
-                        RepositoryId = payload.RepositoryId,
-                        Ref = payload.Ref,
-                        AfterSha = payload.AfterSha,
-                    },
-                    stoppingToken
-                )
-                .ConfigureAwait(false);
+            await ScheduleAsync(message.Message.Value, stoppingToken).ConfigureAwait(false);
         }
     }
 

@@ -373,6 +373,7 @@ export interface RepositoryContentEntry {
   path: string
   type: string
   size: number | null
+  lastModifiedAt: string | null
 }
 
 export interface RepositoryContentTree {
@@ -837,6 +838,7 @@ function normalizeContentEntry(raw: Record<string, unknown>): RepositoryContentE
     path: String(raw.path ?? ''),
     type: String(raw.type ?? ''),
     size: raw.size == null ? null : Number(raw.size),
+    lastModifiedAt: raw.lastModifiedAt == null ? null : String(raw.lastModifiedAt),
   }
 }
 

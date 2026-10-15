@@ -11,8 +11,18 @@ trap 'rm -rf "${OUTPUT_DIR}" "${OGB_CONFIG_DIR:-}"; if [[ "$(uname)" == "Darwin"
 
 "${ROOT}/scripts/test-ogb-cli-docs-e2e.sh"
 
+echo "==> Seeding pull target with the committed mirror"
+# ogb docs pull updates the file that carries a discussion's <!-- forge: #N --> marker, so pulling
+# into a copy of the mirror yields the committed paths instead of fresh title slugs.
+mkdir -p "${OUTPUT_DIR}/docs"
+for folder in prd adr issues; do
+  if [[ -d "${ROOT}/docs/${folder}" ]]; then
+    cp -R "${ROOT}/docs/${folder}" "${OUTPUT_DIR}/docs/"
+  fi
+done
+
 echo "==> Comparing pulled inventory to git mirror markers"
-ogb --hostname "${API_URL}" docs -R "${OWNER}/${REPO_SLUG}" pull --output-dir "${OUTPUT_DIR}" --json > "${OUTPUT_DIR}/inventory.json"
+ogb --json --hostname "${API_URL}" docs -R "${OWNER}/${REPO_SLUG}" pull --output-dir "${OUTPUT_DIR}" > "${OUTPUT_DIR}/inventory.json"
 
 python3 - <<'PY' "${ROOT}" "${OUTPUT_DIR}/inventory.json"
 import json

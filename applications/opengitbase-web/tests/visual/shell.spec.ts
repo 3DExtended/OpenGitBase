@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -40,6 +41,7 @@ async function waitForApp(page: import('@playwright/test').Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await freezeClock(page)
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     void navigator.serviceWorker.getRegistrations().then(registrations =>
@@ -70,6 +72,13 @@ test.describe('Shell components @regression', () => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-admin-rf4-replication')).toHaveScreenshot(
       'admin-rf4-replication.png',
+    )
+  })
+
+  test('repository directory table', async ({ page }) => {
+    await waitForApp(page)
+    await expect(page.getByTestId('visual-repo-directory-table')).toHaveScreenshot(
+      'repo-directory-table.png',
     )
   })
 

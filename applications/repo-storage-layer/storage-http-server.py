@@ -477,7 +477,8 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
     def _handle_content_error(self, exc: GitContentError) -> None:
         if exc.code in {"not_found", "invalid_ref", "ambiguous_sha"}:
-            self._send_json(404, {"error": exc.message})
+            # The code lets the API tell a missing file (not_found) from a revision this node lacks.
+            self._send_json(404, {"error": exc.message, "code": exc.code})
             return
         if exc.code == "invalid_path":
             self._send_json(400, {"error": exc.message})

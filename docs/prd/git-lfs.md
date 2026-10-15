@@ -52,6 +52,8 @@ HAProxy ──► Dispatcher ──► API: authorize, quota, plan actions, mint
 
 ---
 
+_This PRD continues in the comments below: 2/4 User Stories · 3/4 Implementation Decisions · 4/4 Testing Decisions, Out of Scope, Further Notes._
+
 ## User Stories
 
 ### Using LFS from git
@@ -125,8 +127,6 @@ HAProxy ──► Dispatcher ──► API: authorize, quota, plan actions, mint
 
 50. As a developer of OpenGitBase, I want the compose stack and E2E runner to include the `git-lfs` client, so that LFS is tested end to end with the real client.
 51. As a developer of OpenGitBase, I want chaos tests that upload LFS objects, lose the primary+read node, cold-recover, and verify the downloaded bytes, so that the durability guarantee stays protected by tests.
-
----
 
 ## Implementation Decisions
 
@@ -278,8 +278,6 @@ The 2 GiB default keeps a verify (stream, encrypt, upload) within HAProxy's 5-mi
 
 Rollback in reverse: disable first. Already recorded objects stay on disk and in the database and are served again once LFS is re-enabled.
 
----
-
 ## Testing Decisions
 
 ### What makes a good test
@@ -364,8 +362,6 @@ The protocol work (dispatcher routes, batch planning, web UI) is small and follo
 11. `lfs-11` Compose E2E with `git-lfs`, including chaos scenarios.
 
 Enable `Lfs:Enabled` in production only after slices 1–8 and 11.
-
----
 
 ## Update: slice breakdown
 

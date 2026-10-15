@@ -157,6 +157,18 @@ internal static class SshSessionRunner
             )
                 ? timeoutSeconds
                 : 30;
+            options.FleetSelfRegistrationEnabled =
+                !bool.TryParse(
+                    configuration["Dispatcher:FleetSelfRegistrationEnabled"],
+                    out var fleetSelfRegistrationEnabled
+                ) || fleetSelfRegistrationEnabled;
+            options.FleetHeartbeatIntervalSeconds = int.TryParse(
+                configuration["Dispatcher:FleetHeartbeatIntervalSeconds"],
+                out var heartbeatIntervalSeconds
+            )
+                ? heartbeatIntervalSeconds
+                : 30;
+            options.FleetProbeUrl = configuration["Dispatcher:FleetProbeUrl"];
         });
 
         services.AddHttpClient<RepositoryAccessCheckClient>();
