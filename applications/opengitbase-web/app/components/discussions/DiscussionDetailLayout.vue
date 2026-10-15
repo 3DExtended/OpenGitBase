@@ -39,7 +39,10 @@ defineProps<{
       v-else
       class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]"
     >
-      <main class="min-w-0">
+      <main
+        class="min-w-0"
+        data-testid="discussion-detail-main"
+      >
         <div class="space-y-6">
           <header class="space-y-3">
             <h1 class="text-2xl font-semibold">
@@ -64,8 +67,11 @@ defineProps<{
             </div>
           </header>
 
-          <UCard v-if="ctx.discussion.body">
-            <CollaborationRenderedBody :source="ctx.discussion.body" />
+          <UCard
+            v-if="ctx.showDiscussionBody"
+            data-testid="discussion-body"
+          >
+            <CollaborationRenderedBody :source="ctx.discussion.body ?? ''" />
           </UCard>
 
           <DiscussionLinkedDiscussions
