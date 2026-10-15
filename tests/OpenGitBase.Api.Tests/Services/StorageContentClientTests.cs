@@ -124,12 +124,55 @@ public class StorageContentClientTests
             CancellationToken.None
         );
 
-        Assert.NotNull(result);
+        Assert.False(result.IsMissing);
+        var tree = Assert.IsType<StorageContentTreePayload>(result.Payload);
         Assert.Equal(
             new DateTimeOffset(2025, 2, 3, 4, 5, 6, TimeSpan.Zero),
-            result!.Entries[0].LastModifiedAt
+            tree.Entries[0].LastModifiedAt
         );
-        Assert.Null(result.Entries[1].LastModifiedAt);
+        Assert.Null(tree.Entries[1].LastModifiedAt);
+    }
+
+    // As for files: only "not_found" says the directory is missing. A revision the node lacks
+    // (a replica that has not caught up yet) or any other failure leaves IsMissing false.
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "Path is not a directory.", "code": "not_found" }""", true)]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "Unknown revision.", "code": "invalid_ref" }""", false)]
+    [InlineData(HttpStatusCode.NotFound, """{ "error": "Repository not found." }""", false)]
+    [InlineData(HttpStatusCode.InternalServerError, """{ "error": "boom", "code": "git_error" }""", false)]
+    [InlineData(HttpStatusCode.BadGateway, "<html>bad gateway</html>", false)]
+    public async Task GetTreeAsync_WhenStorageFails_ReportsMissingOnlyForNotFound(
+        HttpStatusCode status,
+        string body,
+        bool expectedMissing
+    )
+    {
+        var handler = new StubHttpMessageHandler(
+            (request, _) =>
+            {
+                Assert.Contains("/internal/repos/content/tree?", request.RequestUri?.ToString());
+                Assert.Contains("path=src%2Fmissing", request.RequestUri?.ToString());
+                return Task.FromResult(
+                    new HttpResponseMessage(status)
+                    {
+                        Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                    }
+                );
+            }
+        );
+
+        var client = new StorageContentClient(new HttpClient(handler));
+        var result = await client.GetTreeAsync(
+            CreateTarget(),
+            "secret-token",
+            "/srv/git/repo.git",
+            "main",
+            "src/missing",
+            CancellationToken.None
+        );
+
+        Assert.Null(result.Payload);
+        Assert.Equal(expectedMissing, result.IsMissing);
     }
 
     [Fact]

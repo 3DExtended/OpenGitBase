@@ -21,7 +21,7 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     ) =>
         GetCombinedRefsAsync(target, apiToken, physicalPath, cancellationToken);
 
-    public Task<StorageContentTreePayload?> GetTreeAsync(
+    public async Task<StorageContentTreeResult> GetTreeAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
         string physicalPath,
@@ -32,8 +32,13 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/tree?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
-        return GetJsonAsync<StorageContentTreePayload>(uri, apiToken, cancellationToken)
-;
+        var (payload, isMissing) = await GetPathContentAsync<StorageContentTreePayload>(
+                uri,
+                apiToken,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return new StorageContentTreeResult { Payload = payload, IsMissing = isMissing };
     }
 
     public async Task<StorageContentBlobResult> GetBlobAsync(
@@ -47,26 +52,13 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/blob?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
-        using var response = await httpClient.SendAsync(request, cancellationToken)
+        var (payload, isMissing) = await GetPathContentAsync<StorageContentBlobPayload>(
+                uri,
+                apiToken,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            return new StorageContentBlobResult
-            {
-                IsMissing = await IsMissingFileAsync(response, cancellationToken).ConfigureAwait(false),
-            };
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return new StorageContentBlobResult
-        {
-            Payload = await JsonSerializer
-                .DeserializeAsync<StorageContentBlobPayload>(stream, JsonOptions, cancellationToken)
-                .ConfigureAwait(false),
-        };
+        return new StorageContentBlobResult { Payload = payload, IsMissing = isMissing };
     }
 
     public Task<StorageContentReadmePayload?> GetReadmeAsync(
@@ -301,11 +293,11 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     }
 
     /// <summary>
-    /// Whether a failed blob read means the file does not exist at that revision. A storage node
-    /// also answers 404 for a revision it lacks (a replica that has not caught up yet) and for a
-    /// repository it does not hold; only the "not_found" code says the file itself is missing.
+    /// Whether a failed file or directory read means the path does not exist at that revision. A
+    /// storage node also answers 404 for a revision it lacks (a replica that has not caught up yet)
+    /// and for a repository it does not hold; only the "not_found" code says the path is missing.
     /// </summary>
-    internal static async Task<bool> IsMissingFileAsync(
+    internal static async Task<bool> IsMissingPathAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken
     )
@@ -366,6 +358,29 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
             Tags = tagsTask.Result.Tags,
             IsEmpty = emptyTask.Result.IsEmpty,
         };
+    }
+
+    private async Task<(T? Payload, bool IsMissing)> GetPathContentAsync<T>(
+        string uri,
+        string apiToken,
+        CancellationToken cancellationToken
+    )
+        where T : class
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        using var response = await httpClient.SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, await IsMissingPathAsync(response, cancellationToken).ConfigureAwait(false));
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var payload = await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        return (payload, false);
     }
 
     private async Task<T?> GetJsonAsync<T>(

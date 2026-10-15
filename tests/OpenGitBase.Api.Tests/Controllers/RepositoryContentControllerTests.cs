@@ -103,6 +103,65 @@ public class RepositoryContentControllerTests
     }
 
     [Fact]
+    public async Task GetTree_WhenDirectoryDoesNotExistAtRef_ReturnsNotFound()
+    {
+        var controller = CreateController(
+            CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false),
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, repository) =>
+            {
+                ConfigureStorageNode(queryProcessor);
+                storageContentClient
+                    .GetTreeAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        repository.PhysicalPath,
+                        "main",
+                        "missing-dir",
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(new StorageContentTreeResult { IsMissing = true });
+            }
+        );
+
+        var result = await controller.GetTree("owner", "repo", "main", "missing-dir", CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    // A revision the storage node lacks (e.g. a replica that has not caught up yet) leaves
+    // IsMissing false, so it stays unavailable rather than claiming the directory is missing.
+    [Fact]
+    public async Task GetTree_WhenStorageCannotList_ReturnsServiceUnavailable()
+    {
+        var controller = CreateController(
+            CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false),
+            authenticatedUserId: null,
+            configureStorage: (queryProcessor, storageContentClient, _) =>
+            {
+                ConfigureStorageNode(queryProcessor);
+                storageContentClient
+                    .GetTreeAsync(
+                        Arg.Any<RepositoryRoutingTargetDto>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<CancellationToken>()
+                    )
+                    .Returns(new StorageContentTreeResult());
+            }
+        );
+
+        var result = await controller.GetTree("owner", "repo", "main", "src", CancellationToken.None);
+
+        Assert.Equal(
+            StatusCodes.Status503ServiceUnavailable,
+            Assert.IsType<StatusCodeResult>(result).StatusCode
+        );
+    }
+
+    [Fact]
     public async Task GetBlob_WhenFileDoesNotExistAtRef_ReturnsNotFound()
     {
         var controller = CreateController(
@@ -211,21 +270,24 @@ public class RepositoryContentControllerTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new StorageContentTreePayload
+                new StorageContentTreeResult
                 {
-                    Ref = "main",
-                    Path = string.Empty,
-                    Entries =
-                    [
-                        new StorageContentEntryPayload
-                        {
-                            Name = "README.md",
-                            Path = "README.md",
-                            Type = "blob",
-                            Size = 12,
-                            LastModifiedAt = ReadmeLastModifiedAt,
-                        },
-                    ],
+                    Payload = new StorageContentTreePayload
+                    {
+                        Ref = "main",
+                        Path = string.Empty,
+                        Entries =
+                        [
+                            new StorageContentEntryPayload
+                            {
+                                Name = "README.md",
+                                Path = "README.md",
+                                Type = "blob",
+                                Size = 12,
+                                LastModifiedAt = ReadmeLastModifiedAt,
+                            },
+                        ],
+                    },
                 }
             );
     }
