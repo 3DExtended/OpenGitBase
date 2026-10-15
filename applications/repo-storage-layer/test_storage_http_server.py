@@ -399,6 +399,8 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.patches = [
             mock.patch.object(storage_http_server, "REPOS_ROOT", self.repos_root),
             mock.patch.object(storage_http_server, "LFS_ROOT", self.repos_root / ".lfs"),
+            mock.patch.object(storage_http_server, "LFS_ENCRYPTED_ROOT", self.temp_dir / "data" / "lfs"),
+            mock.patch.object(storage_http_server, "ARTIFACT_ROOT", self.temp_dir / "data" / "artifacts"),
             mock.patch.object(storage_http_server, "ROLE_DIR", self.temp_dir / "roles"),
             mock.patch.object(storage_http_server, "WATERMARK_DIR", self.temp_dir / "watermarks"),
             mock.patch.object(storage_http_server, "STORAGE_API_TOKEN", self.TOKEN),
@@ -469,6 +471,65 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertNotIn(storage_http_server.LFS_ROOT.resolve(), physical_path.resolve().parents)
 
+    def test_put_stores_a_plaintext_object_verified_against_its_oid(self) -> None:
+        content = b"read replica copy" * 500
+        oid = hashlib.sha256(content).hexdigest()
+
+        status, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", content)
+        wrong, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{'0' * 64}", content)
+
+        self.assertEqual(200, status)
+        self.assertEqual(len(content), storage_http_server.lfs_store().size(self.REPOSITORY_ID, oid))
+        self.assertEqual(422, wrong)
+
+    def test_encrypted_replica_stores_and_serves_encrypted_copies_outside_the_artifact_tree(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"plaintext the replica never sees").hexdigest()
+        ciphertext = b"OLFS" + bytes(range(256)) * 20
+
+        put, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", ciphertext)
+        head, headers, _ = self._request("HEAD", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}")
+        get, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}")
+
+        self.assertEqual(200, put)
+        self.assertEqual((200, str(len(ciphertext))), (head, headers["content-length"]))
+        self.assertEqual((200, ciphertext), (get, body))
+        stored = storage_http_server.encrypted_lfs_store().path(self.REPOSITORY_ID, oid)
+        self.assertTrue(stored.name.endswith(".aead"))
+        self.assertNotIn(storage_http_server.ARTIFACT_ROOT.resolve(), stored.resolve().parents)
+        self.assertNotIn(storage_http_server.REPOS_ROOT.resolve(), stored.resolve().parents)
+
+    def test_encrypted_endpoints_refuse_on_a_plaintext_node(self) -> None:
+        oid = hashlib.sha256(b"x").hexdigest()
+        for role in (None, "Primary", "ReadReplica"):
+            if role:
+                self._set_role(role)
+            for method, body in (("PUT", b"OLFS"), ("GET", None), ("HEAD", None)):
+                with self.subTest(role=role, method=method):
+                    status, _, _ = self._request(method, f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", body)
+                    self.assertEqual(403, status)
+
+    def test_plaintext_endpoints_refuse_on_an_encrypted_replica(self) -> None:
+        content = b"secret"
+        oid = self._store(content)
+        self._set_role("EncryptedReplica")
+
+        for method, body in (("PUT", content), ("GET", None), ("HEAD", None)):
+            with self.subTest(method=method):
+                status, _, _ = self._request(method, f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", body)
+                self.assertEqual(403, status)
+
+    def test_encrypted_lfs_endpoints_require_the_node_token(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"x").hexdigest()
+
+        for method in ("HEAD", "GET", "PUT"):
+            with self.subTest(method=method):
+                status, _, _ = self._request(
+                    method, f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", b"OLFS", token=None
+                )
+                self.assertEqual(401, status)
+
     def test_the_lfs_root_is_never_a_repository_path(self) -> None:
         lfs_root = storage_http_server.LFS_ROOT
 
@@ -476,6 +537,9 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.assertFalse(storage_http_server._is_valid_physical_path(str(lfs_root / self.REPOSITORY_ID)))
         self.assertFalse(storage_http_server._is_deletable_repo_path(str(lfs_root)))
         self.assertTrue(storage_http_server._is_valid_physical_path(str(self.repos_root / f"{self.REPOSITORY_ID}.git")))
+
+    def _set_role(self, role: str) -> None:
+        storage_http_server._write_repo_role(self.REPOSITORY_ID, role)
 
     def _store(self, content: bytes) -> str:
         oid = hashlib.sha256(content).hexdigest()

@@ -131,6 +131,11 @@ public sealed class LfsHandler
     private static async Task RelayAsync(HttpContext context, LfsApiAnswer answer)
     {
         context.Response.StatusCode = answer.StatusCode;
+        if (answer.RetryAfterSeconds is { } retryAfter)
+        {
+            context.Response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         context.Response.ContentType = LfsContentType;
         await context.Response.WriteAsync(answer.Body, context.RequestAborted).ConfigureAwait(false);
     }

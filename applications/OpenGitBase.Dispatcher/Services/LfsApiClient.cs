@@ -34,6 +34,7 @@ public sealed class LfsApiClient
             .PostAsJsonAsync($"{_options.ApiUrl.TrimEnd('/')}/api/v1/internal/lfs/{endpoint}", payload, cancellationToken)
             .ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return new LfsApiAnswer((int)response.StatusCode, body);
+        var retryAfter = response.Headers.RetryAfter?.Delta is { } delta ? (int?)delta.TotalSeconds : null;
+        return new LfsApiAnswer((int)response.StatusCode, body, retryAfter);
     }
 }

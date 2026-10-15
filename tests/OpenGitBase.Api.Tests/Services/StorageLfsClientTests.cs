@@ -1,5 +1,7 @@
 ﻿using System.Net;
+using System.Text;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Features.Repository.Contracts;
 
 namespace OpenGitBase.Api.Tests.Services;
 
@@ -21,7 +23,7 @@ public class StorageLfsClientTests
             return response;
         });
 
-        var size = await client.GetObjectSizeAsync(Node, RepositoryId, Oid, CancellationToken.None);
+        var size = await client.GetObjectSizeAsync(Node, RepositoryId, Oid, LfsObjectCopyKind.Plaintext, CancellationToken.None);
 
         Assert.Equal(5_000_000, size);
         Assert.NotNull(sent);
@@ -38,7 +40,7 @@ public class StorageLfsClientTests
     {
         var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
 
-        var size = await client.GetObjectSizeAsync(Node, RepositoryId, Oid, CancellationToken.None);
+        var size = await client.GetObjectSizeAsync(Node, RepositoryId, Oid, LfsObjectCopyKind.Plaintext, CancellationToken.None);
 
         Assert.Null(size);
     }
@@ -49,7 +51,104 @@ public class StorageLfsClientTests
         var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
-            client.GetObjectSizeAsync(Node, RepositoryId, Oid, CancellationToken.None)
+            client.GetObjectSizeAsync(Node, RepositoryId, Oid, LfsObjectCopyKind.Plaintext, CancellationToken.None)
+        );
+    }
+
+    [Fact]
+    public async Task GetObjectSizeAsync_ForAnEncryptedCopy_AsksTheEncryptedRoute()
+    {
+        HttpRequestMessage? sent = null;
+        var client = CreateClient(request =>
+        {
+            sent = request;
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        await client.GetObjectSizeAsync(Node, RepositoryId, Oid, LfsObjectCopyKind.Encrypted, CancellationToken.None);
+
+        Assert.Equal(
+            $"http://storage-1:8081/internal/lfs/{RepositoryId:D}/encrypted/{Oid}",
+            sent?.RequestUri?.ToString()
+        );
+    }
+
+    [Fact]
+    public async Task OpenObjectAsync_StreamsTheObject()
+    {
+        HttpRequestMessage? sent = null;
+        var client = CreateClient(request =>
+        {
+            sent = request;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent("content"u8.ToArray()) };
+        });
+
+        await using var stream = await client.OpenObjectAsync(
+            Node,
+            RepositoryId,
+            Oid,
+            LfsObjectCopyKind.Plaintext,
+            CancellationToken.None
+        );
+
+        Assert.NotNull(stream);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        Assert.Equal("content", await reader.ReadToEndAsync());
+        Assert.Equal(HttpMethod.Get, sent?.Method);
+        Assert.Equal("Bearer node-token", sent?.Headers.Authorization?.ToString());
+    }
+
+    [Fact]
+    public async Task OpenObjectAsync_WhenTheNodeLacksTheObject_ReturnsNull()
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var stream = await client.OpenObjectAsync(Node, RepositoryId, Oid, LfsObjectCopyKind.Plaintext, CancellationToken.None);
+
+        Assert.Null(stream);
+    }
+
+    [Fact]
+    public async Task PutObjectAsync_SendsTheContentWithItsLength()
+    {
+        HttpRequestMessage? sent = null;
+        byte[]? body = null;
+        var client = CreateClient(request =>
+        {
+            sent = request;
+            body = request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        await client.PutObjectAsync(
+            Node,
+            RepositoryId,
+            Oid,
+            LfsObjectCopyKind.Encrypted,
+            new ByteArrayContent([1, 2, 3]),
+            CancellationToken.None
+        );
+
+        Assert.Equal(HttpMethod.Put, sent?.Method);
+        Assert.Equal($"http://storage-1:8081/internal/lfs/{RepositoryId:D}/encrypted/{Oid}", sent?.RequestUri?.ToString());
+        Assert.Equal(3, sent?.Content?.Headers.ContentLength);
+        Assert.Equal([1, 2, 3], body);
+    }
+
+    [Fact]
+    public async Task PutObjectAsync_WhenTheNodeRefuses_Throws()
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.Forbidden));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.PutObjectAsync(
+                Node,
+                RepositoryId,
+                Oid,
+                LfsObjectCopyKind.Plaintext,
+                new ByteArrayContent([1]),
+                CancellationToken.None
+            )
         );
     }
 

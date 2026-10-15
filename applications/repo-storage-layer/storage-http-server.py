@@ -17,7 +17,7 @@ import base64
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 from storage_content import (
     GitContentError,
@@ -51,8 +51,10 @@ REPOS_ROOT = Path("/srv/git")
 LFS_ROOT = Path(os.environ.get("STORAGE_LFS_ROOT", "/srv/git/.lfs"))
 # Loopback only: nginx forwards /lfs/... from the git HTTP port here (see nginx-git-http.conf).
 LFS_TRANSFER_PORT = int(os.environ.get("STORAGE_LFS_TRANSFER_PORT", "8083"))
+# Encrypted LFS copies live on the persistent data volume, beside (not inside) the per-watermark artifact tree.
+LFS_ENCRYPTED_ROOT = Path(os.environ.get("STORAGE_LFS_ENCRYPTED_ROOT", "/var/lib/opengitbase/lfs"))
 INTERNAL_LFS_OBJECT_PATH_PATTERN = re.compile(
-    r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/objects/(?P<oid>[0-9a-f]{64})$"
+    r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/(?P<kind>objects|encrypted)/(?P<oid>[0-9a-f]{64})$"
 )
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
@@ -79,6 +81,10 @@ SYNC_ALLOWED_HOSTS = {
 
 def lfs_store() -> storage_lfs.LfsObjectStore:
     return storage_lfs.LfsObjectStore(LFS_ROOT)
+
+
+def encrypted_lfs_store() -> storage_lfs.LfsObjectStore:
+    return storage_lfs.LfsObjectStore(LFS_ENCRYPTED_ROOT, suffix=".aead", content_addressed=False)
 
 
 def _is_inside_lfs_root(resolved: Path) -> bool:
@@ -489,8 +495,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
 
         lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(urlparse(self.path).path)
         if lfs_match:
-            storage_lfs.send_object(
-                self, lfs_store(), lfs_match.group("repository_id").lower(), lfs_match.group("oid"), False
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.send_object(self, store, repository_id, oid, False),
             )
             return
 
@@ -504,8 +511,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(parsed.path)
         if lfs_match:
-            storage_lfs.send_object(
-                self, lfs_store(), lfs_match.group("repository_id").lower(), lfs_match.group("oid"), True
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.send_object(self, store, repository_id, oid, True),
             )
             return
         if parsed.path == "/internal/repos/content/branches":
@@ -882,6 +890,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.receive_object(self, store, repository_id, oid),
+            )
+            return
         artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
         if not artifact_match:
             self.send_error(404)
@@ -891,6 +906,29 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             artifact_match.group("repository_id"),
             int(artifact_match.group("watermark")),
         )
+
+    def _handle_lfs_object(
+        self,
+        match: re.Match[str],
+        action: Callable[[storage_lfs.LfsObjectStore, str, str], None],
+    ) -> None:
+        """Plaintext objects never land on an encrypted replica, and encrypted copies only there."""
+        repository_id = match.group("repository_id").lower()
+        encrypted_replica = _is_encrypted_replica(repository_id)
+        if match.group("kind") == "encrypted":
+            if not encrypted_replica:
+                self._send_json(403, {"error": "Encrypted LFS copies belong on encrypted replica storage only."})
+                return
+            store = encrypted_lfs_store()
+        else:
+            if encrypted_replica:
+                self._send_json(403, {"error": "Plaintext LFS objects are not allowed on encrypted replica storage."})
+                return
+            store = lfs_store()
+        try:
+            action(store, repository_id, match.group("oid"))
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
 
     def _handle_get_inventory(self) -> None:
         self._send_json(200, on_disk_inventory())

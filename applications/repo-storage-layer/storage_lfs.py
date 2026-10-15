@@ -44,13 +44,18 @@ def require_oid(oid: str) -> str:
 
 
 class LfsObjectStore:
-    def __init__(self, root: Path) -> None:
+    """Plaintext objects (``content_addressed``: verified against the oid) or encrypted copies (suffix ``.aead``:
+    opaque ciphertext that only the API can check)."""
+
+    def __init__(self, root: Path, suffix: str = "", content_addressed: bool = True) -> None:
         self.root = Path(root)
+        self.suffix = suffix
+        self.content_addressed = content_addressed
 
     def path(self, repository_id: str, oid: str) -> Path:
         repository_id = require_repository_id(repository_id)
         oid = require_oid(oid)
-        return self.root / repository_id / oid[0:2] / oid[2:4] / oid
+        return self.root / repository_id / oid[0:2] / oid[2:4] / f"{oid}{self.suffix}"
 
     def size(self, repository_id: str, oid: str) -> int | None:
         try:
@@ -64,19 +69,20 @@ class LfsObjectStore:
     def store(self, repository_id: str, oid: str, stream: BinaryIO, size: int) -> None:
         """Reads exactly ``size`` bytes from ``stream`` and stores them under ``oid``.
 
-        The bytes go to a temporary file beside the target and are moved into place only when their SHA-256
-        equals the oid, so a reader never sees a partial or wrong object. Two uploads of the same object at
-        once both succeed: the content is identical, and the rename is atomic.
+        The bytes go to a temporary file beside the target and are moved into place only when complete (and,
+        for plaintext, when their SHA-256 equals the oid), so a reader never sees a partial or wrong object. Two
+        uploads of the same object at once both succeed: either result is valid, and the rename is atomic.
+        An encrypted copy is always replaced, so a re-upload repairs a damaged one.
         """
         target = self.path(repository_id, oid)
         if size < 0:
             raise LfsObjectMismatch("Object size must not be negative.")
-        if self.size(repository_id, oid) == size:
+        if self.content_addressed and self.size(repository_id, oid) == size:
             _drain(stream, size)
             return
 
         target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(f".{oid}.{os.getpid()}.{id(stream)}.tmp")
+        temporary = target.with_name(f".{target.name}.{os.getpid()}.{id(stream)}.tmp")
         digest = hashlib.sha256()
         received = 0
         try:
@@ -92,7 +98,7 @@ class LfsObjectStore:
                 os.fsync(output.fileno())
             if received != size:
                 raise LfsObjectMismatch(f"Expected {size} bytes, received {received}.")
-            if digest.hexdigest() != oid:
+            if self.content_addressed and digest.hexdigest() != oid:
                 raise LfsObjectMismatch("Content does not match the LFS oid.")
             os.replace(temporary, target)
         finally:

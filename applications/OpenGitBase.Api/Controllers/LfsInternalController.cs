@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Globalization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
@@ -44,6 +45,13 @@ public sealed class LfsInternalController : ControllerBase
             await _lfsService.VerifyAsync(request, HttpContext.TraceIdentifier, cancellationToken).ConfigureAwait(false)
         );
 
-    private static ObjectResult ToActionResult(LfsResult result) =>
-        new(result.Body) { StatusCode = result.StatusCode };
+    private ObjectResult ToActionResult(LfsResult result)
+    {
+        if (result.RetryAfterSeconds is { } retryAfter)
+        {
+            Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return new ObjectResult(result.Body) { StatusCode = result.StatusCode };
+    }
 }

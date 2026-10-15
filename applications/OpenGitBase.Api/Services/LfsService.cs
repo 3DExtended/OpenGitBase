@@ -3,21 +3,24 @@ using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
-using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Api.Services;
 
 /// <summary>
 /// Git LFS on the control plane. The batch call decides access with the same rules as git and hands out one
-/// signed action per object. Object bytes never pass through the API: the dispatcher streams them between the
-/// client and the storage nodes after <see cref="CheckTransferAsync"/>, and <see cref="VerifyAsync"/> records
-/// an object once storage holds it.
+/// signed action per object. Client transfers bypass the API: the dispatcher streams them between the client and
+/// the storage nodes after <see cref="CheckTransferAsync"/>. <see cref="VerifyAsync"/> records an object once it
+/// reached LFS Quorum: the primary and at least one encrypted replica hold it (<see cref="LfsReplicationService"/>).
 /// </summary>
 public sealed partial class LfsService
 {
     private const string BasicTransfer = "basic";
     private const string Sha256 = "sha256";
+    private const int RetryAfterSeconds = 10;
+    private const string StorageUnavailable = "Repository storage is unavailable.";
+    private const string MigrationMessage =
+        "LFS requires encrypted replication; this repository is still migrating. Try again later.";
     private readonly LfsOptions _lfsOptions;
     private readonly GitOptions _gitOptions;
     private readonly RepositoryAccessCheckEvaluator _accessEvaluator;
@@ -25,6 +28,8 @@ public sealed partial class LfsService
     private readonly IQueryProcessor _queryProcessor;
     private readonly LfsActionTokenService _tokens;
     private readonly IStorageLfsClient _storage;
+    private readonly LfsReplicationService _replication;
+    private readonly ILfsCopyCompletionScheduler _completions;
     private readonly ILogger<LfsService> _logger;
 
     public LfsService(
@@ -35,6 +40,8 @@ public sealed partial class LfsService
         IQueryProcessor queryProcessor,
         LfsActionTokenService tokens,
         IStorageLfsClient storage,
+        LfsReplicationService replication,
+        ILfsCopyCompletionScheduler completions,
         ILogger<LfsService> logger
     )
     {
@@ -45,6 +52,8 @@ public sealed partial class LfsService
         _queryProcessor = queryProcessor;
         _tokens = tokens;
         _storage = storage;
+        _replication = replication;
+        _completions = completions;
         _logger = logger;
     }
 
@@ -124,6 +133,19 @@ public sealed partial class LfsService
             {
                 return quotaFailure;
             }
+
+            var replicationFailure = await CheckEncryptedReplicationAsync(
+                    request,
+                    repositoryId,
+                    recorded,
+                    requestId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (replicationFailure is not null)
+            {
+                return replicationFailure;
+            }
         }
 
         var baseUrl = ResolveBaseUrl(request);
@@ -174,10 +196,11 @@ public sealed partial class LfsService
         }
 
         var claims = authorization.Claims!;
-        var primary = await FindHealthyPrimaryAsync(claims.RepositoryId, cancellationToken).ConfigureAwait(false);
-        if (primary is null)
+        var targets = await FindTransferTargetsAsync(claims.RepositoryId, operation, cancellationToken)
+            .ConfigureAwait(false);
+        if (targets.Count == 0)
         {
-            return Error(StatusCodes.Status503ServiceUnavailable, "Repository storage is unavailable.", requestId);
+            return Unavailable(StorageUnavailable, requestId);
         }
 
         return new LfsResult(
@@ -187,7 +210,7 @@ public sealed partial class LfsService
                 RepositoryId = claims.RepositoryId,
                 Oid = claims.Oid,
                 Size = claims.Size,
-                Targets = [RepositoryAccessCheckRoutingMapper.MapRoutingTarget(primary)],
+                Targets = targets.Select(RepositoryAccessCheckRoutingMapper.MapRoutingTarget).ToList(),
             }
         );
     }
@@ -223,24 +246,43 @@ public sealed partial class LfsService
             return Error(StatusCodes.Status422UnprocessableEntity, "Object size does not match the upload.", requestId);
         }
 
-        var primary = await FindHealthyPrimaryAsync(claims.RepositoryId, cancellationToken).ConfigureAwait(false);
-        var node = primary is null ? null : await ResolveEndpointAsync(primary, cancellationToken).ConfigureAwait(false);
-        if (node is null)
+        var alreadyRecorded = await FindRecordedAsync(claims.RepositoryId, [claims.Oid], cancellationToken)
+            .ConfigureAwait(false);
+        if (alreadyRecorded.ContainsKey(claims.Oid))
         {
-            return Error(StatusCodes.Status503ServiceUnavailable, "Repository storage is unavailable.", requestId);
+            return new LfsResult(StatusCodes.Status200OK, new Dictionary<string, string>());
+        }
+
+        var replicas = await _replication
+            .ResolveReplicaSetAsync(claims.RepositoryId, cancellationToken)
+            .ConfigureAwait(false);
+        if (replicas is null)
+        {
+            return Unavailable(StorageUnavailable, requestId);
         }
 
         long? storedSize;
         try
         {
             storedSize = await _storage
-                .GetObjectSizeAsync(node, claims.RepositoryId, claims.Oid, cancellationToken)
+                .GetObjectSizeAsync(
+                    replicas.Primary,
+                    claims.RepositoryId,
+                    claims.Oid,
+                    LfsObjectCopyKind.Plaintext,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "LFS verify of {Oid} could not reach storage node {Node}", claims.Oid, node.InternalHost);
-            return Error(StatusCodes.Status503ServiceUnavailable, "Repository storage is unavailable.", requestId);
+            _logger.LogWarning(
+                ex,
+                "LFS verify of {Oid} could not reach storage node {Node}",
+                claims.Oid,
+                replicas.Primary.InternalHost
+            );
+            return Unavailable(StorageUnavailable, requestId);
         }
 
         if (storedSize != claims.Size)
@@ -252,6 +294,22 @@ public sealed partial class LfsService
             );
         }
 
+        if (replicas.EncryptedReplicas.Count == 0)
+        {
+            return Unavailable(MigrationMessage, requestId);
+        }
+
+        var quorum = await _replication
+            .ReachQuorumAsync(replicas, claims.Oid, claims.Size, cancellationToken)
+            .ConfigureAwait(false);
+        if (quorum.Status != LfsQuorumStatus.Reached)
+        {
+            return Unavailable(
+                "The object could not be stored on an encrypted replica yet; the upload is retried.",
+                requestId
+            );
+        }
+
         var recorded = await _queryProcessor
             .RunQueryAsync(
                 new RecordLfsObjectQuery
@@ -259,8 +317,9 @@ public sealed partial class LfsService
                     RepositoryId = RepositoryId.From(claims.RepositoryId),
                     Oid = claims.Oid,
                     Size = claims.Size,
-                    KeyVersion = 0,
+                    KeyVersion = quorum.KeyVersion,
                     CreatedByUserId = claims.UserId is { } userId ? UserId.From(userId) : null,
+                    Copies = quorum.Copies,
                 },
                 cancellationToken
             )
@@ -270,6 +329,7 @@ public sealed partial class LfsService
             return Error(StatusCodes.Status404NotFound, "Repository not found.", requestId);
         }
 
+        _completions.Schedule(quorum.Pending!);
         return new LfsResult(StatusCodes.Status200OK, new Dictionary<string, string>());
     }
 
@@ -334,6 +394,10 @@ public sealed partial class LfsService
 
     private static LfsResult Error(int statusCode, string message, string requestId) =>
         new(statusCode, new LfsErrorBody { Message = message, RequestId = requestId });
+
+    /// <summary>A 503 that tells git-lfs when to try again.</summary>
+    private static LfsResult Unavailable(string message, string requestId) =>
+        Error(StatusCodes.Status503ServiceUnavailable, message, requestId) with { RetryAfterSeconds = RetryAfterSeconds };
 
     [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex OidPattern();
@@ -474,8 +538,13 @@ public sealed partial class LfsService
         return repository.IsSome ? repository.Get() : null;
     }
 
-    private async Task<RepositoryRoutingTargetDto?> FindHealthyPrimaryAsync(
+    /// <summary>
+    /// Uploads go to the write primary. Downloads read from the plaintext replicas first and fall back to the
+    /// primary; the dispatcher tries the targets in order and moves on when one lacks the object.
+    /// </summary>
+    private async Task<IReadOnlyList<RepositoryRoutingTargetDto>> FindTransferTargetsAsync(
         Guid repositoryId,
+        LfsTransferOperation operation,
         CancellationToken cancellationToken
     )
     {
@@ -487,27 +556,51 @@ public sealed partial class LfsService
             .ConfigureAwait(false);
         if (routing.IsNone)
         {
-            return null;
+            return [];
         }
 
-        var primary = routing.Get().Targets.FirstOrDefault(target => target.IsPrimary);
-        return primary is { IsHealthy: true } ? primary : null;
+        var healthy = routing.Get().Targets.Where(target => target.IsHealthy).ToList();
+        var primary = healthy.Where(target => target.IsPrimary).Take(1).ToList();
+        if (operation == LfsTransferOperation.Upload)
+        {
+            return primary;
+        }
+
+        return
+        [
+            .. healthy.Where(target =>
+                !target.IsPrimary && primary.All(main => main.StorageNodeId != target.StorageNodeId)
+            ),
+            .. primary,
+        ];
     }
 
-    private async Task<StorageNodeEndpoint?> ResolveEndpointAsync(
-        RepositoryRoutingTargetDto target,
+    /// <summary>
+    /// Nothing is uploaded unless it can reach LFS Quorum: objects still to upload need a healthy encrypted replica.
+    /// </summary>
+    private async Task<LfsResult?> CheckEncryptedReplicationAsync(
+        LfsBatchRequest request,
+        Guid repositoryId,
+        IReadOnlyDictionary<string, long> recorded,
+        string requestId,
         CancellationToken cancellationToken
     )
     {
-        var token = await _queryProcessor
-            .RunQueryAsync(
-                new GetStorageNodeApiTokenQuery { StorageNodeId = StorageNodeId.From(target.StorageNodeId) },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        return token.IsNone
-            ? null
-            : new StorageNodeEndpoint(target.StorageNodeId, target.InternalHost, target.InternalHttpPort, token.Get());
+        var needsUpload = request.Objects.Any(item =>
+            IsValidObject(item) && item.Size <= _lfsOptions.MaxObjectBytes && !recorded.ContainsKey(item.Oid)
+        );
+        if (!needsUpload)
+        {
+            return null;
+        }
+
+        var replicas = await _replication.ResolveReplicaSetAsync(repositoryId, cancellationToken).ConfigureAwait(false);
+        if (replicas is null)
+        {
+            return Unavailable(StorageUnavailable, requestId);
+        }
+
+        return replicas.EncryptedReplicas.Count == 0 ? Unavailable(MigrationMessage, requestId) : null;
     }
 
     private async Task<IReadOnlyDictionary<string, long>> FindRecordedAsync(

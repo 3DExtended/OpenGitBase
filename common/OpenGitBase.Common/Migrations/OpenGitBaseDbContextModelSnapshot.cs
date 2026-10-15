@@ -1201,6 +1201,34 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("PublicGitSshKey", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectCopyEntity", b =>
+                {
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Oid")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("StorageNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("StoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("RepositoryId", "Oid", "StorageNodeId");
+
+                    b.HasIndex("StorageNodeId");
+
+                    b.ToTable("LfsObjectCopy", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", b =>
                 {
                     b.Property<Guid>("RepositoryId")
@@ -2057,6 +2085,17 @@ namespace OpenGitBase.Common.Migrations
                         .IsRequired();
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectCopyEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", "Object")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId", "Oid")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Object");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", b =>

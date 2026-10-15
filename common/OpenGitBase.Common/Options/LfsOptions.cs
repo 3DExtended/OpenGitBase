@@ -15,6 +15,12 @@ public sealed class LfsOptions
     /// <summary>Most objects in one batch request (git-lfs sends 100 by default); more answer 413.</summary>
     public int MaxBatchObjects { get; set; } = 100;
 
+    /// <summary>Plaintext segment size of the AEAD format for new encrypted copies.</summary>
+    public int SegmentBytes { get; set; } = 1024 * 1024;
+
+    /// <summary>Cap for one encrypted replica upload during verify; a hanging replica only costs itself.</summary>
+    public int ReplicaUploadTimeoutSeconds { get; set; } = 600;
+
     /// <summary>
     /// Base URL for action hrefs, such as <c>https://git.example.com</c>. Empty means the URL the client used
     /// to reach the dispatcher.

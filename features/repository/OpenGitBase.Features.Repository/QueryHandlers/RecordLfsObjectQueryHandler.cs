@@ -48,7 +48,7 @@ public class RecordLfsObjectQueryHandler : IQueryHandler<RecordLfsObjectQuery, R
     }
 
     /// <summary>
-    /// Inserts the row and adds its size to the repository's storage usage in one transaction, so the size is
+    /// Inserts the row with its copies and adds its size to the repository's storage usage in one transaction, so the size is
     /// counted exactly once: a concurrent verify of the same oid fails on the primary key and adds nothing.
     /// </summary>
     private static Task<bool> TryInsertAsync(
@@ -74,6 +74,19 @@ public class RecordLfsObjectQueryHandler : IQueryHandler<RecordLfsObjectQuery, R
                             CreatedAt = DateTimeOffset.UtcNow,
                             CreatedByUserId = query.CreatedByUserId?.Value,
                         }
+                    );
+                var storedAt = DateTimeOffset.UtcNow;
+                context
+                    .Set<LfsObjectCopyEntity>()
+                    .AddRange(
+                        query.Copies.DistinctBy(copy => copy.StorageNodeId).Select(copy => new LfsObjectCopyEntity
+                        {
+                            RepositoryId = query.RepositoryId.Value,
+                            Oid = query.Oid,
+                            StorageNodeId = copy.StorageNodeId,
+                            Kind = copy.Kind,
+                            StoredAt = storedAt,
+                        })
                     );
                 try
                 {

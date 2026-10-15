@@ -110,6 +110,33 @@ public class RecordLfsObjectQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_RecordsTheCopiesThatReachedQuorumWithTheObject()
+    {
+        await using var scope = CreateScope();
+        await scope.EnsureCreatedAsync();
+        await using var context = await scope.CreateDbContextAsync();
+        var (repositoryId, ownerUserId) = await RepositoryTestData.SeedPublicRepositoryAsync(context);
+        var primary = Guid.NewGuid();
+        var encrypted = Guid.NewGuid();
+        var query = NewQuery(repositoryId, ownerUserId);
+        query.Copies =
+        [
+            new LfsObjectCopySpec { StorageNodeId = primary, Kind = LfsObjectCopyKind.Plaintext },
+            new LfsObjectCopySpec { StorageNodeId = encrypted, Kind = LfsObjectCopyKind.Encrypted },
+        ];
+
+        await CreateHandler(scope).RunQueryAsync(query, CancellationToken.None);
+        await CreateHandler(scope).RunQueryAsync(query, CancellationToken.None);
+
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        var copies = await verifyContext.Set<LfsObjectCopyEntity>().OrderBy(copy => copy.Kind).ToListAsync();
+        Assert.Equal(2, copies.Count);
+        Assert.Equal((primary, LfsObjectCopyKind.Plaintext), (copies[0].StorageNodeId, copies[0].Kind));
+        Assert.Equal((encrypted, LfsObjectCopyKind.Encrypted), (copies[1].StorageNodeId, copies[1].Kind));
+        Assert.All(copies, copy => Assert.Equal(Oid, copy.Oid));
+    }
+
+    [Fact]
     public async Task RunQueryAsync_WhenRepositoryDoesNotExist_ReturnsNone()
     {
         await using var scope = CreateScope();

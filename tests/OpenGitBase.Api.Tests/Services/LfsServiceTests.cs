@@ -1,7 +1,9 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using System.Security.Cryptography;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Api.Tests.Services.Lfs;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -24,7 +26,9 @@ public class LfsServiceTests
     private static readonly DateTimeOffset Now = new(2026, 10, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly IQueryProcessor _queryProcessor = Substitute.For<IQueryProcessor>();
-    private readonly IStorageLfsClient _storage = Substitute.For<IStorageLfsClient>();
+    private readonly FakeLfsStorageNodes _nodes = new();
+    private readonly IRepositoryKeyService _keys = Substitute.For<IRepositoryKeyService>();
+    private readonly ILfsCopyCompletionScheduler _completions = Substitute.For<ILfsCopyCompletionScheduler>();
     private readonly ISystemClock _clock = Substitute.For<ISystemClock>();
     private readonly UserId _ownerUserId = UserId.From(Guid.NewGuid());
     private readonly RepositoryId _repositoryId = RepositoryId.From(Guid.NewGuid());
@@ -32,7 +36,11 @@ public class LfsServiceTests
     private readonly LfsOptions _lfsOptions = new() { Enabled = true, ActionTokenLifetimeSeconds = 3600 };
     private readonly RepositoryStorageQuotaOptions _quotaOptions = new() { Enabled = true, MaxBytes = 1_073_741_824 };
     private readonly RepositoryDto _repository;
+    private readonly byte[] _content = RandomNumberGenerator.GetBytes(5000);
+    private readonly string _contentOid;
     private bool _primaryHealthy = true;
+    private bool _readReplicaHealthy = true;
+    private bool _encryptedReplicasHealthy = true;
 
     public LfsServiceTests()
     {
@@ -45,7 +53,29 @@ public class LfsServiceTests
             PhysicalPath = $"/srv/git/{_repositoryId.Value}.git",
             StorageNodeId = StorageNodeId.From(_primaryNodeId),
         };
+        _contentOid = Convert.ToHexStringLower(SHA256.HashData(_content));
         _clock.UtcNow.Returns(_ => Now);
+        _keys
+            .TryGetRepositoryKeyAsync(_repositoryId.Value, Arg.Any<CancellationToken>())
+            .Returns(_ => new EphemeralRepositoryKey(RandomNumberGenerator.GetBytes(32), 1));
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryReplicationContextQuery>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+                Option.From(
+                    new RepositoryReplicationContextDto
+                    {
+                        RepositoryId = _repositoryId.Value,
+                        IsPrimary = true,
+                        Peers =
+                        [
+                            Peer("storage-1", "Primary", _primaryHealthy),
+                            Peer("storage-4", "ReadReplica", _readReplicaHealthy),
+                            Peer("storage-2", "EncryptedReplica", _encryptedReplicasHealthy),
+                            Peer("storage-3", "EncryptedReplica", _encryptedReplicasHealthy),
+                        ],
+                    }
+                )
+            );
         ConfigureOwnerWithToken(GitAccessTokenScopes.Write);
         _queryProcessor
             .RunQueryAsync(Arg.Any<FindLfsObjectsQuery>(), Arg.Any<CancellationToken>())
@@ -436,49 +466,168 @@ public class LfsServiceTests
     }
 
     [Fact]
-    public async Task VerifyAsync_WhenThePrimaryHoldsTheObject_RecordsIt()
+    public async Task CheckTransferAsync_Download_OffersTheReadReplicaBeforeThePrimary()
     {
-        var token = IssueToken(NewOid, 5_000_000, LfsTransferOperation.Upload);
-        _storage
-            .GetObjectSizeAsync(Arg.Any<StorageNodeEndpoint>(), _repositoryId.Value, NewOid, Arg.Any<CancellationToken>())
-            .Returns(5_000_000L);
+        var token = IssueToken(RecordedOid, 42, LfsTransferOperation.Download);
 
-        var result = await CreateService().VerifyAsync(Verify(token, NewOid, 5_000_000), RequestId, CancellationToken.None);
+        var result = await CreateService().CheckTransferAsync(
+            TransferCheck(token, RecordedOid, "download"),
+            RequestId,
+            CancellationToken.None
+        );
+
+        var body = Assert.IsType<LfsTransferCheckResponse>(result.Body);
+        Assert.Equal(["storage-4", "storage-1"], body.Targets.Select(target => target.InternalHost));
+    }
+
+    [Fact]
+    public async Task CheckTransferAsync_Download_WhenTheReadReplicaIsDown_OffersThePrimary()
+    {
+        _readReplicaHealthy = false;
+        var token = IssueToken(RecordedOid, 42, LfsTransferOperation.Download);
+
+        var result = await CreateService().CheckTransferAsync(
+            TransferCheck(token, RecordedOid, "download"),
+            RequestId,
+            CancellationToken.None
+        );
+
+        var body = Assert.IsType<LfsTransferCheckResponse>(result.Body);
+        Assert.Equal(["storage-1"], body.Targets.Select(target => target.InternalHost));
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_WithoutAHealthyEncryptedReplica_Answers503WithTheMigrationMessage()
+    {
+        _encryptedReplicasHealthy = false;
+
+        var result = await CreateService().BatchAsync(UploadBatch(NewOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(503, result.StatusCode);
+        Assert.Equal(
+            "LFS requires encrypted replication; this repository is still migrating. Try again later.",
+            Assert.IsType<LfsErrorBody>(result.Body).Message
+        );
+        Assert.NotNull(result.RetryAfterSeconds);
+    }
+
+    [Fact]
+    public async Task BatchAsync_Upload_WhenEveryObjectIsRecorded_NeedsNoEncryptedReplica()
+    {
+        _encryptedReplicasHealthy = false;
+
+        var result = await CreateService().BatchAsync(UploadBatch(RecordedOid), RequestId, CancellationToken.None);
 
         Assert.Equal(200, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_WhenThePrimaryAndAnEncryptedReplicaHoldTheObject_RecordsItWithTheQuorumCopies()
+    {
+        _nodes.Store("storage-1", _repositoryId.Value, _contentOid, LfsObjectCopyKind.Plaintext, _content);
+        _nodes.FailingHosts.Add("storage-3");
+        var token = IssueToken(_contentOid, _content.Length, LfsTransferOperation.Upload);
+
+        var result = await CreateService().VerifyAsync(
+            Verify(token, _contentOid, _content.Length),
+            RequestId,
+            CancellationToken.None
+        );
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.NotNull(_nodes.Find("storage-2", _repositoryId.Value, _contentOid, LfsObjectCopyKind.Encrypted));
         await _queryProcessor
             .Received(1)
             .RunQueryAsync(
                 Arg.Is<RecordLfsObjectQuery>(query =>
                     query.RepositoryId == _repositoryId
-                    && query.Oid == NewOid
-                    && query.Size == 5_000_000
+                    && query.Oid == _contentOid
+                    && query.Size == _content.Length
+                    && query.KeyVersion == 1
                     && query.CreatedByUserId == _ownerUserId
+                    && query.Copies.Count == 2
+                    && query.Copies.Any(copy =>
+                        copy.StorageNodeId == _primaryNodeId && copy.Kind == LfsObjectCopyKind.Plaintext
+                    )
+                    && query.Copies.Any(copy =>
+                        copy.StorageNodeId == FakeLfsStorageNodes.NodeId("storage-2")
+                        && copy.Kind == LfsObjectCopyKind.Encrypted
+                    )
                 ),
                 Arg.Any<CancellationToken>()
             );
-        await _storage
-            .Received(1)
-            .GetObjectSizeAsync(
-                Arg.Is<StorageNodeEndpoint>(node =>
-                    node.StorageNodeId == _primaryNodeId
-                    && node.InternalHost == "storage-1"
-                    && node.InternalHttpPort == 8081
-                    && node.ApiToken == "node-token"
-                ),
-                _repositoryId.Value,
-                NewOid,
-                Arg.Any<CancellationToken>()
-            );
+        _completions.Received(1).Schedule(Arg.Is<LfsPendingCopies>(pending => pending.Oid == _contentOid));
+    }
+
+    [Fact]
+    public async Task VerifyAsync_WhenNoEncryptedReplicaConfirms_Answers503WithRetryAfterAndRecordsNothing()
+    {
+        _nodes.Store("storage-1", _repositoryId.Value, _contentOid, LfsObjectCopyKind.Plaintext, _content);
+        _nodes.FailingHosts.Add("storage-2");
+        _nodes.FailingHosts.Add("storage-3");
+        var token = IssueToken(_contentOid, _content.Length, LfsTransferOperation.Upload);
+
+        var result = await CreateService().VerifyAsync(
+            Verify(token, _contentOid, _content.Length),
+            RequestId,
+            CancellationToken.None
+        );
+
+        Assert.Equal(503, result.StatusCode);
+        Assert.NotNull(result.RetryAfterSeconds);
+        await _queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(Arg.Any<RecordLfsObjectQuery>(), Arg.Any<CancellationToken>());
+        _completions.DidNotReceive().Schedule(Arg.Any<LfsPendingCopies>());
+    }
+
+    [Fact]
+    public async Task VerifyAsync_WithoutAHealthyEncryptedReplica_Answers503WithTheMigrationMessage()
+    {
+        _encryptedReplicasHealthy = false;
+        _nodes.Store("storage-1", _repositoryId.Value, _contentOid, LfsObjectCopyKind.Plaintext, _content);
+        var token = IssueToken(_contentOid, _content.Length, LfsTransferOperation.Upload);
+
+        var result = await CreateService().VerifyAsync(
+            Verify(token, _contentOid, _content.Length),
+            RequestId,
+            CancellationToken.None
+        );
+
+        Assert.Equal(503, result.StatusCode);
+        Assert.Contains("still migrating", Assert.IsType<LfsErrorBody>(result.Body).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_WhenTheObjectIsAlreadyRecorded_Answers200WithoutTouchingStorage()
+    {
+        var token = IssueToken(RecordedOid, 42, LfsTransferOperation.Upload);
+
+        var result = await CreateService().VerifyAsync(Verify(token, RecordedOid, 42), RequestId, CancellationToken.None);
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Empty(_nodes.Requests);
+        await _queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(Arg.Any<RecordLfsObjectQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task VerifyAsync_WhenThePrimaryIsDown_Answers503WithRetryAfter()
+    {
+        _primaryHealthy = false;
+        var token = IssueToken(NewOid, 5_000_000, LfsTransferOperation.Upload);
+
+        var result = await CreateService().VerifyAsync(Verify(token, NewOid, 5_000_000), RequestId, CancellationToken.None);
+
+        Assert.Equal(503, result.StatusCode);
+        Assert.NotNull(result.RetryAfterSeconds);
     }
 
     [Fact]
     public async Task VerifyAsync_WhenThePrimaryLacksTheObject_Answers422AndRecordsNothing()
     {
         var token = IssueToken(NewOid, 5_000_000, LfsTransferOperation.Upload);
-        _storage
-            .GetObjectSizeAsync(Arg.Any<StorageNodeEndpoint>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((long?)null);
 
         var result = await CreateService().VerifyAsync(Verify(token, NewOid, 5_000_000), RequestId, CancellationToken.None);
 
@@ -554,6 +703,16 @@ public class LfsServiceTests
             RepositoryPath = "alice/repo",
         };
 
+    private static RepositoryReplicationPeerDto Peer(string host, string role, bool healthy) =>
+        new()
+        {
+            StorageNodeId = host == "storage-1" ? Guid.Empty : FakeLfsStorageNodes.NodeId(host),
+            InternalHost = host,
+            InternalHttpPort = 8081,
+            Role = role,
+            IsHealthy = healthy,
+        };
+
     private LfsService CreateService() =>
         new(
             _lfsOptions,
@@ -573,7 +732,15 @@ public class LfsServiceTests
             _quotaOptions,
             _queryProcessor,
             CreateTokenService(),
-            _storage,
+            _nodes.CreateClient(),
+            new LfsReplicationService(
+                _queryProcessor,
+                _nodes.CreateClient(),
+                _keys,
+                _lfsOptions,
+                NullLogger<LfsReplicationService>.Instance
+            ),
+            _completions,
             NullLogger<LfsService>.Instance
         );
 
@@ -675,6 +842,18 @@ public class LfsServiceTests
                                 IsHealthy = _primaryHealthy,
                                 IsInSync = _primaryHealthy,
                                 IsPrimary = true,
+                            },
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = FakeLfsStorageNodes.NodeId("storage-4"),
+                                InternalHost = "storage-4",
+                                InternalSshPort = 22,
+                                InternalGitHttpPort = 8082,
+                                InternalHttpPort = 8081,
+                                Role = "ReadReplica",
+                                IsHealthy = _readReplicaHealthy,
+                                IsInSync = _readReplicaHealthy,
+                                IsPrimary = false,
                             },
                         ],
                     }

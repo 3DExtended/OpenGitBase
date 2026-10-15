@@ -272,6 +272,25 @@ public class LfsHandlerTests
     }
 
     [Fact]
+    public async Task Verify_WhenTheApiAsksToRetryLater_RelaysRetryAfter()
+    {
+        var harness = new Harness();
+        harness.ApiAnswers["verify"] = (503, """{"message":"try again","request_id":"r"}""");
+        harness.ApiRetryAfterSeconds["verify"] = 10;
+        var context = CreateContext(
+            "POST",
+            $"/alice/demo.git/info/lfs/objects/{Oid}/verify",
+            $$"""{"oid":"{{Oid}}","size":12}"""
+        );
+        context.Request.Headers.Authorization = "Bearer action-token";
+
+        await harness.Handler.HandleAsync(context);
+
+        Assert.Equal(503, context.Response.StatusCode);
+        Assert.Equal("10", context.Response.Headers.RetryAfter.ToString());
+    }
+
+    [Fact]
     public async Task Verify_WhenTheBodyNamesAnotherObject_Answers422()
     {
         var harness = new Harness();
@@ -370,6 +389,8 @@ public class LfsHandlerTests
 
         public Dictionary<string, JsonElement> ApiRequests { get; } = new();
 
+        public Dictionary<string, int> ApiRetryAfterSeconds { get; } = new();
+
         public List<StorageRequest> StorageRequests { get; } = [];
 
         public Func<HttpRequestMessage, HttpResponseMessage> StorageAnswer { get; set; } =
@@ -391,10 +412,18 @@ public class LfsHandlerTests
             var endpoint = request.RequestUri!.AbsolutePath.Replace("/api/v1/internal/lfs/", string.Empty, StringComparison.Ordinal);
             ApiRequests[endpoint] = JsonDocument.Parse(await request.Content!.ReadAsStringAsync()).RootElement.Clone();
             var (status, body) = ApiAnswers.TryGetValue(endpoint, out var answer) ? answer : (500, "{}");
-            return new HttpResponseMessage((HttpStatusCode)status)
+            var response = new HttpResponseMessage((HttpStatusCode)status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             };
+            if (ApiRetryAfterSeconds.TryGetValue(endpoint, out var retryAfter))
+            {
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(
+                    TimeSpan.FromSeconds(retryAfter)
+                );
+            }
+
+            return response;
         }
 
         private async Task<HttpResponseMessage> AnswerStorageAsync(HttpRequestMessage request)

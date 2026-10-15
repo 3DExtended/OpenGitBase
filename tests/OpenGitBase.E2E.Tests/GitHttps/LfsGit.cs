@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using OpenGitBase.E2E.Core;
 
 namespace OpenGitBase.E2E.Tests.GitHttps;

@@ -194,6 +194,8 @@ public class Startup
             sp.GetRequiredService<PlatformMergeIdentityOptions>()
         ));
         services.AddScoped<LfsService>();
+        services.AddScoped<LfsReplicationService>();
+        services.AddSingleton<ILfsCopyCompletionScheduler, LfsCopyCompletionScheduler>();
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()
@@ -391,8 +393,9 @@ public class Startup
         services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
+        // LFS objects may be large; every caller bounds its own transfer (Lfs:ReplicaUploadTimeoutSeconds).
         services.AddHttpClient<IStorageLfsClient, StorageLfsClient>(client =>
-            client.Timeout = TimeSpan.FromMinutes(5));
+            client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddTransient<
             IQueryHandler<
                 CreateRepositoryWithStorageQuery,
