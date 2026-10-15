@@ -66,6 +66,22 @@ class LfsObjectStore:
     def open(self, repository_id: str, oid: str) -> BinaryIO:
         return self.path(repository_id, oid).open("rb")
 
+    def inventory(self, repository_id: str) -> list[dict[str, Any]]:
+        """Every complete object of the repository as ``{"oid", "size"}``, sorted by oid. Partial uploads (dot
+        files) and files that are not at their oid's place are left out, so the API sees only copies it can
+        serve."""
+        repository_root = self.root / require_repository_id(repository_id)
+        objects: list[dict[str, Any]] = []
+        for path in sorted(repository_root.glob(f"[0-9a-f][0-9a-f]/[0-9a-f][0-9a-f]/*{self.suffix}")):
+            oid = path.name[: len(path.name) - len(self.suffix)] if self.suffix else path.name
+            if not OID_PATTERN.match(oid) or path.parent.parent.name != oid[0:2] or path.parent.name != oid[2:4]:
+                continue
+            try:
+                objects.append({"oid": oid, "size": path.stat().st_size})
+            except FileNotFoundError:
+                continue
+        return sorted(objects, key=lambda item: item["oid"])
+
     def store(self, repository_id: str, oid: str, stream: BinaryIO, size: int) -> None:
         """Reads exactly ``size`` bytes from ``stream`` and stores them under ``oid``.
 

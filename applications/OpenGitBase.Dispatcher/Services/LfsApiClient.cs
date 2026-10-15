@@ -28,6 +28,9 @@ public sealed class LfsApiClient
     public Task<LfsApiAnswer> VerifyAsync(LfsVerifyForwardRequest request, CancellationToken cancellationToken) =>
         PostAsync("verify", request, cancellationToken);
 
+    public Task<LfsApiAnswer> RequestRepairAsync(LfsRepairForwardRequest request, CancellationToken cancellationToken) =>
+        PostAsync("repair", request, cancellationToken);
+
     private async Task<LfsApiAnswer> PostAsync<T>(string endpoint, T payload, CancellationToken cancellationToken)
     {
         using var response = await _httpClient

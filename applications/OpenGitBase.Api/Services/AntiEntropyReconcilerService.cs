@@ -19,6 +19,7 @@ public sealed class AntiEntropyReconcilerService
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly ReplicationArtifactPublisher _artifactPublisher;
     private readonly Rf1BackfillService _backfillService;
+    private readonly ILfsRepairQueue _lfsRepairs;
     private readonly HaStorageBackgroundOptions _options;
     private readonly ILogger<AntiEntropyReconcilerService> _logger;
 
@@ -28,6 +29,7 @@ public sealed class AntiEntropyReconcilerService
         IStorageProvisionerClient storageProvisionerClient,
         ReplicationArtifactPublisher artifactPublisher,
         Rf1BackfillService backfillService,
+        ILfsRepairQueue lfsRepairs,
         IOptions<HaStorageBackgroundOptions> options,
         ILogger<AntiEntropyReconcilerService> logger
     )
@@ -37,12 +39,13 @@ public sealed class AntiEntropyReconcilerService
         _storageProvisionerClient = storageProvisionerClient;
         _artifactPublisher = artifactPublisher;
         _backfillService = backfillService;
+        _lfsRepairs = lfsRepairs;
         _options = options.Value;
         _logger = logger;
     }
 
     /// <summary>
-    /// One reconcile pass. Each step runs on its own: every step but the last talks to storage
+    /// One reconcile pass. Each step runs on its own: every step but the last two talks to storage
     /// nodes, and a node that does not answer (its client throws on transport failures) must cost
     /// only the step that asked it, never the rest of the pass. Pending primary writes go first:
     /// they are the only step that moves PrimaryWatermark, and the pushes behind them are what a
@@ -59,6 +62,8 @@ public sealed class AntiEntropyReconcilerService
         await RunStepAsync(context, "lagging replicas", SyncLaggingRepositoriesAsync, cancellationToken)
             .ConfigureAwait(false);
         await RunStepAsync(context, "degraded latch", HealRecoveredDegradedAsync, cancellationToken)
+            .ConfigureAwait(false);
+        await RunStepAsync(context, "LFS copies", QueueLfsRepairsAsync, cancellationToken)
             .ConfigureAwait(false);
 
         var degraded = await context
@@ -298,6 +303,26 @@ public sealed class AntiEntropyReconcilerService
                 repositoryId,
                 result.IsSome ? result.Get().Error : "no result"
             );
+        }
+    }
+
+    /// <summary>
+    /// Queues an LFS reconcile run (<see cref="LfsCopyReconciler"/>) for every repository with LFS objects. The runs
+    /// read each node's on-disk inventory and repair what is missing. They run on <see cref="LfsRepairQueue"/>'s
+    /// worker, so copying large objects never holds up this pass or the HA loop behind it.
+    /// </summary>
+    private async Task QueueLfsRepairsAsync(OpenGitBaseDbContext context, CancellationToken cancellationToken)
+    {
+        var repositories = await context
+            .Set<LfsObjectEntity>()
+            .AsNoTracking()
+            .Select(entity => entity.RepositoryId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var repositoryId in repositories)
+        {
+            _lfsRepairs.Schedule(repositoryId);
         }
     }
 

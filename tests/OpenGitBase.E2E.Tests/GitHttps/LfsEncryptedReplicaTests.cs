@@ -1,7 +1,5 @@
-﻿using System.Diagnostics;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using OpenGitBase.E2E.Core;
 using OpenGitBase.E2E.Core.Fixtures;
 
@@ -17,8 +15,6 @@ namespace OpenGitBase.E2E.Tests.GitHttps;
 [E2eTier(2)]
 public class LfsEncryptedReplicaTests : E2eTestBase
 {
-    private const string EncryptedLfsRoot = "/var/lib/opengitbase/lfs";
-    private const string PlaintextLfsRoot = "/srv/git/.lfs";
     private static readonly TimeSpan CopyDeadline = TimeSpan.FromSeconds(90);
 
     [RequiresComposeFact]
@@ -40,7 +36,7 @@ public class LfsEncryptedReplicaTests : E2eTestBase
                 .CreateAsync(owner, "lfs-encrypted-repo", "LFS Encrypted Repo", isPrivate: true)
                 .ConfigureAwait(false);
             await E2eScenarioHelpers.WaitForStorageProvisioningAsync().ConfigureAwait(false);
-            var replicas = await GetReplicasAsync(admin, repository.RepositoryId).ConfigureAwait(false);
+            var replicas = await LfsStorageDisk.GetReplicasAsync(admin, repository.RepositoryId).ConfigureAwait(false);
             var encrypted = replicas.Where(replica => replica.Role == "EncryptedReplica").Select(replica => replica.NodeId).ToList();
             Assert.Equal(2, encrypted.Count);
 
@@ -63,23 +59,23 @@ public class LfsEncryptedReplicaTests : E2eTestBase
             Assert.True(push.Succeeded, LfsGit.WithoutTrace(push.StdErr));
 
             Transcript.Describe("Both encrypted replicas receive a copy (one before verify answers, one after)");
-            var relativePath = $"{repository.RepositoryId.ToLowerInvariant()}/{oid[..2]}/{oid[2..4]}/{oid}";
+            var relativePath = LfsStorageDisk.RelativePath(repository.RepositoryId, oid);
             foreach (var node in encrypted)
             {
-                await WaitForFileAsync(node, $"{EncryptedLfsRoot}/{relativePath}.aead").ConfigureAwait(false);
+                await LfsStorageDisk.WaitForFileAsync(node, $"{LfsStorageDisk.EncryptedLfsRoot}/{relativePath}.aead", CopyDeadline).ConfigureAwait(false);
             }
 
             Transcript.Describe("A read replica on another node receives the plaintext object");
             var primary = replicas.Single(replica => replica.Role == "Primary").NodeId;
             foreach (var node in replicas.Where(replica => replica.Role == "ReadReplica" && replica.NodeId != primary))
             {
-                await WaitForFileAsync(node.NodeId, $"{PlaintextLfsRoot}/{relativePath}").ConfigureAwait(false);
+                await LfsStorageDisk.WaitForFileAsync(node.NodeId, $"{LfsStorageDisk.PlaintextLfsRoot}/{relativePath}", CopyDeadline).ConfigureAwait(false);
             }
 
             Transcript.Describe("No encrypted replica's disk contains the plaintext marker");
             foreach (var node in encrypted)
             {
-                var grep = await ExecAsync(node, "grep", "-rlF", marker, "/var/lib/opengitbase", "/srv").ConfigureAwait(false);
+                var grep = await LfsStorageDisk.ExecAsync(node, "grep", "-rlF", marker, "/var/lib/opengitbase", "/srv").ConfigureAwait(false);
                 Assert.True(grep.ExitCode == 1, $"{node}: grep exit {grep.ExitCode}, matches: {grep.StdOut} {grep.StdErr}");
             }
         }
@@ -90,67 +86,5 @@ public class LfsEncryptedReplicaTests : E2eTestBase
                 Directory.Delete(workDir, true);
             }
         }
-    }
-
-    private static async Task<IReadOnlyList<(string NodeId, string Role)>> GetReplicasAsync(
-        AuthenticatedClient admin,
-        string repositoryId
-    )
-    {
-        using var response = await admin.Client.RawClient
-            .GetAsync($"admin/repositories/{repositoryId}/replication")
-            .ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        Assert.True(response.IsSuccessStatusCode, $"GET replication status: {(int)response.StatusCode} {body}");
-        using var document = JsonDocument.Parse(body);
-        return document
-            .RootElement.GetProperty("replicas")
-            .EnumerateArray()
-            .Select(replica => (
-                replica.GetProperty("nodeId").GetString() ?? string.Empty,
-                replica.GetProperty("role").GetString() ?? string.Empty
-            ))
-            .ToList();
-    }
-
-    /// <summary>Polls without the transcript; copies made after verify answered take a moment.</summary>
-    private static async Task WaitForFileAsync(string nodeId, string path)
-    {
-        var deadline = DateTimeOffset.UtcNow + CopyDeadline;
-        while (true)
-        {
-            var test = await ExecAsync(nodeId, "test", "-s", path).ConfigureAwait(false);
-            if (test.ExitCode == 0)
-            {
-                return;
-            }
-
-            Assert.True(DateTimeOffset.UtcNow < deadline, $"{path} did not appear on {nodeId} within {CopyDeadline.TotalSeconds:0} s.");
-            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>Read-only <c>docker exec</c> against the stack's container for a storage node.</summary>
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> ExecAsync(string nodeId, params string[] command)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add("exec");
-        startInfo.ArgumentList.Add(E2eEnvironment.ContainerName(nodeId));
-        foreach (var argument in command)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start docker.");
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync().ConfigureAwait(false);
-        return (process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
     }
 }

@@ -29,6 +29,30 @@ public class LfsObjectCipherTests
         Assert.Equal(LfsObjectCipher.EncryptedLength(size, SegmentBytes), ciphertext.Length);
     }
 
+    [Theory]
+    [InlineData(0, 1024)]
+    [InlineData(5000, 1024)]
+    [InlineData(5000, 4096)]
+    [InlineData(200_000_000, 1024 * 1024)]
+    [InlineData(200_000_000, LfsObjectCipher.MaxSegmentBytes)]
+    public void IsPlausibleEncryptedLength_AcceptsTheLengthOfACopyAtAnyValidSegmentSize(long size, int segmentBytes)
+    {
+        Assert.True(LfsObjectCipher.IsPlausibleEncryptedLength(size, LfsObjectCipher.EncryptedLength(size, segmentBytes)));
+    }
+
+    [Theory]
+    [InlineData(5000, 0)]
+    [InlineData(5000, 100)]
+    [InlineData(5000, 5000)]
+    [InlineData(5000, 5029)]
+    [InlineData(5000, 5046)]
+    [InlineData(5000, 5000 + LfsObjectCipher.HeaderBytes + (6 * LfsObjectCipher.TagBytes))]
+    [InlineData(5000, 5000 + LfsObjectCipher.HeaderBytes + (5 * LfsObjectCipher.TagBytes) + 1)]
+    public void IsPlausibleEncryptedLength_RejectsTruncatedPaddedOrImpossibleLengths(long size, long length)
+    {
+        Assert.False(LfsObjectCipher.IsPlausibleEncryptedLength(size, length));
+    }
+
     [Fact]
     public async Task Encrypt_DoesNotLeakThePlaintext()
     {

@@ -22,6 +22,12 @@ public sealed class LfsOptions
     public int ReplicaUploadTimeoutSeconds { get; set; } = 600;
 
     /// <summary>
+    /// Most copies one reconciler run repairs for one repository; the rest follow in the next run, which is queued
+    /// right away. Keeps one repository with many missing copies from holding the repair worker.
+    /// </summary>
+    public int MaxRepairsPerRun { get; set; } = 100;
+
+    /// <summary>
     /// Base URL for action hrefs, such as <c>https://git.example.com</c>. Empty means the URL the client used
     /// to reach the dispatcher.
     /// </summary>

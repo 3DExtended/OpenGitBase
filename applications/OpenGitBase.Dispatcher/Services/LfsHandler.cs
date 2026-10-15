@@ -20,6 +20,9 @@ public sealed class LfsHandler
 
     // Batch and verify bodies are small JSON documents; a large body here is not a real LFS client.
     private const long MaxJsonRequestBytes = 4 * 1024 * 1024;
+
+    // git-lfs waits this long before it retries a download that answered 503.
+    private const int RepairRetryAfterSeconds = 10;
     private static readonly byte[] NoLocks = Encoding.UTF8.GetBytes("""{"ours":[],"theirs":[]}""");
 
     private readonly LfsApiClient _api;
@@ -287,8 +290,39 @@ public sealed class LfsHandler
             }
         }
 
-        await WriteErrorAsync(context, StatusCodes.Status404NotFound, "Object not found on storage.")
+        // The API only issues download tokens for recorded objects, so a copy is missing somewhere: ask for a
+        // repair and let the client retry instead of failing the clone with "object not found".
+        await RequestRepairAsync(context, request, check).ConfigureAwait(false);
+        context.Response.Headers.RetryAfter = RepairRetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await WriteErrorAsync(
+                context,
+                StatusCodes.Status503ServiceUnavailable,
+                "The LFS object is being restored on storage; try again shortly."
+            )
             .ConfigureAwait(false);
+    }
+
+    private async Task RequestRepairAsync(HttpContext context, LfsHttpRequest request, LfsTransferCheckResult check)
+    {
+        _logger.LogWarning("No storage target holds LFS object {Oid} of {RepositoryId}; asking for a repair", check.Oid, check.RepositoryId);
+        try
+        {
+            TryReadActionToken(context.Request, out var token);
+            var answer = await _api
+                .RequestRepairAsync(
+                    new LfsRepairForwardRequest { Token = token, Oid = check.Oid, RepositoryPath = request.RepositoryPath },
+                    context.RequestAborted
+                )
+                .ConfigureAwait(false);
+            if (answer.StatusCode != StatusCodes.Status202Accepted)
+            {
+                _logger.LogWarning("The API answered {Status} to the LFS repair request for {Oid}", answer.StatusCode, check.Oid);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not ask the API to repair LFS object {Oid}", check.Oid);
+        }
     }
 
     private async Task HandleVerifyAsync(HttpContext context, LfsHttpRequest request)

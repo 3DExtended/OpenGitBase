@@ -1,10 +1,11 @@
-using Mapster;
+﻿using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Api.Tests.Services.Lfs;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -44,6 +45,58 @@ public class AntiEntropyReconcilerServiceTests
                 .Set<RepositoryReplicaEntity>()
                 .SingleAsync(entity => entity.StorageNodeId == laggingReplicaId);
             Assert.Equal(4, replica.AppliedWatermark);
+        }
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_QueuesAnLfsRepairForEachRepositoryWithLfsObjects()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (service, provider) = await CreateRf3ServiceAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 4,
+            replicaWatermark: 4
+        );
+
+        await using (provider)
+        {
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using (var context = await contextFactory.CreateDbContextAsync())
+            {
+                foreach (var oid in new[] { new string('a', 64), new string('b', 64) })
+                {
+                    context.Set<LfsObjectEntity>().Add(
+                        new LfsObjectEntity { RepositoryId = repositoryId, Oid = oid, Size = 1, CreatedAt = DateTimeOffset.UtcNow }
+                    );
+                }
+
+                await context.SaveChangesAsync();
+            }
+
+            await service.RunOnceAsync(CancellationToken.None);
+
+            Assert.Equal([repositoryId], provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_WithoutLfsObjects_QueuesNoLfsRepair()
+    {
+        var (service, provider) = await CreateRf3ServiceAsync(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 4,
+            replicaWatermark: 4
+        );
+
+        await using (provider)
+        {
+            await service.RunOnceAsync(CancellationToken.None);
+
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
         }
     }
 
@@ -563,6 +616,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddLogging();
         services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -681,6 +736,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddLogging();
         services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();
@@ -806,6 +863,8 @@ public class AntiEntropyReconcilerServiceTests
         services.AddLogging();
         services.AddOptions();
         services.AddSingleton<ReplicationArtifactPublisher>();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<AntiEntropyReconcilerService>();
 
         var provider = services.BuildServiceProvider();

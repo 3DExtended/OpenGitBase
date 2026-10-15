@@ -30,6 +30,7 @@ public sealed partial class LfsService
     private readonly IStorageLfsClient _storage;
     private readonly LfsReplicationService _replication;
     private readonly ILfsCopyCompletionScheduler _completions;
+    private readonly ILfsRepairQueue _repairs;
     private readonly ILogger<LfsService> _logger;
 
     public LfsService(
@@ -42,6 +43,7 @@ public sealed partial class LfsService
         IStorageLfsClient storage,
         LfsReplicationService replication,
         ILfsCopyCompletionScheduler completions,
+        ILfsRepairQueue repairs,
         ILogger<LfsService> logger
     )
     {
@@ -54,6 +56,7 @@ public sealed partial class LfsService
         _storage = storage;
         _replication = replication;
         _completions = completions;
+        _repairs = repairs;
         _logger = logger;
     }
 
@@ -213,6 +216,42 @@ public sealed partial class LfsService
                 Targets = targets.Select(RepositoryAccessCheckRoutingMapper.MapRoutingTarget).ToList(),
             }
         );
+    }
+
+    /// <summary>
+    /// A download found no storage target holding a recorded object. Queues an LFS repair of the repository
+    /// (requests for a repository already waiting collapse into one) and answers 202. The dispatcher tells the
+    /// client to retry.
+    /// </summary>
+    public async Task<LfsResult> RequestRepairAsync(LfsRepairRequest request, string requestId, CancellationToken cancellationToken)
+    {
+        if (!_lfsOptions.Enabled)
+        {
+            return Error(StatusCodes.Status501NotImplemented, "Git LFS is not enabled on this server.", requestId);
+        }
+
+        var authorization = await AuthorizeTransferAsync(
+                request.Token,
+                request.Oid,
+                LfsTransferOperation.Download,
+                request.RepositoryPath,
+                requestId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (authorization.Failure is not null)
+        {
+            return authorization.Failure;
+        }
+
+        var claims = authorization.Claims!;
+        _logger.LogWarning(
+            "LFS object {Oid} of {RepositoryId} was on no download target; queued an LFS repair",
+            claims.Oid,
+            claims.RepositoryId
+        );
+        _repairs.Schedule(claims.RepositoryId);
+        return new LfsResult(StatusCodes.Status202Accepted, new { });
     }
 
     public async Task<LfsResult> VerifyAsync(

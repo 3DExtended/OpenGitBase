@@ -39,6 +39,24 @@ public static class LfsObjectCipher
     public static long EncryptedLength(long plaintextSize, int segmentBytes) =>
         HeaderBytes + plaintextSize + (SegmentCount(plaintextSize, segmentBytes) * TagBytes);
 
+    /// <summary>
+    /// Whether <paramref name="encryptedLength"/> is the length of a copy of a <paramref name="plaintextSize"/>-byte
+    /// object at some valid segment size. A cheap on-disk check for the reconciler: it catches truncated and padded
+    /// copies without reading them, and still accepts copies written before <c>Lfs:SegmentBytes</c> changed.
+    /// </summary>
+    public static bool IsPlausibleEncryptedLength(long plaintextSize, long encryptedLength)
+    {
+        var overhead = encryptedLength - HeaderBytes - plaintextSize;
+        if (plaintextSize < 0 || overhead <= 0 || overhead % TagBytes != 0)
+        {
+            return false;
+        }
+
+        var segments = overhead / TagBytes;
+        return segments >= SegmentCount(plaintextSize, MaxSegmentBytes)
+            && segments <= SegmentCount(plaintextSize, MinSegmentBytes);
+    }
+
     public static async Task EncryptAsync(
         Stream plaintext,
         long plaintextSize,

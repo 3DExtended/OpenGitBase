@@ -77,6 +77,47 @@ class PlaintextObjectStoreTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.store.path(repository_id, oid)
 
+    def test_inventory_lists_the_stored_objects_of_one_repository_with_their_sizes(self) -> None:
+        first, second = b"first object", b"second, longer object"
+        other_repository = "1a2b3c4d-0000-4000-8000-000000000001"
+        for content in (first, second):
+            self.store.store(REPOSITORY_ID, oid_of(content), io.BytesIO(content), len(content))
+        self.store.store(other_repository, oid_of(b"other"), io.BytesIO(b"other"), 5)
+
+        inventory = self.store.inventory(REPOSITORY_ID)
+
+        self.assertEqual(
+            sorted([{"oid": oid_of(first), "size": len(first)}, {"oid": oid_of(second), "size": len(second)}],
+                   key=lambda item: item["oid"]),
+            inventory,
+        )
+
+    def test_inventory_of_a_repository_without_objects_is_empty(self) -> None:
+        self.assertEqual([], self.store.inventory(REPOSITORY_ID))
+
+    def test_inventory_skips_partial_uploads_and_misplaced_files(self) -> None:
+        content = b"complete object"
+        oid = oid_of(content)
+        self.store.store(REPOSITORY_ID, oid, io.BytesIO(content), len(content))
+        directory = self.store.path(REPOSITORY_ID, oid).parent
+        (directory / f".{oid}.123.456.tmp").write_bytes(b"partial")
+        misplaced = oid_of(b"misplaced")
+        (directory / misplaced).write_bytes(b"misplaced")
+        (directory / "notes.txt").write_bytes(b"not an object")
+
+        self.assertEqual([{"oid": oid, "size": len(content)}], self.store.inventory(REPOSITORY_ID))
+
+    def test_inventory_of_encrypted_copies_names_them_by_oid(self) -> None:
+        store = storage_lfs.LfsObjectStore(self.temp_dir / "encrypted", suffix=".aead", content_addressed=False)
+        oid = oid_of(b"plaintext")
+        store.store(REPOSITORY_ID, oid, io.BytesIO(b"OLFS ciphertext"), 15)
+
+        self.assertEqual([{"oid": oid, "size": 15}], store.inventory(REPOSITORY_ID))
+
+    def test_inventory_refuses_an_invalid_repository_id(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.inventory("../escape")
+
     def _leftover_files(self) -> list[Path]:
         return [path for path in self.store.root.rglob("*") if path.is_file()]
 

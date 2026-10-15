@@ -140,6 +140,7 @@ public class LfsInternalControllerTests
                 NullLogger<LfsReplicationService>.Instance
             ),
             Substitute.For<ILfsCopyCompletionScheduler>(),
+            Substitute.For<ILfsRepairQueue>(),
             NullLogger<LfsService>.Instance
         );
         return new LfsInternalController(service)

@@ -29,6 +29,7 @@ public class LfsServiceTests
     private readonly FakeLfsStorageNodes _nodes = new();
     private readonly IRepositoryKeyService _keys = Substitute.For<IRepositoryKeyService>();
     private readonly ILfsCopyCompletionScheduler _completions = Substitute.For<ILfsCopyCompletionScheduler>();
+    private readonly RecordingLfsRepairQueue _repairs = new();
     private readonly ISystemClock _clock = Substitute.For<ISystemClock>();
     private readonly UserId _ownerUserId = UserId.From(Guid.NewGuid());
     private readonly RepositoryId _repositoryId = RepositoryId.From(Guid.NewGuid());
@@ -385,6 +386,41 @@ public class LfsServiceTests
     }
 
     [Fact]
+    public async Task RequestRepairAsync_ForAValidDownloadToken_QueuesAnLfsRepairOfTheRepository()
+    {
+        var token = IssueToken(RecordedOid, 42, LfsTransferOperation.Download);
+
+        var result = await CreateService().RequestRepairAsync(Repair(token, RecordedOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(202, result.StatusCode);
+        Assert.Equal([_repositoryId.Value], _repairs.Scheduled);
+    }
+
+    [Fact]
+    public async Task RequestRepairAsync_WithAnUploadToken_Answers401AndQueuesNothing()
+    {
+        var token = IssueToken(RecordedOid, 42, LfsTransferOperation.Upload);
+
+        var result = await CreateService().RequestRepairAsync(Repair(token, RecordedOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(401, result.StatusCode);
+        Assert.Empty(_repairs.Scheduled);
+    }
+
+    [Fact]
+    public async Task RequestRepairAsync_WithATokenOfAnotherRepository_Answers403AndQueuesNothing()
+    {
+        var token = CreateTokenService()
+            .Issue(Guid.NewGuid(), RecordedOid, 42, LfsTransferOperation.Download, _ownerUserId.Value)
+            .Token;
+
+        var result = await CreateService().RequestRepairAsync(Repair(token, RecordedOid), RequestId, CancellationToken.None);
+
+        Assert.Equal(403, result.StatusCode);
+        Assert.Empty(_repairs.Scheduled);
+    }
+
+    [Fact]
     public async Task CheckTransferAsync_ForAValidUploadToken_ReturnsThePrimaryAndTheDeclaredSize()
     {
         var token = IssueToken(NewOid, 5_000_000, LfsTransferOperation.Upload);
@@ -694,6 +730,14 @@ public class LfsServiceTests
             RepositoryPath = "alice/repo",
         };
 
+    private static LfsRepairRequest Repair(string token, string oid) =>
+        new()
+        {
+            Token = token,
+            Oid = oid,
+            RepositoryPath = "alice/repo",
+        };
+
     private static LfsVerifyRequest Verify(string token, string oid, long size) =>
         new()
         {
@@ -741,6 +785,7 @@ public class LfsServiceTests
                 NullLogger<LfsReplicationService>.Instance
             ),
             _completions,
+            _repairs,
             NullLogger<LfsService>.Instance
         );
 

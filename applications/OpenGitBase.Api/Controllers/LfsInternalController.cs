@@ -45,6 +45,14 @@ public sealed class LfsInternalController : ControllerBase
             await _lfsService.VerifyAsync(request, HttpContext.TraceIdentifier, cancellationToken).ConfigureAwait(false)
         );
 
+    [HttpPost("repair")]
+    public async Task<IActionResult> RequestRepair([FromBody] LfsRepairRequest request, CancellationToken cancellationToken) =>
+        ToActionResult(
+            await _lfsService
+                .RequestRepairAsync(request, HttpContext.TraceIdentifier, cancellationToken)
+                .ConfigureAwait(false)
+        );
+
     private ObjectResult ToActionResult(LfsResult result)
     {
         if (result.RetryAfterSeconds is { } retryAfter)

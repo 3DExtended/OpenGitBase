@@ -188,6 +188,134 @@ public sealed class LfsReplicationService
         }
     }
 
+    /// <summary>
+    /// Streams the object from a plaintext <paramref name="source"/>, encrypts it and stores it on
+    /// <paramref name="target"/>, capped by <see cref="LfsOptions.ReplicaUploadTimeoutSeconds"/>. Never throws: a
+    /// failure is an unsuccessful attempt.
+    /// </summary>
+    public async Task<LfsCopyAttempt> CopyEncryptedAsync(
+        StorageNodeEndpoint source,
+        StorageNodeEndpoint target,
+        LfsCipherContext cipher,
+        long size,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var timeout = TransferTimeout(cancellationToken);
+        try
+        {
+            var plaintext = await _storage
+                .OpenObjectAsync(source, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Plaintext, timeout.Token)
+                .ConfigureAwait(false);
+            if (plaintext is null)
+            {
+                _logger.LogWarning("LFS object {Oid} is missing on {Source}", cipher.Oid, source.InternalHost);
+                return new LfsCopyAttempt(target, LfsObjectCopyKind.Encrypted, false);
+            }
+
+            using var content = new LfsEncryptingContent(plaintext, size, cipher, _options.SegmentBytes);
+            await _storage
+                .PutObjectAsync(target, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Encrypted, content, timeout.Token)
+                .ConfigureAwait(false);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Encrypted, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Encrypted copy of LFS object {Oid} on {Node} failed", cipher.Oid, target.InternalHost);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Encrypted, false);
+        }
+    }
+
+    /// <summary>
+    /// Streams the object from a plaintext <paramref name="source"/> to <paramref name="target"/> unless the target
+    /// already holds it. The storage node checks the bytes against the oid. Never throws.
+    /// </summary>
+    public async Task<LfsCopyAttempt> CopyPlaintextAsync(
+        StorageNodeEndpoint source,
+        StorageNodeEndpoint target,
+        string oid,
+        long size,
+        Guid repositoryId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var timeout = TransferTimeout(cancellationToken);
+        try
+        {
+            var held = await _storage
+                .GetObjectSizeAsync(target, repositoryId, oid, LfsObjectCopyKind.Plaintext, timeout.Token)
+                .ConfigureAwait(false);
+            if (held == size)
+            {
+                return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, true);
+            }
+
+            var plaintext = await _storage
+                .OpenObjectAsync(source, repositoryId, oid, LfsObjectCopyKind.Plaintext, timeout.Token)
+                .ConfigureAwait(false);
+            if (plaintext is null)
+            {
+                return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false);
+            }
+
+            using var content = new StreamContent(plaintext);
+            content.Headers.ContentLength = size;
+            await _storage
+                .PutObjectAsync(target, repositoryId, oid, LfsObjectCopyKind.Plaintext, content, timeout.Token)
+                .ConfigureAwait(false);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Plaintext copy of LFS object {Oid} on {Node} failed", oid, target.InternalHost);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false);
+        }
+    }
+
+    /// <summary>
+    /// Restores the plaintext object on <paramref name="target"/> from an encrypted copy on
+    /// <paramref name="encryptedSource"/>, decrypting while streaming (<see cref="LfsDecryptingContent"/>). A copy
+    /// that fails authentication or the oid check is never written. Never throws.
+    /// </summary>
+    public async Task<LfsCopyAttempt> RestorePlaintextAsync(
+        StorageNodeEndpoint encryptedSource,
+        StorageNodeEndpoint target,
+        LfsCipherContext cipher,
+        long size,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var timeout = TransferTimeout(cancellationToken);
+        try
+        {
+            var ciphertext = await _storage
+                .OpenObjectAsync(encryptedSource, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Encrypted, timeout.Token)
+                .ConfigureAwait(false);
+            if (ciphertext is null)
+            {
+                _logger.LogWarning("Encrypted copy of LFS object {Oid} is missing on {Source}", cipher.Oid, encryptedSource.InternalHost);
+                return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false);
+            }
+
+            using var content = new LfsDecryptingContent(ciphertext, size, cipher);
+            await _storage
+                .PutObjectAsync(target, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Plaintext, content, timeout.Token)
+                .ConfigureAwait(false);
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Restoring LFS object {Oid} on {Node} from the encrypted copy on {Source} failed",
+                cipher.Oid,
+                target.InternalHost,
+                encryptedSource.InternalHost
+            );
+            return new LfsCopyAttempt(target, LfsObjectCopyKind.Plaintext, false);
+        }
+    }
+
     private async Task<StorageNodeEndpoint?> ResolveEndpointAsync(
         Guid storageNodeId,
         string host,
@@ -206,84 +334,12 @@ public sealed class LfsReplicationService
             : new StorageNodeEndpoint(storageNodeId, host, httpPort, token.Get());
     }
 
-    /// <summary>One encrypted upload with its own timeout. Never throws: a failure is an unsuccessful attempt.</summary>
-    private async Task<LfsCopyAttempt> CopyEncryptedAsync(
-        StorageNodeEndpoint primary,
-        StorageNodeEndpoint node,
-        LfsCipherContext cipher,
-        long size
-    )
+    /// <summary>One transfer's cap, cancelled early with the caller's token.</summary>
+    private CancellationTokenSource TransferTimeout(CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(_options.ReplicaUploadTimeoutSeconds));
-        try
-        {
-            var source = await _storage
-                .OpenObjectAsync(primary, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Plaintext, timeout.Token)
-                .ConfigureAwait(false);
-            if (source is null)
-            {
-                _logger.LogWarning("LFS object {Oid} is missing on primary {Primary}", cipher.Oid, primary.InternalHost);
-                return new LfsCopyAttempt(node, LfsObjectCopyKind.Encrypted, false);
-            }
-
-            using var content = new LfsEncryptingContent(source, size, cipher, _options.SegmentBytes);
-            await _storage
-                .PutObjectAsync(node, cipher.RepositoryId, cipher.Oid, LfsObjectCopyKind.Encrypted, content, timeout.Token)
-                .ConfigureAwait(false);
-            return new LfsCopyAttempt(node, LfsObjectCopyKind.Encrypted, true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Encrypted copy of LFS object {Oid} on {Node} failed",
-                cipher.Oid,
-                node.InternalHost
-            );
-            return new LfsCopyAttempt(node, LfsObjectCopyKind.Encrypted, false);
-        }
-    }
-
-    /// <summary>Streams the object from the primary to a plaintext replica unless it already holds it.</summary>
-    private async Task<LfsCopyAttempt> CopyPlaintextAsync(
-        StorageNodeEndpoint primary,
-        StorageNodeEndpoint node,
-        string oid,
-        long size,
-        Guid repositoryId
-    )
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(_options.ReplicaUploadTimeoutSeconds));
-        try
-        {
-            var held = await _storage
-                .GetObjectSizeAsync(node, repositoryId, oid, LfsObjectCopyKind.Plaintext, timeout.Token)
-                .ConfigureAwait(false);
-            if (held == size)
-            {
-                return new LfsCopyAttempt(node, LfsObjectCopyKind.Plaintext, true);
-            }
-
-            var source = await _storage
-                .OpenObjectAsync(primary, repositoryId, oid, LfsObjectCopyKind.Plaintext, timeout.Token)
-                .ConfigureAwait(false);
-            if (source is null)
-            {
-                return new LfsCopyAttempt(node, LfsObjectCopyKind.Plaintext, false);
-            }
-
-            using var content = new StreamContent(source);
-            content.Headers.ContentLength = size;
-            await _storage
-                .PutObjectAsync(node, repositoryId, oid, LfsObjectCopyKind.Plaintext, content, timeout.Token)
-                .ConfigureAwait(false);
-            return new LfsCopyAttempt(node, LfsObjectCopyKind.Plaintext, true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Plaintext copy of LFS object {Oid} on {Node} failed", oid, node.InternalHost);
-            return new LfsCopyAttempt(node, LfsObjectCopyKind.Plaintext, false);
-        }
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(_options.ReplicaUploadTimeoutSeconds));
+        return timeout;
     }
 
     private Task RecordCopyAsync(

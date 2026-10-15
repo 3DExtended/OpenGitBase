@@ -152,6 +152,57 @@ public class StorageLfsClientTests
         );
     }
 
+    [Fact]
+    public async Task GetInventoryAsync_ReturnsTheKindAndTheObjectsTheNodeHolds()
+    {
+        HttpRequestMessage? sent = null;
+        var client = CreateClient(request =>
+        {
+            sent = request;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    $$"""{"kind":"encrypted","objects":[{"oid":"{{Oid}}","size":1077}]}""",
+                    Encoding.UTF8,
+                    "application/json"
+                ),
+            };
+        });
+
+        var inventory = await client.GetInventoryAsync(Node, RepositoryId, CancellationToken.None);
+
+        Assert.Equal(LfsObjectCopyKind.Encrypted, inventory.Kind);
+        Assert.Equal(new Dictionary<string, long> { [Oid] = 1077 }, inventory.Objects);
+        Assert.Equal(HttpMethod.Get, sent!.Method);
+        Assert.Equal($"http://storage-1:8081/internal/lfs/{RepositoryId:D}/inventory", sent.RequestUri?.ToString());
+        Assert.Equal("Bearer node-token", sent.Headers.Authorization?.ToString());
+    }
+
+    [Fact]
+    public async Task GetInventoryAsync_OfAPlaintextNode_ReportsPlaintext()
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"kind":"plaintext","objects":[]}""", Encoding.UTF8, "application/json"),
+        });
+
+        var inventory = await client.GetInventoryAsync(Node, RepositoryId, CancellationToken.None);
+
+        Assert.Equal(LfsObjectCopyKind.Plaintext, inventory.Kind);
+        Assert.Empty(inventory.Objects);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "{}")]
+    [InlineData(HttpStatusCode.OK, """{"kind":"unknown","objects":[]}""")]
+    [InlineData(HttpStatusCode.OK, "not json")]
+    public async Task GetInventoryAsync_WhenTheNodeCannotAnswer_Throws(HttpStatusCode status, string body)
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(status) { Content = new StringContent(body) });
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetInventoryAsync(Node, RepositoryId, CancellationToken.None));
+    }
+
     private static StorageLfsClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
         new(new HttpClient(new StubHandler(respond)));
 

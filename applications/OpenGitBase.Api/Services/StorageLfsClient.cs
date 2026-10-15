@@ -1,5 +1,7 @@
 ﻿using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using OpenGitBase.Features.Repository.Contracts;
 
 namespace OpenGitBase.Api.Services;
@@ -87,6 +89,54 @@ public sealed class StorageLfsClient : IStorageLfsClient
         }
     }
 
+    public async Task<LfsNodeInventory> GetInventoryAsync(
+        StorageNodeEndpoint node,
+        Guid repositoryId,
+        CancellationToken cancellationToken
+    )
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"http://{node.InternalHost}:{node.InternalHttpPort}/internal/lfs/{repositoryId:D}/inventory"
+        );
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", node.ApiToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Storage node {node.InternalHost} answered {(int)response.StatusCode} for the LFS inventory.",
+                null,
+                response.StatusCode
+            );
+        }
+
+        InventoryBody? body;
+        try
+        {
+            body = await response
+                .Content.ReadFromJsonAsync<InventoryBody>(JsonSerializerOptions.Web, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            throw new HttpRequestException($"Storage node {node.InternalHost} sent an unreadable LFS inventory.", ex);
+        }
+
+        var kind = body?.Kind switch
+        {
+            "plaintext" => LfsObjectCopyKind.Plaintext,
+            "encrypted" => LfsObjectCopyKind.Encrypted,
+            _ => throw new HttpRequestException($"Storage node {node.InternalHost} sent an LFS inventory of unknown kind."),
+        };
+        var objects = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var item in body.Objects ?? [])
+        {
+            objects[item.Oid] = item.Size;
+        }
+
+        return new LfsNodeInventory(kind, objects);
+    }
+
     private static HttpRequestMessage Request(
         HttpMethod method,
         StorageNodeEndpoint node,
@@ -103,4 +153,8 @@ public sealed class StorageLfsClient : IStorageLfsClient
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", node.ApiToken);
         return request;
     }
+
+    private sealed record InventoryBody(string? Kind, IReadOnlyList<InventoryItem>? Objects);
+
+    private sealed record InventoryItem(string Oid, long Size);
 }

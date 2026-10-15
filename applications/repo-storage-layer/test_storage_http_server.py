@@ -530,6 +530,36 @@ class LfsInternalEndpointTests(unittest.TestCase):
                 )
                 self.assertEqual(401, status)
 
+    def test_inventory_lists_plaintext_objects_on_a_plaintext_node(self) -> None:
+        content = b"lfs object" * 100
+        oid = self._store(content)
+
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual(200, status)
+        self.assertEqual({"kind": "plaintext", "objects": [{"oid": oid, "size": len(content)}]}, json.loads(body))
+
+    def test_inventory_lists_encrypted_copies_on_an_encrypted_replica(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"plaintext the replica never sees").hexdigest()
+        ciphertext = b"OLFS" + bytes(range(256))
+        self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", ciphertext)
+
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual(200, status)
+        self.assertEqual({"kind": "encrypted", "objects": [{"oid": oid, "size": len(ciphertext)}]}, json.loads(body))
+
+    def test_inventory_of_a_repository_without_objects_is_empty(self) -> None:
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual((200, {"kind": "plaintext", "objects": []}), (status, json.loads(body)))
+
+    def test_inventory_requires_the_node_token(self) -> None:
+        status, _, _ = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory", token=None)
+
+        self.assertEqual(401, status)
+
     def test_the_lfs_root_is_never_a_repository_path(self) -> None:
         lfs_root = storage_http_server.LFS_ROOT
 

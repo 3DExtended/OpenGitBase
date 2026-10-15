@@ -235,18 +235,41 @@ public class LfsHandlerTests
     }
 
     [Fact]
-    public async Task Download_WhenNoTargetHoldsTheObject_Answers404()
+    public async Task Download_WhenNoTargetHoldsTheObject_Answers503WithRetryAfterAndAsksTheApiForARepair()
     {
         var harness = new Harness();
-        harness.AnswerTransferCheck(size: 12);
+        harness.AnswerTransferCheck(size: 12, hosts: ["storage-4", "storage-1"]);
+        harness.ApiAnswers["repair"] = (202, "{}");
         harness.StorageAnswer = _ => new HttpResponseMessage(HttpStatusCode.NotFound);
         var context = CreateContext("GET", $"/alice/demo.git/info/lfs/objects/{Oid}", string.Empty);
         context.Request.Headers.Authorization = "Bearer action-token";
 
         await harness.Handler.HandleAsync(context);
 
-        Assert.Equal(404, context.Response.StatusCode);
+        Assert.Equal(503, context.Response.StatusCode);
+        Assert.Equal("10", context.Response.Headers.RetryAfter.ToString());
         Assert.Equal(LfsContentType, context.Response.ContentType);
+        Assert.Equal(2, harness.StorageRequests.Count);
+        var repair = harness.ApiRequests["repair"];
+        Assert.Equal("action-token", repair.GetProperty("token").GetString());
+        Assert.Equal(Oid, repair.GetProperty("oid").GetString());
+        Assert.Equal("alice/demo", repair.GetProperty("repositoryPath").GetString());
+    }
+
+    [Fact]
+    public async Task Download_WhenNoTargetAnswersAndTheRepairRequestFails_StillAsksTheClientToRetry()
+    {
+        var harness = new Harness();
+        harness.AnswerTransferCheck(size: 12);
+        harness.StorageAnswer = _ => throw new HttpRequestException("storage-1 is down");
+        var context = CreateContext("GET", $"/alice/demo.git/info/lfs/objects/{Oid}", string.Empty);
+        context.Request.Headers.Authorization = "Bearer action-token";
+
+        await harness.Handler.HandleAsync(context);
+
+        Assert.Equal(503, context.Response.StatusCode);
+        Assert.Equal("10", context.Response.Headers.RetryAfter.ToString());
+        Assert.True(harness.ApiRequests.ContainsKey("repair"));
     }
 
     [Fact]

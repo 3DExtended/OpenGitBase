@@ -27,6 +27,12 @@ public interface IStorageLfsClient
         CancellationToken cancellationToken
     );
 
+    /// <summary>
+    /// The repository's LFS copies on the node's disk, with the kind the node's role holds. Throws when the node
+    /// cannot answer, so a caller never mistakes an unreachable node for an empty one.
+    /// </summary>
+    Task<LfsNodeInventory> GetInventoryAsync(StorageNodeEndpoint node, Guid repositoryId, CancellationToken cancellationToken);
+
     /// <summary>Stores <paramref name="content"/> (which must report its length) as the node's copy.</summary>
     Task PutObjectAsync(
         StorageNodeEndpoint node,

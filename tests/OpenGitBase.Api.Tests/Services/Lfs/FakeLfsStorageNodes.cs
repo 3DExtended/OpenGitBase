@@ -20,6 +20,9 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
 
     public IReadOnlyCollection<RecordedStorageRequest> Requests => _requests;
 
+    /// <summary>The copy kind each host's inventory reports (its role); hosts not listed hold plaintext.</summary>
+    public IDictionary<string, LfsObjectCopyKind> Kinds { get; } = new Dictionary<string, LfsObjectCopyKind>(StringComparer.Ordinal);
+
     public static StorageNodeEndpoint Endpoint(string host) => new(NodeId(host), host, 8081, $"token-{host}");
 
     /// <summary>A stable node id per host, so tests can name nodes by host.</summary>
@@ -33,6 +36,9 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
 
     public byte[]? Find(string host, Guid repositoryId, string oid, LfsObjectCopyKind kind) =>
         _objects.TryGetValue(Key(host, repositoryId, oid, kind), out var content) ? content : null;
+
+    public void Remove(string host, Guid repositoryId, string oid, LfsObjectCopyKind kind) =>
+        _objects.TryRemove(Key(host, repositoryId, oid, kind), out _);
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -56,6 +62,11 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
         }
 
         var key = uri.Host + uri.AbsolutePath;
+        if (request.Method == HttpMethod.Get && uri.AbsolutePath.EndsWith("/inventory", StringComparison.Ordinal))
+        {
+            return Inventory(uri);
+        }
+
         if (request.Method == HttpMethod.Put)
         {
             if (request.Content?.Headers.ContentLength != body.Length)
@@ -84,4 +95,22 @@ public sealed class FakeLfsStorageNodes : HttpMessageHandler
 
     private static string Key(string host, Guid repositoryId, string oid, LfsObjectCopyKind kind) =>
         $"{host}/internal/lfs/{repositoryId:D}/{(kind == LfsObjectCopyKind.Encrypted ? "encrypted" : "objects")}/{oid}";
+
+    private HttpResponseMessage Inventory(Uri uri)
+    {
+        var kind = Kinds.TryGetValue(uri.Host, out var held) ? held : LfsObjectCopyKind.Plaintext;
+        var repository = uri.AbsolutePath.Split('/')[3];
+        var prefix = $"{uri.Host}/internal/lfs/{repository}/{(kind == LfsObjectCopyKind.Encrypted ? "encrypted" : "objects")}/";
+        var objects = _objects
+            .Where(entry => entry.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(entry => new { oid = entry.Key[prefix.Length..], size = entry.Value.Length })
+            .OrderBy(item => item.oid, StringComparer.Ordinal);
+        var body = System.Text.Json.JsonSerializer.Serialize(
+            new { kind = kind == LfsObjectCopyKind.Encrypted ? "encrypted" : "plaintext", objects }
+        );
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+        };
+    }
 }

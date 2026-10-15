@@ -56,6 +56,7 @@ LFS_ENCRYPTED_ROOT = Path(os.environ.get("STORAGE_LFS_ENCRYPTED_ROOT", "/var/lib
 INTERNAL_LFS_OBJECT_PATH_PATTERN = re.compile(
     r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/(?P<kind>objects|encrypted)/(?P<oid>[0-9a-f]{64})$"
 )
+INTERNAL_LFS_INVENTORY_PATH_PATTERN = re.compile(r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/inventory$")
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
 )
@@ -516,6 +517,10 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
                 lambda store, repository_id, oid: storage_lfs.send_object(self, store, repository_id, oid, True),
             )
             return
+        inventory_match = INTERNAL_LFS_INVENTORY_PATH_PATTERN.match(parsed.path)
+        if inventory_match:
+            self._handle_lfs_inventory(inventory_match.group("repository_id").lower())
+            return
         if parsed.path == "/internal/repos/content/branches":
             self._handle_list_branches()
             return
@@ -929,6 +934,17 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             action(store, repository_id, match.group("oid"))
         except ValueError:
             self._send_json(404, {"error": "Not found."})
+
+    def _handle_lfs_inventory(self, repository_id: str) -> None:
+        """The repository's LFS copies on this node: encrypted on an encrypted replica, plaintext elsewhere."""
+        encrypted_replica = _is_encrypted_replica(repository_id)
+        store = encrypted_lfs_store() if encrypted_replica else lfs_store()
+        try:
+            objects = store.inventory(repository_id)
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
+            return
+        self._send_json(200, {"kind": "encrypted" if encrypted_replica else "plaintext", "objects": objects})
 
     def _handle_get_inventory(self) -> None:
         self._send_json(200, on_disk_inventory())

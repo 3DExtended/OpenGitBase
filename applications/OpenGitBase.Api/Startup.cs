@@ -196,6 +196,10 @@ public class Startup
         services.AddScoped<LfsService>();
         services.AddScoped<LfsReplicationService>();
         services.AddSingleton<ILfsCopyCompletionScheduler, LfsCopyCompletionScheduler>();
+        services.AddScoped<ILfsCopyReconciler, LfsCopyReconciler>();
+        services.AddSingleton<LfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(provider => provider.GetRequiredService<LfsRepairQueue>());
+        services.AddHostedService(provider => provider.GetRequiredService<LfsRepairQueue>());
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()
