@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
+from storage_lfs import POINTER_MAX_BYTES, parse_pointer
+
 INLINE_MAX_BYTES = 1_048_576
 
 README_CANDIDATES = (
@@ -190,6 +192,10 @@ def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
         capture_output=True,
         timeout=60,
     ).stdout
+    pointer = parse_pointer(raw) if size <= POINTER_MAX_BYTES else None
+    if pointer is not None:
+        return _lfs_blob(ref, normalized_path, *pointer)
+
     is_binary = b"\0" in raw[:8192]
 
     preview_kind = _preview_kind(normalized_path, is_binary)
@@ -209,6 +215,19 @@ def get_blob(git_dir: str, ref: str, path: str) -> dict[str, Any]:
         payload["contentBase64"] = __import__("base64").b64encode(raw).decode("ascii")
 
     return payload
+
+
+def _lfs_blob(ref: str, path: str, oid: str, size: int) -> dict[str, Any]:
+    """An LFS-tracked file is described by its object; the pointer text is never shown as the content."""
+    return {
+        "ref": ref,
+        "path": path,
+        "size": size,
+        "isBinary": True,
+        "isTooLarge": size > INLINE_MAX_BYTES,
+        "previewKind": _preview_kind(path, True),
+        "lfs": {"oid": oid, "size": size},
+    }
 
 
 def get_raw_bytes(git_dir: str, ref: str, path: str, *, max_bytes: int = RAW_MAX_BYTES) -> tuple[bytes, str]:

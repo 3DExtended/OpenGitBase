@@ -16,6 +16,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.parse
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -567,6 +568,37 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.assertFalse(storage_http_server._is_valid_physical_path(str(lfs_root / self.REPOSITORY_ID)))
         self.assertFalse(storage_http_server._is_deletable_repo_path(str(lfs_root)))
         self.assertTrue(storage_http_server._is_valid_physical_path(str(self.repos_root / f"{self.REPOSITORY_ID}.git")))
+
+    def test_raw_blob_of_an_lfs_pointer_names_the_lfs_object_in_its_headers(self) -> None:
+        oid = "e" * 64
+        pointer = f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize 4096\n".encode("ascii")
+        physical_path = self._repository_with_files({"asset.bin": pointer, "README.md": b"hello\n"})
+
+        status, headers, body = self._request("GET", self._raw_path(physical_path, "asset.bin"))
+        _, plain_headers, _ = self._request("GET", self._raw_path(physical_path, "README.md"))
+
+        self.assertEqual(200, status)
+        self.assertEqual(pointer, body)
+        self.assertEqual(oid, headers["x-opengitbase-lfs-oid"])
+        self.assertEqual("4096", headers["x-opengitbase-lfs-size"])
+        self.assertNotIn("x-opengitbase-lfs-oid", plain_headers)
+
+    def _repository_with_files(self, files: dict[str, bytes]) -> str:
+        work = self.temp_dir / "content-work"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+        for name, content in files.items():
+            (work / name).write_bytes(content)
+        git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "files"], check=True)
+        bare = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(work), str(bare)], check=True)
+        return str(bare)
+
+    @staticmethod
+    def _raw_path(physical_path: str, path: str) -> str:
+        query = urllib.parse.urlencode({"physicalPath": physical_path, "ref": "main", "path": path})
+        return f"/internal/repos/content/blob/raw?{query}"
 
     def _set_role(self, role: str) -> None:
         storage_http_server._write_repo_role(self.REPOSITORY_ID, role)

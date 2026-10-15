@@ -9,6 +9,31 @@ const { t } = useI18n()
 const colorMode = useColorMode()
 import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
 
+// A fixed inline image, so the LFS preview snapshot does not depend on the network.
+const lfsImageFixtureUrl = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120">'
+  + '<rect width="240" height="120" fill="#0b1416"/>'
+  + '<circle cx="60" cy="60" r="34" fill="#38e0e6"/>'
+  + '<rect x="112" y="40" width="96" height="14" rx="3" fill="#38e0e6" opacity="0.7"/>'
+  + '<rect x="112" y="66" width="64" height="14" rx="3" fill="#38e0e6" opacity="0.4"/>'
+  + '</svg>',
+)}`
+
+function lfsBlobFixture(path: string, previewKind: string, size: number, available: boolean) {
+  return {
+    ref: 'main',
+    path,
+    size,
+    isBinary: true,
+    isTooLarge: size > 1_048_576,
+    previewKind,
+    textContent: null,
+    contentBase64: null,
+    lfs: { oid: '4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393', size, available },
+    replicationLag: null,
+  }
+}
+
 function memberLabel(userId: string): string {
   return userId === 'user-1' ? 'alice' : 'bob'
 }
@@ -359,6 +384,57 @@ const selfHostOptions = [
       </h2>
       <StorageUsageMeter
         :usage="{ bytesUsed: 900000000, bytesLimit: 1073741824, fileSizeLimit: 52428800 }"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-md"
+      data-testid="visual-storage-meter-lfs"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Storage meter (with Git LFS)
+      </h2>
+      <StorageUsageMeter
+        :usage="{ bytesUsed: 314572800, bytesLimit: 1073741824, fileSizeLimit: 52428800, gitBytes: 12582912, lfsBytes: 301989888 }"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-image"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (image preview)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('assets/logo.png', 'image', 2516582, true)"
+        :raw-url="lfsImageFixtureUrl"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-download"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (download only)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('models/weights.bin', 'binary', 769654784, true)"
+        raw-url="#"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-unavailable"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (object not available)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('assets/hero.psd', 'binary', 48234496, false)"
+        raw-url="#"
       />
     </section>
 

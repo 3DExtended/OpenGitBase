@@ -470,7 +470,8 @@ public class RepositoryCommitsControllerTests
             queryProcessor,
             new WebReadReplicaSelector(),
             storageContentClient,
-            cache
+            cache,
+            Substitute.For<ILfsContentReader>()
         );
 
         var controller = new RepositoryCommitsController(contentService)

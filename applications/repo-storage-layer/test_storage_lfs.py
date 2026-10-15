@@ -22,6 +22,41 @@ def oid_of(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def pointer_text(oid: str, size: int) -> bytes:
+    return f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n".encode("ascii")
+
+
+class PointerTests(unittest.TestCase):
+    OID = "a" * 64
+
+    def test_parse_pointer_reads_oid_and_size_of_an_exact_pointer(self) -> None:
+        self.assertEqual((self.OID, 5000), storage_lfs.parse_pointer(pointer_text(self.OID, 5000)))
+
+    def test_parse_pointer_accepts_an_empty_object(self) -> None:
+        self.assertEqual((self.OID, 0), storage_lfs.parse_pointer(pointer_text(self.OID, 0)))
+
+    def test_parse_pointer_rejects_what_only_looks_like_a_pointer(self) -> None:
+        exact = pointer_text(self.OID, 12).decode("ascii")
+        for name, content in {
+            "crlf line ends": exact.replace("\n", "\r\n"),
+            "no trailing newline": exact.rstrip("\n"),
+            "extension key": exact.replace("oid ", "ext-0-foo sha256:" + "b" * 64 + "\noid "),
+            "upper-case oid": exact.replace(self.OID, self.OID.upper()),
+            "short oid": exact.replace(self.OID, "a" * 63),
+            "leading zero size": exact.replace("size 12", "size 012"),
+            "other spec version": exact.replace("spec/v1", "spec/v2"),
+            "trailing text": exact + "more\n",
+            "leading blank line": "\n" + exact,
+        }.items():
+            with self.subTest(name):
+                self.assertIsNone(storage_lfs.parse_pointer(content.encode("ascii")))
+
+    def test_parse_pointer_rejects_content_larger_than_a_pointer(self) -> None:
+        padded = pointer_text(self.OID, 1) + b" " * storage_lfs.POINTER_MAX_BYTES
+
+        self.assertIsNone(storage_lfs.parse_pointer(padded))
+
+
 class PlaintextObjectStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = Path(tempfile.mkdtemp())

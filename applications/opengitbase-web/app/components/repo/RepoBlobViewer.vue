@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { RepositoryContentBlob, Discussion } from '~/utils/api'
-import type { CommentAnchorInput } from '~/utils/api'
+import type { CommentAnchorInput, Discussion, RepositoryContentBlob } from '~/utils/api'
 import { fileNameFromPath, formatEntrySize, isMarkdownPath } from '~/utils/repoBrowse'
+import { lfsBlobView } from '~/utils/lfsBlob'
 
 const props = defineProps<{
   blob: RepositoryContentBlob
@@ -26,6 +26,11 @@ const fileName = computed(() => fileNameFromPath(props.blob.path))
 const isMarkdown = computed(() => isMarkdownPath(props.blob.path))
 const markdownMode = ref<'rendered' | 'raw'>('rendered')
 
+// A file stored with Git LFS is shown by its object, never by the pointer text.
+const lfsView = computed(() => lfsBlobView(props.blob))
+const displaySize = computed(() => props.blob.lfs?.size ?? props.blob.size)
+const canDownload = computed(() => lfsView.value !== 'unavailable')
+
 const imageSrc = computed(() => {
   if (props.blob.previewKind !== 'image' || props.blob.isTooLarge) {
     return null
@@ -37,14 +42,16 @@ const imageSrc = computed(() => {
 })
 
 const showText = computed(() =>
-  !props.blob.isBinary
+  !lfsView.value
+  && !props.blob.isBinary
   && !props.blob.isTooLarge
   && props.blob.previewKind === 'text'
   && (!isMarkdown.value || markdownMode.value === 'raw'),
 )
 
 const showMarkdown = computed(() =>
-  !props.blob.isBinary
+  !lfsView.value
+  && !props.blob.isBinary
   && !props.blob.isTooLarge
   && isMarkdown.value
   && markdownMode.value === 'rendered'
@@ -52,17 +59,18 @@ const showMarkdown = computed(() =>
 )
 
 const showImage = computed(() =>
-  props.blob.previewKind === 'image'
+  !lfsView.value
+  && props.blob.previewKind === 'image'
   && !props.blob.isTooLarge
   && imageSrc.value,
 )
 
 const showSvgMessage = computed(() =>
-  props.blob.previewKind === 'svg' && !props.blob.isTooLarge,
+  !lfsView.value && props.blob.previewKind === 'svg' && !props.blob.isTooLarge,
 )
 
-const showBinary = computed(() => props.blob.isBinary)
-const showTooLarge = computed(() => props.blob.isTooLarge && !props.blob.isBinary)
+const showBinary = computed(() => !lfsView.value && props.blob.isBinary)
+const showTooLarge = computed(() => !lfsView.value && props.blob.isTooLarge && !props.blob.isBinary)
 
 function onRangeSelected(payload: { line: number, endLine: number | null }): void {
   emit('lineAnchor', {
@@ -86,9 +94,19 @@ function onRangeCleared(): void {
         <h2 class="font-mono text-lg font-semibold">
           {{ fileName }}
         </h2>
-        <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
-          {{ formatEntrySize(blob.size) }}
-        </p>
+        <div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--ogb-text-muted)]">
+          <span>{{ formatEntrySize(displaySize) }}</span>
+          <UBadge
+            v-if="lfsView"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-hard-drive-download"
+            data-testid="lfs-badge"
+          >
+            {{ t('repo.browse.lfsBadge') }}
+          </UBadge>
+        </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <div
@@ -117,6 +135,7 @@ function onRangeCleared(): void {
           </button>
         </div>
         <UButton
+          v-if="canDownload"
           :to="rawUrl"
           target="_blank"
           variant="soft"
@@ -125,11 +144,50 @@ function onRangeCleared(): void {
         >
           {{ t('repo.browse.download') }}
         </UButton>
+        <UButton
+          v-else
+          variant="soft"
+          size="sm"
+          disabled
+        >
+          {{ t('repo.browse.download') }}
+        </UButton>
       </div>
     </div>
 
     <div
-      v-if="showTooLarge"
+      v-if="lfsView === 'unavailable'"
+      class="rounded-md border border-[var(--ogb-border)] bg-[var(--ogb-bg)] px-4 py-6 text-sm"
+      data-testid="lfs-not-available"
+    >
+      <p class="font-medium">
+        {{ t('repo.browse.lfsNotAvailable') }}
+      </p>
+      <p class="mt-1 text-[var(--ogb-text-muted)]">
+        {{ t('repo.browse.lfsNotAvailableDescription') }}
+      </p>
+    </div>
+
+    <div
+      v-else-if="lfsView === 'image'"
+      class="rounded-md border border-[var(--ogb-border)] bg-[var(--ogb-bg)] p-4"
+    >
+      <img
+        :src="rawUrl"
+        :alt="fileName"
+        class="max-h-[32rem] max-w-full object-contain"
+      >
+    </div>
+
+    <div
+      v-else-if="lfsView === 'download'"
+      class="rounded-md border border-[var(--ogb-border)] bg-[var(--ogb-bg)] px-4 py-6 text-sm text-[var(--ogb-text-muted)]"
+    >
+      {{ t('repo.browse.lfsDownloadOnly') }}
+    </div>
+
+    <div
+      v-else-if="showTooLarge"
       class="rounded-md border border-[var(--ogb-border)] bg-[var(--ogb-bg)] px-4 py-6 text-sm text-[var(--ogb-text-muted)]"
     >
       {{ t('repo.browse.tooLarge') }}

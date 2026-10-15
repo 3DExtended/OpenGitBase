@@ -25,6 +25,10 @@ from storage_content import (
 )
 
 
+def lfs_pointer(oid: str, size: int) -> bytes:
+    return f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n".encode("ascii")
+
+
 class StorageContentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.mkdtemp()
@@ -85,6 +89,41 @@ class StorageContentTests(unittest.TestCase):
         blob = get_blob(self.repo_path, "main", "src/app.ts")
         self.assertEqual(blob["previewKind"], "text")
         self.assertIn("export const ok", blob["textContent"])
+
+    def _commit_files(self, files: dict[str, bytes]) -> None:
+        work = Path(self.temp_dir) / "work"
+        for name, content in files.items():
+            (work / name).parent.mkdir(parents=True, exist_ok=True)
+            (work / name).write_bytes(content)
+        for command in (["add", "."], ["commit", "-m", "files"], ["push", self.repo_path, "main"]):
+            subprocess.run(["git", *command], cwd=work, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def test_get_blob_of_an_lfs_pointer_describes_the_lfs_object(self) -> None:
+        oid = "c" * 64
+        self._commit_files({"assets/logo.png": lfs_pointer(oid, 5_000_000), "assets/data.bin": lfs_pointer(oid, 7)})
+
+        image = get_blob(self.repo_path, "main", "assets/logo.png")
+        binary = get_blob(self.repo_path, "main", "assets/data.bin")
+
+        self.assertEqual({"oid": oid, "size": 5_000_000}, image["lfs"])
+        self.assertEqual(5_000_000, image["size"])
+        self.assertEqual("image", image["previewKind"])
+        self.assertTrue(image["isBinary"])
+        self.assertNotIn("contentBase64", image)
+        self.assertNotIn("textContent", image)
+        self.assertEqual({"oid": oid, "size": 7}, binary["lfs"])
+        self.assertEqual("binary", binary["previewKind"])
+        self.assertNotIn("textContent", binary)
+
+    def test_get_blob_of_text_that_only_looks_like_a_pointer_returns_the_text(self) -> None:
+        crlf = lfs_pointer("d" * 64, 3).replace(b"\n", b"\r\n")
+        self._commit_files({"notes.txt": crlf})
+
+        blob = get_blob(self.repo_path, "main", "notes.txt")
+
+        self.assertNotIn("lfs", blob)
+        self.assertEqual("text", blob["previewKind"])
+        self.assertIn("git-lfs.github.com", blob["textContent"])
 
     def test_get_raw_bytes(self) -> None:
         raw, path = get_raw_bytes(self.repo_path, "main", "README.md")

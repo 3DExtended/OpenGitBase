@@ -18,5 +18,8 @@ public sealed class RepositoryContentBlobResponse
 
     public string? ContentBase64 { get; init; }
 
+    /// <summary>Set when the blob is a Git LFS pointer; the content fields then stay empty.</summary>
+    public RepositoryContentLfsResponse? Lfs { get; init; }
+
     public RepositoryReplicationLagDto? ReplicationLag { get; init; }
 }

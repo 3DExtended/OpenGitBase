@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 import urllib.error
@@ -15,13 +14,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from storage_lfs import POINTER_MAX_BYTES, parse_pointer
+
 API_URL_FILE = Path("/var/lib/opengitbase/api-url")
 NULL_SHA = "0" * 40
-# An LFS pointer is a small blob in exactly this form (git-lfs spec v1, no extensions).
-LFS_POINTER_MAX_BYTES = 1024
-LFS_POINTER_PATTERN = re.compile(
-    rb"\Aversion https://git-lfs\.github\.com/spec/v1\noid sha256:(?P<oid>[0-9a-f]{64})\nsize (?P<size>0|[1-9][0-9]*)\n\Z"
-)
 
 
 def _read_api_url() -> str:
@@ -141,7 +137,7 @@ def _small_blobs(git_dir: str, shas: list[str]) -> set[str]:
     small: set[str] = set()
     for line in process.stdout.splitlines():
         parts = line.split()
-        if len(parts) == 3 and parts[1] == "blob" and int(parts[2]) <= LFS_POINTER_MAX_BYTES:
+        if len(parts) == 3 and parts[1] == "blob" and int(parts[2]) <= POINTER_MAX_BYTES:
             small.add(parts[0])
     return small
 
@@ -184,12 +180,12 @@ def collect_lfs_pointers(git_dir: str, updates: list[tuple[str, str, str]]) -> l
 
     pointers: dict[str, dict[str, Any]] = {}
     for sha, content in _blob_contents(git_dir, candidates).items():
-        match = LFS_POINTER_PATTERN.match(content)
-        if match is None:
+        pointer = parse_pointer(content)
+        if pointer is None:
             continue
-        oid = match.group("oid").decode("ascii")
+        oid, size = pointer
         path, ref = found[sha]
-        pointers.setdefault(oid, {"oid": oid, "size": int(match.group("size")), "path": path, "refName": ref})
+        pointers.setdefault(oid, {"oid": oid, "size": size, "path": path, "refName": ref})
     return sorted(pointers.values(), key=lambda item: (item["path"], item["oid"]))
 
 

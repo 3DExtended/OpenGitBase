@@ -300,6 +300,10 @@ export interface RepositoryUsage {
   bytesUsed: number
   bytesLimit: number
   fileSizeLimit: number
+  /** Bytes of the git repository itself; with lfsBytes it makes up bytesUsed. */
+  gitBytes?: number
+  /** Bytes of the repository's Git LFS objects. */
+  lfsBytes?: number
 }
 
 export interface OwnerProfile {
@@ -353,6 +357,13 @@ export interface RepositoryContentTree {
   replicationLag: RepositoryReplicationLag | null
 }
 
+/** The Git LFS object behind a pointer blob; available is false when the repository never received it. */
+export interface RepositoryContentLfs {
+  oid: string
+  size: number
+  available: boolean
+}
+
 export interface RepositoryContentBlob {
   ref: string
   path: string
@@ -362,6 +373,7 @@ export interface RepositoryContentBlob {
   previewKind: string
   textContent: string | null
   contentBase64: string | null
+  lfs: RepositoryContentLfs | null
   replicationLag: RepositoryReplicationLag | null
 }
 
@@ -841,7 +853,20 @@ function normalizeContentBlob(raw: Record<string, unknown>): RepositoryContentBl
     previewKind: String(raw.previewKind ?? 'text'),
     textContent: raw.textContent == null ? null : String(raw.textContent),
     contentBase64: raw.contentBase64 == null ? null : String(raw.contentBase64),
+    lfs: normalizeContentLfs(raw.lfs),
     replicationLag: normalizeReplicationLag(raw.replicationLag),
+  }
+}
+
+function normalizeContentLfs(raw: unknown): RepositoryContentLfs | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const lfs = raw as Record<string, unknown>
+  return {
+    oid: String(lfs.oid ?? ''),
+    size: Number(lfs.size ?? 0),
+    available: Boolean(lfs.available),
   }
 }
 
@@ -1708,6 +1733,8 @@ export function createApi(baseUrl: string) {
             bytesUsed: Number(result.data.bytesUsed ?? 0),
             bytesLimit: Number(result.data.bytesLimit ?? 1_073_741_824),
             fileSizeLimit: Number(result.data.fileSizeLimit ?? 52_428_800),
+            gitBytes: Number(result.data.gitBytes ?? result.data.bytesUsed ?? 0),
+            lfsBytes: Number(result.data.lfsBytes ?? 0),
           },
         }
       },

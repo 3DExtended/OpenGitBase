@@ -10,18 +10,37 @@ namespace OpenGitBase.Api.Services;
 
 public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
 {
+    private const string LfsOidHeader = "X-OpenGitBase-Lfs-Oid";
+
+    /// <summary>
+    /// Raw LFS content gets its real type only for plain images the blob view previews. Everything else, SVG and
+    /// HTML included, stays a download so user content never runs in the API's origin.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> InlineImageTypes = new Dictionary<string, string>(
+        StringComparer.OrdinalIgnoreCase
+    )
+    {
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
+    };
+
     private readonly RepositoryContentAuthorizationService _authorization;
     private readonly IQueryProcessor _queryProcessor;
     private readonly WebReadReplicaSelector _replicaSelector;
     private readonly IStorageContentClient _storageContentClient;
     private readonly IRepositoryContentCache _cache;
+    private readonly ILfsContentReader _lfsContent;
 
     public RepositoryContentService(
         RepositoryContentAuthorizationService authorization,
         IQueryProcessor queryProcessor,
         WebReadReplicaSelector replicaSelector,
         IStorageContentClient storageContentClient,
-        IRepositoryContentCache cache
+        IRepositoryContentCache cache,
+        ILfsContentReader lfsContent
     )
     {
         _authorization = authorization;
@@ -29,6 +48,7 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
         _replicaSelector = replicaSelector;
         _storageContentClient = storageContentClient;
         _cache = cache;
+        _lfsContent = lfsContent;
     }
 
     public async Task<(RepositoryContentAccessResult Access, RepositoryContentRefsResponse? Data)> GetRefsAsync(
@@ -248,6 +268,15 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             return (RepositoryContentAccessResult.Unavailable(), null);
         }
 
+        RepositoryContentLfsResponse? lfs = null;
+        if (payload.Lfs is { } pointer)
+        {
+            var recorded = await _lfsContent
+                .FindRecordedSizeAsync(access.Repository.Id.Value, pointer.Oid, cancellationToken)
+                .ConfigureAwait(false);
+            lfs = new RepositoryContentLfsResponse { Oid = pointer.Oid, Size = pointer.Size, Available = recorded is not null };
+        }
+
         var response = new RepositoryContentBlobResponse
         {
             Ref = payload.Ref,
@@ -258,8 +287,15 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             PreviewKind = payload.PreviewKind,
             TextContent = payload.TextContent,
             ContentBase64 = payload.ContentBase64,
+            Lfs = lfs,
             ReplicationLag = context.ReplicationLag,
         };
+
+        // An LFS object's availability changes with uploads and repairs; pointer blobs are looked up every time.
+        if (lfs is not null)
+        {
+            return (access, response);
+        }
 
         await _cache
             .SetAsync(cacheKey, response, RepositoryContentCacheTtl.Default, cancellationToken)
@@ -395,8 +431,18 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             return (RepositoryContentAccessResult.Unavailable(), null);
         }
 
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         var fileName = Path.GetFileName(path);
+        if (response.Headers.TryGetValues(LfsOidHeader, out var oids))
+        {
+            response.Dispose();
+            return (
+                access,
+                await OpenLfsObjectAsync(access.Repository.Id.Value, oids.First(), fileName, cancellationToken)
+                    .ConfigureAwait(false)
+            );
+        }
+
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         response.Dispose();
 
         return (
@@ -483,6 +529,35 @@ public sealed class RepositoryContentService : IRepositoryDiskUsageProvider
             .ConfigureAwait(false);
 
         return payload?.Branches.Select(branch => branch.Name).ToList() ?? [];
+    }
+
+    /// <summary>The LFS object behind a pointer blob, streamed from storage with its recorded length.</summary>
+    private async Task<StorageRawResult> OpenLfsObjectAsync(
+        Guid repositoryId,
+        string oid,
+        string fileName,
+        CancellationToken cancellationToken
+    )
+    {
+        var size = await _lfsContent.FindRecordedSizeAsync(repositoryId, oid, cancellationToken).ConfigureAwait(false);
+        if (size is null)
+        {
+            return new StorageRawResult { Status = StorageRawStatus.LfsObjectNotAvailable, FileName = fileName };
+        }
+
+        var content = await _lfsContent.OpenAsync(repositoryId, oid, cancellationToken).ConfigureAwait(false);
+        if (content is null)
+        {
+            return new StorageRawResult { Status = StorageRawStatus.LfsObjectRestoring, FileName = fileName };
+        }
+
+        return new StorageRawResult
+        {
+            Content = content,
+            ContentLength = size,
+            ContentType = InlineImageTypes.GetValueOrDefault(Path.GetExtension(fileName), "application/octet-stream"),
+            FileName = fileName,
+        };
     }
 
     private async Task<StorageContentContext?> LoadStorageContextAsync(

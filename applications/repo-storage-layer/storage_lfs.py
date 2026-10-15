@@ -25,6 +25,22 @@ REPOSITORY_ID_PATTERN = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 TRANSFER_PATH_PATTERN = re.compile(r"^/lfs/(?P<repository_id>[^/]+)/objects/(?P<oid>[^/]+)$")
 # A stalled client must not hold a server thread forever.
 TRANSFER_SOCKET_TIMEOUT_SECONDS = 300
+# An LFS pointer is a small blob in exactly this form (git-lfs spec v1, no extensions). Anything else, even text
+# that only looks like one, is an ordinary blob.
+POINTER_MAX_BYTES = 1024
+POINTER_PATTERN = re.compile(
+    rb"\Aversion https://git-lfs\.github\.com/spec/v1\noid sha256:(?P<oid>[0-9a-f]{64})\nsize (?P<size>0|[1-9][0-9]*)\n\Z"
+)
+
+
+def parse_pointer(content: bytes) -> tuple[str, int] | None:
+    """The (oid, size) of an exact LFS pointer, or None for every other blob."""
+    if len(content) > POINTER_MAX_BYTES:
+        return None
+    match = POINTER_PATTERN.match(content)
+    if match is None:
+        return None
+    return match.group("oid").decode("ascii"), int(match.group("size"))
 
 
 class LfsObjectMismatch(ValueError):

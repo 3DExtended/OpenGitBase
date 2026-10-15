@@ -709,6 +709,11 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             "Content-Disposition",
             f'attachment; filename="{Path(normalized_path).name}"',
         )
+        # The API serves the LFS object instead of the pointer; the headers spare it parsing the body.
+        pointer = storage_lfs.parse_pointer(raw)
+        if pointer is not None:
+            self.send_header("X-OpenGitBase-Lfs-Oid", pointer[0])
+            self.send_header("X-OpenGitBase-Lfs-Size", str(pointer[1]))
         self.end_headers()
         self.wfile.write(raw)
 
