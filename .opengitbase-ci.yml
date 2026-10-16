@@ -44,7 +44,7 @@ dotnet-tests:
             set -eu
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -qq
-            apt-get install -y -qq --no-install-recommends ca-certificates git dotnet-sdk-10.0
+            apt-get install -y -qq --no-install-recommends ca-certificates dotnet-sdk-10.0 git openssh-client
   script: |
     set -eu
     git config --global user.name "OpenGitBase CI"
