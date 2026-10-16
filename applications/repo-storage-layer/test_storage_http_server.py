@@ -495,6 +495,75 @@ class StorageHttpMissingTreeTests(unittest.TestCase):
         self.assertEqual((404, "invalid_ref"), (actual_status, body.get("code")))
 
 
+class StorageHttpWorkspaceArchiveTests(unittest.TestCase):
+    """A CI job's workspace comes from the storage node, since the API has no git.
+
+    The node answers a tar.gz of the commit, or 404 invalid_ref for a commit it lacks, so the
+    API can try another node.
+    """
+
+    setUp = StorageHttpMissingBlobTests.setUp
+    tearDown = StorageHttpMissingBlobTests.tearDown
+
+    def _get_archive(self, **params: str) -> tuple[int, str, bytes]:
+        import urllib.error
+        import urllib.request
+        from urllib.parse import urlencode
+
+        query = urlencode({"physicalPath": str(self.repo_path), **params})
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.server.server_address[1]}/internal/repos/content/archive?{query}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.status, response.headers.get("Content-Type", ""), response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, error.headers.get("Content-Type", ""), error.read()
+
+    def _head(self) -> str:
+        import subprocess
+
+        return subprocess.run(
+            ["git", "--git-dir", str(self.repo_path), "rev-parse", "main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    def test_the_commit_is_served_as_tar_gz(self) -> None:
+        import io
+        import tarfile
+
+        for depth in ("0", "1"):
+            with self.subTest(depth=depth):
+                status, content_type, body = self._get_archive(sha=self._head(), depth=depth)
+
+                self.assertEqual((200, "application/gzip"), (status, content_type))
+                with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as tar:
+                    names = {name.removeprefix("./") for name in tar.getnames()}
+                self.assertIn("README", names)
+                self.assertEqual(depth == "1", ".git/HEAD" in names)
+
+    def test_a_commit_the_node_lacks_is_404_invalid_ref(self) -> None:
+        import json
+
+        status, _, body = self._get_archive(sha="1" * 40, depth="0")
+
+        self.assertEqual((404, "invalid_ref"), (status, json.loads(body).get("code")))
+
+    def test_a_missing_or_malformed_parameter_is_400(self) -> None:
+        for params in (
+            {"depth": "0"},
+            {"sha": self._head()},
+            {"sha": self._head(), "depth": "-1"},
+            {"sha": self._head(), "depth": "deep"},
+        ):
+            with self.subTest(params=params):
+                status, _, _ = self._get_archive(**params)
+                self.assertEqual(400, status)
+
+
 class StorageImageTests(unittest.TestCase):
     def test_the_image_trusts_repositories_owned_by_the_git_user(self) -> None:
         # Root runs git in repositories that belong to git (create-artifact, content, merges).
