@@ -96,6 +96,16 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             return Option<PipelineRunId>.None;
         }
 
+        var refName = BranchOrTagName(query.Ref);
+        var scheduledJobs = parseResult.Definition.Jobs
+            .Where(job => job.Only.Count == 0 || job.Only.Any(pattern => OnlyGlobMatcher.IsMatch(pattern, refName)))
+            .ToList();
+        if (scheduledJobs.Count == 0)
+        {
+            // A run only advances when one of its jobs changes, so a run without jobs would stay queued.
+            return Option<PipelineRunId>.None;
+        }
+
         var ownerContext = await ResolveOwnerContextAsync(context, repository, cancellationToken)
             .ConfigureAwait(false);
 
@@ -111,20 +121,17 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         };
         context.Set<PipelineRunEntity>().Add(run);
 
-        var firstStage = parseResult.Definition.Stages.FirstOrDefault();
+        // Later stages are released as earlier ones finish, so the first stage `only` left a job in
+        // starts; a stage with nothing to run would hold the rest blocked.
+        var firstStage = parseResult.Definition.Stages.First(stage =>
+            scheduledJobs.Exists(job => string.Equals(job.Stage, stage, StringComparison.Ordinal))
+        );
+        var queuedJobIds = new List<Guid>();
 
-        foreach (var job in parseResult.Definition.Jobs)
+        foreach (var job in scheduledJobs)
         {
-            if (
-                job.Only.Count > 0
-                && !job.Only.Any(pattern => OnlyGlobMatcher.IsMatch(pattern, query.Ref))
-            )
-            {
-                continue;
-            }
-
             var jobId = Guid.NewGuid();
-            var reservedVariables = BuildCiVariables(run, repository, job, jobId, ownerContext);
+            var reservedVariables = BuildCiVariables(run, refName, repository, job, jobId, ownerContext);
             if (
                 job.Variables.Keys.Any(key =>
                     reservedVariables.ContainsKey(key)
@@ -187,19 +194,40 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 );
             if (jobEntity.Status == PipelineJobStatus.Queued)
             {
-                await _jobAvailableEventPublisher
-                    .PublishAsync(jobEntity.Id, cancellationToken)
-                    .ConfigureAwait(false);
+                queuedJobIds.Add(jobEntity.Id);
             }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // Announced only once saved, so an agent never wakes for a job it cannot claim.
+        foreach (var jobId in queuedJobIds)
+        {
+            await _jobAvailableEventPublisher.PublishAsync(jobId, cancellationToken).ConfigureAwait(false);
+        }
+
         var runDto = _mapper.Map<PipelineRunDto>(run);
         return Option.From(runDto.Id);
     }
 
+    // A push reports the full ref (refs/heads/main); `only` patterns and CI_COMMIT_REF_NAME use the
+    // branch or tag name, e.g. `main` or `v1.0.0`.
+    private static string BranchOrTagName(string fullRef)
+    {
+        foreach (var prefix in (string[])["refs/heads/", "refs/tags/"])
+        {
+            if (fullRef.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return fullRef[prefix.Length..];
+            }
+        }
+
+        return fullRef;
+    }
+
     private static Dictionary<string, string> BuildCiVariables(
         PipelineRunEntity run,
+        string refName,
         RepositoryEntity repository,
         ResolvedJob job,
         Guid jobId,
@@ -212,7 +240,7 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             ["CI_PIPELINE_ID"] = run.Id.ToString("D"),
             ["CI_JOB_ID"] = jobId.ToString("D"),
             ["CI_JOB_NAME"] = job.Name,
-            ["CI_COMMIT_REF_NAME"] = run.Ref,
+            ["CI_COMMIT_REF_NAME"] = refName,
             ["CI_COMMIT_SHA"] = run.AfterSha,
             ["CI_RUNS_ON"] = job.RunsOn,
             ["CI_PROJECT_NAME"] = repository.Name,

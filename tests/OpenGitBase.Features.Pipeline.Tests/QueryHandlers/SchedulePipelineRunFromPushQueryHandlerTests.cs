@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
@@ -192,6 +194,19 @@ public sealed class SchedulePipelineRunFromPushQueryHandlerTests
           variables:
             OGB_OVERLAY_UPPER: /tmp
         """)]
+    [InlineData("""
+        image: alpine:latest
+        build:
+          stage: build
+          runs-on: ogb-hosted
+          script: echo build
+        lint:
+          stage: build
+          runs-on: ogb-hosted
+          script: echo lint
+          variables:
+            CI_COMMIT_SHA: 0000000000000000000000000000000000000000
+        """)]
     public async Task RunQueryAsync_WhenCiFileSetsPlatformVariables_SchedulesNothing(string pipelineYaml)
     {
         var reader = FakeRepositoryFileReader.WithFiles(
@@ -213,6 +228,171 @@ public sealed class SchedulePipelineRunFromPushQueryHandlerTests
         Assert.True(result.IsNone);
         await using var context = await scope.ContextFactory.CreateDbContextAsync();
         Assert.False(await context.Set<PipelineJobEntity>().AnyAsync());
+        await scope.JobPublisher.DidNotReceiveWithAnyArgs().PublishAsync(default, default);
+    }
+
+    // A push reports the full ref (refs/heads/main), while `only` patterns name the branch or tag,
+    // e.g. `main` or `release/*`, as the CI docs promise.
+    [Theory]
+    [InlineData("refs/heads/main", "main", true)]
+    [InlineData("refs/heads/release/1.2", "release/*", true)]
+    [InlineData("refs/tags/v1.0.0", "v*", true)]
+    [InlineData("refs/heads/feature", "main", false)]
+    [InlineData("refs/heads/main", "refs/heads/main", false)]
+    public async Task RunQueryAsync_MatchesOnlyAgainstTheBranchOrTagName(
+        string pushedRef,
+        string pattern,
+        bool expectJob
+    )
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(
+            new Dictionary<string, string>
+            {
+                [".opengitbase-ci.yml"] = $$"""
+                    image: alpine:latest
+                    build:
+                      stage: build
+                      runs-on: ogb-hosted
+                      only:
+                        - "{{pattern}}"
+                      script: echo build
+                    """,
+            }
+        );
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = pushedRef,
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        Assert.Equal(expectJob, await context.Set<PipelineJobEntity>().AnyAsync());
+    }
+
+    // A run only advances when one of its jobs changes, so a run without jobs would stay queued.
+    [Fact]
+    public async Task RunQueryAsync_WhenOnlyExcludesEveryJob_SchedulesNoRun()
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(
+            new Dictionary<string, string>
+            {
+                [".opengitbase-ci.yml"] = """
+                    image: alpine:latest
+                    build:
+                      stage: build
+                      runs-on: ogb-hosted
+                      only:
+                        - main
+                      script: echo build
+                    """,
+            }
+        );
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        var result = await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = "refs/heads/feature",
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        Assert.True(result.IsNone);
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        Assert.False(await context.Set<PipelineRunEntity>().AnyAsync());
+        await scope.JobPublisher.DidNotReceiveWithAnyArgs().PublishAsync(default, default);
+    }
+
+    // Later stages are released as earlier ones finish, so the first stage left after `only`
+    // has to start, or its jobs would stay blocked behind a stage with nothing to run.
+    [Fact]
+    public async Task RunQueryAsync_WhenOnlyEmptiesTheFirstStage_QueuesTheNextStage()
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(
+            new Dictionary<string, string>
+            {
+                [".opengitbase-ci.yml"] = """
+                    stages:
+                      - release
+                      - test
+                      - report
+                    image: alpine:latest
+                    publish:
+                      stage: release
+                      runs-on: ogb-hosted
+                      only:
+                        - v*
+                      script: echo publish
+                    test:
+                      stage: test
+                      runs-on: ogb-hosted
+                      script: echo test
+                    report:
+                      stage: report
+                      runs-on: ogb-hosted
+                      script: echo report
+                    """,
+            }
+        );
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = "refs/heads/main",
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var jobs = await context.Set<PipelineJobEntity>().ToDictionaryAsync(job => job.Name, job => job.Status);
+        Assert.Equal(
+            new Dictionary<string, PipelineJobStatus>
+            {
+                ["test"] = PipelineJobStatus.Queued,
+                ["report"] = PipelineJobStatus.Blocked,
+            },
+            jobs
+        );
+    }
+
+    [Theory]
+    [InlineData("refs/heads/release/1.2", "release/1.2")]
+    [InlineData("refs/tags/v1.0.0", "v1.0.0")]
+    public async Task RunQueryAsync_SetsCommitRefNameToTheBranchOrTagName(string pushedRef, string expected)
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(CiFiles);
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = pushedRef,
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var job = await context.Set<PipelineJobEntity>().SingleAsync();
+        var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(job.EnvironmentJson)!;
+        Assert.Equal(expected, environment["CI_COMMIT_REF_NAME"]);
+        Assert.Equal(pushedRef, (await context.Set<PipelineRunEntity>().SingleAsync()).Ref);
     }
 
     private static SchedulePipelineRunFromPushQueryHandler CreateHandler(
