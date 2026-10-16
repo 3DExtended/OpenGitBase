@@ -154,6 +154,7 @@ public class Startup
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddScoped<IRepositoryFileReader, StorageRepositoryFileReader>();
+        services.AddScoped<IRepositoryArchiveReader, StorageRepositoryFileReader>();
         services.AddHttpClient<ILayerStoreClient, LayerStoreClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();

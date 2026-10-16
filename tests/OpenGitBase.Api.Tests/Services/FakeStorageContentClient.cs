@@ -48,6 +48,15 @@ internal sealed class FakeStorageContentClient : IStorageContentClient
         CancellationToken cancellationToken) =>
         Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
 
+    public Task<HttpResponseMessage> GetArchiveAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string commitSha,
+        int gitDepth,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
+
     public Task<StorageContentUsagePayload?> GetDiskUsageAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,
