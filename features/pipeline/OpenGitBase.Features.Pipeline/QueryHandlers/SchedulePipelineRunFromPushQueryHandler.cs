@@ -112,19 +112,20 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         context.Set<PipelineRunEntity>().Add(run);
 
         var firstStage = parseResult.Definition.Stages.FirstOrDefault();
+        var refName = BranchOrTagName(query.Ref);
 
         foreach (var job in parseResult.Definition.Jobs)
         {
             if (
                 job.Only.Count > 0
-                && !job.Only.Any(pattern => OnlyGlobMatcher.IsMatch(pattern, query.Ref))
+                && !job.Only.Any(pattern => OnlyGlobMatcher.IsMatch(pattern, refName))
             )
             {
                 continue;
             }
 
             var jobId = Guid.NewGuid();
-            var reservedVariables = BuildCiVariables(run, repository, job, jobId, ownerContext);
+            var reservedVariables = BuildCiVariables(run, refName, repository, job, jobId, ownerContext);
             if (
                 job.Variables.Keys.Any(key =>
                     reservedVariables.ContainsKey(key)
@@ -198,8 +199,24 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
         return Option.From(runDto.Id);
     }
 
+    // A push reports the full ref (refs/heads/main); `only` patterns and CI_COMMIT_REF_NAME use the
+    // branch or tag name, e.g. `main` or `v1.0.0`.
+    private static string BranchOrTagName(string fullRef)
+    {
+        foreach (var prefix in (string[])["refs/heads/", "refs/tags/"])
+        {
+            if (fullRef.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return fullRef[prefix.Length..];
+            }
+        }
+
+        return fullRef;
+    }
+
     private static Dictionary<string, string> BuildCiVariables(
         PipelineRunEntity run,
+        string refName,
         RepositoryEntity repository,
         ResolvedJob job,
         Guid jobId,
@@ -212,7 +229,7 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             ["CI_PIPELINE_ID"] = run.Id.ToString("D"),
             ["CI_JOB_ID"] = jobId.ToString("D"),
             ["CI_JOB_NAME"] = job.Name,
-            ["CI_COMMIT_REF_NAME"] = run.Ref,
+            ["CI_COMMIT_REF_NAME"] = refName,
             ["CI_COMMIT_SHA"] = run.AfterSha,
             ["CI_RUNS_ON"] = job.RunsOn,
             ["CI_PROJECT_NAME"] = repository.Name,

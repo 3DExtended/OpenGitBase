@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
@@ -213,6 +214,77 @@ public sealed class SchedulePipelineRunFromPushQueryHandlerTests
         Assert.True(result.IsNone);
         await using var context = await scope.ContextFactory.CreateDbContextAsync();
         Assert.False(await context.Set<PipelineJobEntity>().AnyAsync());
+    }
+
+    // A push reports the full ref (refs/heads/main), while `only` patterns name the branch or tag,
+    // e.g. `main` or `release/*`, as the CI docs promise.
+    [Theory]
+    [InlineData("refs/heads/main", "main", true)]
+    [InlineData("refs/heads/release/1.2", "release/*", true)]
+    [InlineData("refs/tags/v1.0.0", "v*", true)]
+    [InlineData("refs/heads/feature", "main", false)]
+    [InlineData("refs/heads/main", "refs/heads/main", false)]
+    public async Task RunQueryAsync_MatchesOnlyAgainstTheBranchOrTagName(
+        string pushedRef,
+        string pattern,
+        bool expectJob
+    )
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(
+            new Dictionary<string, string>
+            {
+                [".opengitbase-ci.yml"] = $$"""
+                    image: alpine:latest
+                    build:
+                      stage: build
+                      runs-on: ogb-hosted
+                      only:
+                        - "{{pattern}}"
+                      script: echo build
+                    """,
+            }
+        );
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = pushedRef,
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        Assert.Equal(expectJob, await context.Set<PipelineJobEntity>().AnyAsync());
+    }
+
+    [Theory]
+    [InlineData("refs/heads/release/1.2", "release/1.2")]
+    [InlineData("refs/tags/v1.0.0", "v1.0.0")]
+    public async Task RunQueryAsync_SetsCommitRefNameToTheBranchOrTagName(string pushedRef, string expected)
+    {
+        var reader = FakeRepositoryFileReader.WithFiles(CiFiles);
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        await CreateHandler(scope, reader).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = pushedRef,
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var job = await context.Set<PipelineJobEntity>().SingleAsync();
+        var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(job.EnvironmentJson)!;
+        Assert.Equal(expected, environment["CI_COMMIT_REF_NAME"]);
+        Assert.Equal(pushedRef, (await context.Set<PipelineRunEntity>().SingleAsync()).Ref);
     }
 
     private static SchedulePipelineRunFromPushQueryHandler CreateHandler(
