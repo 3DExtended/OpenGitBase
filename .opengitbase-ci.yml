@@ -1,0 +1,52 @@
+# OpenGitBase CI on its own forge: runs the storage and .NET test suites for every push to main.
+#
+# ogb-hosted jobs get 1 CPU, 2 GiB and 30 minutes. With the process sandbox (the compose
+# default) they run in the compute agent's container, Ubuntu 24.04, so the toolchains come
+# from the Ubuntu archive and no script names a download URL the egress allowlist would have
+# to approve. `image` names the Base Image Catalog entry the agent stacks the job on.
+
+stages:
+  - test
+
+image: alpine
+
+storage-tests:
+  stage: test
+  runs-on: ogb-hosted
+  only:
+    - main
+  dependencies:
+    - storage-toolchain:
+        - installscript: |
+            set -eu
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends ca-certificates curl git openssl python3 python3-cryptography
+  script: |
+    set -eu
+    git config --global user.name "OpenGitBase CI"
+    git config --global user.email ci@opengitbase.local
+    cd applications/repo-storage-layer
+    python3 -m unittest discover -v
+
+dotnet-tests:
+  stage: test
+  runs-on: ogb-hosted
+  only:
+    - main
+  variables:
+    DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    DOTNET_NOLOGO: "1"
+  dependencies:
+    - dotnet-sdk:
+        - version: "10.0"
+        - installscript: |
+            set -eu
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends ca-certificates dotnet-sdk-10.0 git openssh-client
+  script: |
+    set -eu
+    git config --global user.name "OpenGitBase CI"
+    git config --global user.email ci@opengitbase.local
+    dotnet test OpenGitBase.sln

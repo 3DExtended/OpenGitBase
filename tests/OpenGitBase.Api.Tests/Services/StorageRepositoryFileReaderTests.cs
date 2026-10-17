@@ -279,6 +279,73 @@ public class StorageRepositoryFileReaderTests
         );
     }
 
+    [Fact]
+    public async Task ReadWorkspaceArchiveAsync_ReturnsTheArchiveFromThePrimary()
+    {
+        byte[] archive = [0x1f, 0x8b, 0x08];
+        GivenArchive(Primary, gitDepth: 2, HttpStatusCode.OK, archive);
+
+        var bytes = await CreateReader().ReadWorkspaceArchiveAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            2,
+            CancellationToken.None
+        );
+
+        Assert.Equal(archive, bytes);
+    }
+
+    // A replica that has not caught up answers 404 invalid_ref; neither that nor an outage
+    // may hand the job an empty workspace.
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public Task ReadWorkspaceArchiveAsync_WhenStorageAnswersAnError_Throws(HttpStatusCode status)
+    {
+        GivenArchive(Primary, gitDepth: 0, status, "{\"error\":\"boom\"}"u8.ToArray());
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+    }
+
+    [Fact]
+    public async Task ReadWorkspaceArchiveAsync_WhenStorageNodeIsUnreachable_Throws()
+    {
+        _storage
+            .GetArchiveAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<HttpResponseMessage>(_ => throw new HttpRequestException("Connection refused"));
+
+        var exception = await Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+        Assert.IsType<HttpRequestException>(exception.InnerException);
+    }
+
+    [Fact]
+    public Task ReadWorkspaceArchiveAsync_WhenNoStorageNodeIsHealthy_Throws()
+    {
+        GivenTargets(new RepositoryRoutingTargetDto
+        {
+            StorageNodeId = Primary.StorageNodeId,
+            IsPrimary = true,
+            IsHealthy = false,
+        });
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+    }
+
     private static StorageContentEntryPayload Blob(string path) =>
         new() { Name = path.Split('/')[^1], Path = path, Type = "blob" };
 
@@ -332,6 +399,23 @@ public class StorageRepositoryFileReaderTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(result);
+
+    private void GivenArchive(
+        RepositoryRoutingTargetDto target,
+        int gitDepth,
+        HttpStatusCode status,
+        byte[] body
+    ) =>
+        _storage
+            .GetArchiveAsync(
+                target,
+                $"token-{target.StorageNodeId}",
+                PhysicalPath,
+                CommitSha,
+                gitDepth,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ => new HttpResponseMessage(status) { Content = new ByteArrayContent(body) });
 
     private void GivenRaw(
         RepositoryRoutingTargetDto target,

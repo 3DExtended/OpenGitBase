@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
@@ -7,6 +5,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
+using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Entities;
 
 namespace OpenGitBase.Features.Pipeline.QueryHandlers;
@@ -16,14 +15,17 @@ public sealed class MaterializeWorkspaceArchiveQueryHandler
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _passwordHasherService;
+    private readonly IRepositoryArchiveReader _repositoryArchiveReader;
 
     public MaterializeWorkspaceArchiveQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        IPasswordHasherService passwordHasherService
+        IPasswordHasherService passwordHasherService,
+        IRepositoryArchiveReader repositoryArchiveReader
     )
     {
         _contextFactory = contextFactory;
         _passwordHasherService = passwordHasherService;
+        _repositoryArchiveReader = repositoryArchiveReader;
     }
 
     public async Task<Option<WorkspaceArchiveResult>> RunQueryAsync(
@@ -87,19 +89,17 @@ public sealed class MaterializeWorkspaceArchiveQueryHandler
             return Option<WorkspaceArchiveResult>.None;
         }
 
-        var archiveBytes = job.GitDepth > 0
-            ? await BuildShallowArchiveAsync(
+        // The storage node builds the archive: it holds the bare repository, and the API has no git.
+        // Failure throws, so the caller answers "unavailable" rather than "unauthorized".
+        var archiveBytes = await _repositoryArchiveReader
+            .ReadWorkspaceArchiveAsync(
+                repository.Id,
                 repository.PhysicalPath,
                 run.AfterSha,
                 job.GitDepth,
                 cancellationToken
-            ).ConfigureAwait(false)
-            : await BuildFullArchiveAsync(repository.PhysicalPath, run.AfterSha, cancellationToken)
-                .ConfigureAwait(false);
-        if (archiveBytes.Length == 0)
-        {
-            return Option<WorkspaceArchiveResult>.None;
-        }
+            )
+            .ConfigureAwait(false);
 
         return Option.From(
             new WorkspaceArchiveResult
@@ -109,141 +109,5 @@ public sealed class MaterializeWorkspaceArchiveQueryHandler
                 IsShallow = job.GitDepth > 0,
             }
         );
-    }
-
-    private static async Task<byte[]> BuildFullArchiveAsync(
-        string repositoryPath,
-        string afterSha,
-        CancellationToken cancellationToken
-    )
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"ogb-ws-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var archivePath = Path.Combine(tempDir, "workspace.tar.gz");
-            var exitCode = await RunProcessAsync(
-                "git",
-                tempDir,
-                cancellationToken,
-                $"--git-dir={repositoryPath}",
-                "archive",
-                "--format=tar.gz",
-                $"--output={archivePath}",
-                afterSha
-            ).ConfigureAwait(false);
-            if (exitCode != 0 || !File.Exists(archivePath))
-            {
-                return [];
-            }
-
-            return await File.ReadAllBytesAsync(archivePath, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir))
-            {
-                Directory.Delete(tempDir, recursive: true);
-            }
-        }
-    }
-
-    private static async Task<byte[]> BuildShallowArchiveAsync(
-        string repositoryPath,
-        string afterSha,
-        int gitDepth,
-        CancellationToken cancellationToken
-    )
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"ogb-ws-{Guid.NewGuid():N}");
-        var cloneDir = Path.Combine(tempDir, "repo");
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var cloneExit = await RunProcessAsync(
-                "git",
-                tempDir,
-                cancellationToken,
-                "clone",
-                "--depth",
-                gitDepth.ToString(CultureInfo.InvariantCulture),
-                "--",
-                repositoryPath,
-                cloneDir
-            ).ConfigureAwait(false);
-            if (cloneExit != 0)
-            {
-                return [];
-            }
-
-            var checkoutExit = await RunProcessAsync(
-                "git",
-                cloneDir,
-                cancellationToken,
-                "checkout",
-                "--detach",
-                afterSha
-            ).ConfigureAwait(false);
-            if (checkoutExit != 0)
-            {
-                return [];
-            }
-
-            var archivePath = Path.Combine(tempDir, "workspace.tar.gz");
-            var tarExit = await RunProcessAsync(
-                "tar",
-                tempDir,
-                cancellationToken,
-                "-czf",
-                archivePath,
-                "-C",
-                cloneDir,
-                "."
-            ).ConfigureAwait(false);
-            if (tarExit != 0 || !File.Exists(archivePath))
-            {
-                return [];
-            }
-
-            return await File.ReadAllBytesAsync(archivePath, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir))
-            {
-                Directory.Delete(tempDir, recursive: true);
-            }
-        }
-    }
-
-    private static async Task<int> RunProcessAsync(
-        string fileName,
-        string workingDirectory,
-        CancellationToken cancellationToken,
-        params string[] arguments
-    )
-    {
-        var info = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            WorkingDirectory = workingDirectory,
-        };
-        foreach (var argument in arguments)
-        {
-            info.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(info);
-        if (process is null)
-        {
-            return -1;
-        }
-
-        var drainOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var drainError = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        await Task.WhenAll(drainOutput, drainError).ConfigureAwait(false);
-        return process.ExitCode;
     }
 }

@@ -5,7 +5,11 @@
 
 from __future__ import annotations
 
+import io
+import re
 import subprocess
+import tarfile
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -30,6 +34,10 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 # accounted for. On very long histories that walk is cut off after this many
 # seconds; entries not reached by then are listed without a date.
 LAST_MODIFIED_BUDGET_SECONDS = 5.0
+
+WORKSPACE_ARCHIVE_TIMEOUT_SECONDS = 600
+
+_FULL_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 # Prefixes each commit header in the history walk. Git always quotes paths that
 # contain control characters, so no path line can begin with this byte.
@@ -433,6 +441,54 @@ def resolve_readme(git_dir: str, ref: str) -> dict[str, Any] | None:
             "markdownSource": blob.get("textContent", ""),
         }
     return None
+
+
+def build_workspace_archive(git_dir: str, sha: str, depth: int) -> bytes:
+    """Pack the workspace a CI job starts from as tar.gz.
+
+    Depth 0 packs the commit's files alone; depth N packs a shallow clone checked out at the
+    commit, with its last N commits and .git, for jobs that need history.
+    """
+    if not _FULL_OBJECT_ID.fullmatch(sha or ""):
+        raise GitContentError("invalid_ref", "A full commit id is required.")
+    if depth < 0:
+        raise GitContentError("invalid_depth", "Depth must not be negative.")
+    if not _has_commit(git_dir, sha):
+        raise GitContentError("invalid_ref", f"Unknown commit '{sha}'.")
+
+    if depth == 0:
+        return _run_git_bytes(git_dir, "archive", "--format=tar.gz", sha)
+
+    with tempfile.TemporaryDirectory(prefix="ogb-workspace-") as workspace:
+        clone_url = Path(git_dir).resolve().as_uri()
+        for args in (
+            ["init", "-q"],
+            ["fetch", "-q", "--no-tags", f"--depth={depth}", clone_url, sha],
+            ["checkout", "-q", "--detach", "FETCH_HEAD"],
+        ):
+            result = subprocess.run(
+                ["git", "-C", workspace, *args],
+                check=False,
+                capture_output=True,
+                timeout=WORKSPACE_ARCHIVE_TIMEOUT_SECONDS,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                raise GitContentError("git_error", stderr or "Failed to build the workspace.")
+
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+            tar.add(workspace, arcname=".")
+        return buffer.getvalue()
+
+
+def _has_commit(git_dir: str, sha: str) -> bool:
+    result = subprocess.run(
+        ["git", "--git-dir", git_dir, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
 
 
 def is_empty_repository(git_dir: str) -> bool:
