@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import type { CommentAnchorInput } from '~/utils/api'
 import type { DiscussionDetailPageContext } from '~/composables/useDiscussionDetailPage'
 import DiscussionCodeAttachModal from '~/components/discussions/DiscussionCodeAttachModal.vue'
+import DiscussionDetailThread from '~/components/discussions/DiscussionDetailThread.vue'
 import DiscussionLinkedDiscussions from '~/components/discussions/DiscussionLinkedDiscussions.vue'
-import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
 
 defineProps<{
   ctx: DiscussionDetailPageContext
@@ -39,7 +38,10 @@ defineProps<{
       v-else
       class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_220px]"
     >
-      <main class="min-w-0">
+      <main
+        class="min-w-0"
+        data-testid="discussion-detail-main"
+      >
         <div class="space-y-6">
           <header class="space-y-3">
             <h1 class="text-2xl font-semibold">
@@ -64,8 +66,20 @@ defineProps<{
             </div>
           </header>
 
-          <UCard v-if="ctx.discussion.body">
-            <CollaborationRenderedBody :source="ctx.discussion.body" />
+          <div
+            v-if="ctx.opening.comment"
+            data-testid="discussion-opening"
+          >
+            <DiscussionDetailThread
+              :ctx="ctx"
+              :comment="ctx.opening.comment"
+            />
+          </div>
+          <UCard
+            v-else-if="ctx.opening.body"
+            data-testid="discussion-body"
+          >
+            <CollaborationRenderedBody :source="ctx.opening.body" />
           </UCard>
 
           <DiscussionLinkedDiscussions
@@ -78,7 +92,10 @@ defineProps<{
             :remove-link="ctx.removeDiscussionLink"
           />
 
-          <section class="space-y-4">
+          <section
+            class="space-y-4"
+            data-testid="discussion-comments"
+          >
             <h2 class="text-sm font-semibold uppercase tracking-wide text-[var(--ogb-text-muted)]">
               {{ ctx.t('repo.discussions.commentsTitle') }}
             </h2>
@@ -108,7 +125,7 @@ defineProps<{
             </UAlert>
 
             <p
-              v-else-if="!ctx.comments.length"
+              v-else-if="!ctx.opening.comments.length"
               class="text-sm text-[var(--ogb-text-muted)]"
             >
               {{ ctx.t('repo.discussions.noComments') }}
@@ -116,22 +133,13 @@ defineProps<{
 
             <template v-else>
               <div
-                v-for="comment in ctx.comments"
+                v-for="comment in ctx.opening.comments"
                 :key="comment.id"
                 class="space-y-2"
               >
-                <DiscussionSubThread
+                <DiscussionDetailThread
+                  :ctx="ctx"
                   :comment="comment"
-                  :owner="ctx.owner"
-                  :repo-slug="ctx.repoSlug"
-                  :member-label="ctx.memberLabel"
-                  :members="ctx.members"
-                  :can-resolve="ctx.canResolveSubThread(comment)"
-                  :can-reply="ctx.auth.isAuthenticated"
-                  :commit-link-from="`discussions/${ctx.discussion.number}`"
-                  @reply="(body: string, anchor: CommentAnchorInput | null) => ctx.postReply(comment.id, body, anchor)"
-                  @resolve="ctx.resolveSubThread(comment.id)"
-                  @unresolve="ctx.unresolveSubThread(comment.id)"
                 />
               </div>
             </template>
