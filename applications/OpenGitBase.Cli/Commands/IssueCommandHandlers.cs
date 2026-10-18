@@ -1,6 +1,7 @@
 using OpenGitBase.Cli.Api;
 using OpenGitBase.Cli.Api.Models;
 using OpenGitBase.Cli.Auth;
+using OpenGitBase.Cli.Git;
 
 namespace OpenGitBase.Cli.Commands;
 
@@ -31,6 +32,14 @@ public static class IssueCommandHandlers
                 }
                 catch (Exception ex)
                 {
+                    // An error response does not prove the comment is missing: the API may have saved it and then
+                    // failed. Carry on then, so the spec is not left half-published.
+                    if (await IsSpecPartSavedAsync(services, repo, discussion.Number, index, bodyParts[index])
+                        .ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
                     throw new InvalidOperationException(
                         $"Created issue #{discussion.Number}, but posting body part {index + 1} of {bodyParts.Count} "
                         + $"as a comment failed: {ex.Message}",
@@ -275,6 +284,28 @@ public static class IssueCommandHandlers
             throw new InvalidOperationException(
                 $"Only {discussion.CreatorUsername ?? "its creator"}, who published #{discussion.Number}, can edit its spec; "
                 + $"you are signed in as {username}.");
+        }
+    }
+
+    /// <summary>Whether the spec of issue <paramref name="number"/> holds <paramref name="part"/> as its part <paramref name="index"/>.</summary>
+    private static async Task<bool> IsSpecPartSavedAsync(
+        CliServices services,
+        RepoSlug repo,
+        int number,
+        int index,
+        string part)
+    {
+        try
+        {
+            var discussion = await services.ApiClient
+                .GetDiscussionAsync(repo, number, includeComments: true)
+                .ConfigureAwait(false);
+            var saved = DiscussionSpec.CollectParts(discussion);
+            return saved.Count > index && string.Equals(saved[index].Text, part.Trim(), StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 }
