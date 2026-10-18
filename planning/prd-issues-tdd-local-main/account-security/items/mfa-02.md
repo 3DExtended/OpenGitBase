@@ -30,10 +30,10 @@ See the "Deviations" section of #246: no SHA-256 lookup hash (50-bit codes); re-
 
 ## Status
 
-- Branch: `claude/obg-multifactor-login-699197`
+- Branch: `claude/obg-multifactor-login-699197`, pushed to `main`
 - Tests:
   - `dotnet test` (whole solution) green; `OpenGitBase.Features.AccountSecurity.Tests` 80, `OpenGitBase.Api.Tests` 997
   - Web: `pnpm test` 168 passed; `pnpm test:visual` 220 passed; lint and typecheck with no new findings
   - Compose E2E (images built from the branch, api-1 started alone first for the new migration): tier 1 14/14 incl. the new `TwoFactorTotpE2eTests.EnableTotp_SignInWithARecoveryCodeOnlyOnce` (10 codes on confirm, `methods` has `recovery`, upper case without dash accepted, count 9, reuse 401). The `Tag=Regression` matrices were not rerun: they touch neither the security routes nor the second step, and `/account/me` and login without 2FA are unchanged.
 - Visual snapshots: new `visual-two-factor-recovery-sign-in`, `visual-recovery-codes`; updated `visual-two-factor-sign-in`, `visual-security-status`, `visual-totp-setup` and the gallery baselines
-- Commit(s): `f4662d4`, `3fdf82c`
+- Commit(s): `f4662d4`, `3fdf82c`, `7c52265`
