@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Repository.Contracts;
 using OpenGitBase.Features.Repository.Entities;
@@ -140,18 +141,31 @@ public sealed class CreateRepositoryWithStorageQueryHandler
             await using var context = await _contextFactory
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
-            var entity = _mapper.Map<RepositoryEntity>(model);
-            entity.Id = repositoryId;
-            entity.StorageNodeId = replicaSet.Primary.Id.Value;
-            entity.PrimaryStorageNodeId = replicaSet.Primary.Id.Value;
-            entity.ReadReplicaStorageNodeId = replicaSet.ReadReplica.Id.Value;
-            entity.ReplicationEpoch = 1;
-            entity.PrimaryWatermark = 0;
-            entity.ReplicationState = ReplicationState.Rf4Healthy;
-            entity.PlacementPolicy = query.ModelToCreate.PlacementPolicy;
-            entity.Replicas = BuildReplicaEntities(repositoryId, replicaSet);
-            context.Set<RepositoryEntity>().Add(entity);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            // Every attempt inserts the same id, so a replayed COMMIT that already landed neither fails the create
+            // nor sends it into the rollback below, which would delete the storage of a repository that exists.
+            await context
+                .InsertOnceAsync(
+                    async ct =>
+                    {
+                        var entity = _mapper.Map<RepositoryEntity>(model);
+                        entity.Id = repositoryId;
+                        entity.StorageNodeId = replicaSet.Primary.Id.Value;
+                        entity.PrimaryStorageNodeId = replicaSet.Primary.Id.Value;
+                        entity.ReadReplicaStorageNodeId = replicaSet.ReadReplica.Id.Value;
+                        entity.ReplicationEpoch = 1;
+                        entity.PrimaryWatermark = 0;
+                        entity.ReplicationState = ReplicationState.Rf4Healthy;
+                        entity.PlacementPolicy = query.ModelToCreate.PlacementPolicy;
+                        entity.Replicas = BuildReplicaEntities(repositoryId, replicaSet);
+                        context.Set<RepositoryEntity>().Add(entity);
+                        await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                        return true;
+                    },
+                    ct => context.Set<RepositoryEntity>().AnyAsync(entity => entity.Id == repositoryId, ct),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
             await _repositoryKeyService
                 .GenerateAndStoreKeyAsync(repositoryId, cancellationToken)
                 .ConfigureAwait(false);

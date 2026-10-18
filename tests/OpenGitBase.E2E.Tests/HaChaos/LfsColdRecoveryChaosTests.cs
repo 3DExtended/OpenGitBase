@@ -122,6 +122,23 @@ public class LfsColdRecoveryChaosTests : E2eTestBase
                 .WaitForFileAsync(recovered.Primary, $"{LfsStorageDisk.PlaintextLfsRoot}/{relativePath}", CopyDeadline)
                 .ConfigureAwait(false);
 
+            // The import once left a working-tree clone: git refused the push and the replication hook never ran.
+            Transcript.Describe("The restored primary takes a push and replicates it to both encrypted replicas");
+            await File.WriteAllTextAsync(Path.Combine(workDir, "after-recovery.txt"), "pushed to the restored primary\n")
+                .ConfigureAwait(false);
+            await gitOps.CommitPathsAsync(workDir, "push after cold recovery").ConfigureAwait(false);
+            var pushAfterRecovery = await LfsGit.PushAsync(gitOps, workDir, "main").ConfigureAwait(false);
+            Assert.True(pushAfterRecovery.Succeeded, LfsGit.WithoutTrace(pushAfterRecovery.StdErr));
+            await WaitUntilAsync(
+                    admin,
+                    repository.RepositoryId,
+                    status => status.PrimaryWatermark > recovered.PrimaryWatermark
+                        && status.EncryptedArtifactWatermarks.All(watermark => watermark >= status.PrimaryWatermark),
+                    CopyDeadline,
+                    "the encrypted replicas to hold the artifact of the push after recovery"
+                )
+                .ConfigureAwait(false);
+
             Transcript.Describe("The old primary returns without the object; downloads fall back to the new primary");
             await chaos.StartServiceAsync(lostNode).ConfigureAwait(false);
             await LfsStorageDisk.WaitForHealthyAsync(lostNode, RecoveryDeadline).ConfigureAwait(false);

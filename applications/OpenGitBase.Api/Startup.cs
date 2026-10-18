@@ -407,6 +407,8 @@ public class Startup
         services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
+        // The probe bounds each request itself (StorageNodeLivenessProbe.DefaultTimeout).
+        services.AddHttpClient<IStorageNodeLivenessProbe, StorageNodeLivenessProbe>();
         // LFS objects may be large; every caller bounds its own transfer (Lfs:ReplicaUploadTimeoutSeconds).
         services.AddHttpClient<IStorageLfsClient, StorageLfsClient>(client =>
             client.Timeout = Timeout.InfiniteTimeSpan);

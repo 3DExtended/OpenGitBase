@@ -20,7 +20,8 @@ public sealed class MergeRequestHandlerTestScope : IAsyncDisposable
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _serviceProvider;
 
-    public MergeRequestHandlerTestScope()
+    /// <param name="configureDbContext">Adjusts the SQLite options, e.g. to add interceptors or an execution strategy.</param>
+    public MergeRequestHandlerTestScope(Action<DbContextOptionsBuilder>? configureDbContext = null)
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
@@ -35,7 +36,7 @@ public sealed class MergeRequestHandlerTestScope : IAsyncDisposable
 
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(new FeatureAssemblyProvider(assemblies));
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection);
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection, configureDbContext);
         services.AddLogging();
         services.AddSingleton<ISystemClock, SystemClock>();
 
