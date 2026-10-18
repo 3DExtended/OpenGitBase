@@ -7,6 +7,8 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Features.AccountSecurity;
+using OpenGitBase.Features.AccountSecurity.Entities;
 using OpenGitBase.Features.Organization;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Repository;
@@ -24,6 +26,9 @@ public class EncryptionKeyRotationTests
     private const string NodeApiToken = "Node-Token-ABC+/==";
     private const string DispatcherPrivateKey =
         "-----BEGIN OPENSSH PRIVATE KEY-----\nAbCdEf\n-----END OPENSSH PRIVATE KEY-----";
+
+    private const string TotpSecret = "JBSWY3DPEHPK3PXP";
+    private const string PendingTotpSecret = "GEZDGNBVGY3TQOJQ";
 
     private static readonly string PreviousDataKey = Convert.ToBase64String(new byte[32]);
 
@@ -64,7 +69,10 @@ public class EncryptionKeyRotationTests
         Assert.Equal(NodeApiToken, currentOnly.DecryptSecret(node.ApiTokenProtected));
         var fleetSecrets = await context.Set<FleetSecretsEntity>().SingleAsync();
         Assert.Equal(DispatcherPrivateKey, currentOnly.DecryptSecret(fleetSecrets.DispatcherSshPrivateKeyProtected));
-        Assert.Equal(5, result.ReprotectedValues);
+        var authenticator = await context.Set<UserTotpAuthenticatorEntity>().SingleAsync();
+        Assert.Equal(TotpSecret, currentOnly.DecryptSecret(authenticator.SecretProtected!));
+        Assert.Equal(PendingTotpSecret, currentOnly.DecryptSecret(authenticator.PendingSecretProtected!));
+        Assert.Equal(7, result.ReprotectedValues);
     }
 
     [Fact]
@@ -107,6 +115,7 @@ public class EncryptionKeyRotationTests
                     typeof(OrganizationMapsterConfig).Assembly,
                     typeof(RepositoryMapsterConfig).Assembly,
                     typeof(StorageNodeMapsterConfig).Assembly,
+                    typeof(AccountSecurityMapsterConfig).Assembly,
                 ]
             )
         );
@@ -207,6 +216,15 @@ public class EncryptionKeyRotationTests
                 UpdatedAt = now,
             }
         );
+        context.Set<UserTotpAuthenticatorEntity>().Add(
+            new UserTotpAuthenticatorEntity
+            {
+                UserId = userId,
+                SecretProtected = protection.EncryptSecret(TotpSecret),
+                PendingSecretProtected = protection.EncryptSecret(PendingTotpSecret),
+                CreatedAt = now,
+            }
+        );
         await context.SaveChangesAsync();
     }
 
@@ -218,6 +236,7 @@ public class EncryptionKeyRotationTests
         var repositoryKey = await context.Set<RepositoryKeyEntity>().AsNoTracking().SingleAsync();
         var node = await context.Set<StorageNodeEntity>().AsNoTracking().SingleAsync();
         var fleetSecrets = await context.Set<FleetSecretsEntity>().AsNoTracking().SingleAsync();
+        var authenticator = await context.Set<UserTotpAuthenticatorEntity>().AsNoTracking().SingleAsync();
         return string.Join(
             "|",
             credentials.EmailCiphertext,
@@ -226,7 +245,9 @@ public class EncryptionKeyRotationTests
             invite.EmailLookupHash,
             repositoryKey.KeyCiphertext,
             node.ApiTokenProtected,
-            fleetSecrets.DispatcherSshPrivateKeyProtected
+            fleetSecrets.DispatcherSshPrivateKeyProtected,
+            authenticator.SecretProtected,
+            authenticator.PendingSecretProtected
         );
     }
 }

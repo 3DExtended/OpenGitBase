@@ -22,6 +22,68 @@ namespace OpenGitBase.Common.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.AuthenticationChallengeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Purpose", "TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("AuthenticationChallenges", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserTotpAuthenticatorEntity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("LastUsedTimeStep")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PendingSecretProtected")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SecretProtected")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserTotpAuthenticators", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.ComputeNode.Entities.ComputeNodeEnrollmentEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1867,11 +1929,22 @@ namespace OpenGitBase.Common.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<int>("SecondFactorFailedAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("SecondFactorLockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("SessionsValidAfter")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("SignInProvider")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("TwoFactorEnabledAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -1914,6 +1987,28 @@ namespace OpenGitBase.Common.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.AuthenticationChallengeEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserTotpAuthenticatorEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
+                        .WithOne()
+                        .HasForeignKey("OpenGitBase.Features.AccountSecurity.Entities.UserTotpAuthenticatorEntity", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Discussion.Entities.CommentAnchorEntity", b =>
