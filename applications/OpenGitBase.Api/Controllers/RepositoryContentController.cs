@@ -11,6 +11,8 @@ namespace OpenGitBase.Api.Controllers;
 [Route("repository/by-slug/{owner}/{slug}/content")]
 public sealed class RepositoryContentController : ControllerBase
 {
+    private const string LfsRestoreRetryAfterSeconds = "10";
+
     private readonly RepositoryContentService _contentService;
 
     public RepositoryContentController(RepositoryContentService contentService)
@@ -122,9 +124,29 @@ public sealed class RepositoryContentController : ControllerBase
             return MapAccessFailure(access);
         }
 
+        switch (data.Status)
+        {
+            case StorageRawStatus.LfsObjectNotAvailable:
+                return NotFound(new { error = "LFS object not available." });
+            case StorageRawStatus.LfsObjectRestoring:
+                Response.Headers.RetryAfter = LfsRestoreRetryAfterSeconds;
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new { error = "The LFS object is being restored on storage; try again shortly." }
+                );
+        }
+
         ApplyCacheHeaders(isPrivate: access.Repository?.IsPrivate == true);
+        Response.Headers.XContentTypeOptions = "nosniff";
+        if (data.Content is { } content)
+        {
+            // Streamed from storage as it arrives; the length is the recorded object size.
+            Response.ContentLength = data.ContentLength;
+            return File(content, data.ContentType, data.FileName, enableRangeProcessing: false);
+        }
+
         return File(
-            data.Bytes,
+            data.Bytes!,
             "application/octet-stream",
             data.FileName,
             enableRangeProcessing: false

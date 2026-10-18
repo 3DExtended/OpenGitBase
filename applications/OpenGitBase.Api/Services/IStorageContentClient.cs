@@ -47,6 +47,15 @@ public interface IStorageContentClient
         CancellationToken cancellationToken
     );
 
+    Task<HttpResponseMessage> GetArchiveAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string commitSha,
+        int gitDepth,
+        CancellationToken cancellationToken
+    );
+
     Task<StorageContentUsagePayload?> GetDiskUsageAsync(
         RepositoryRoutingTargetDto target,
         string apiToken,

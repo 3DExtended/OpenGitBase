@@ -1,14 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
-
-// The fixtures carry fixed timestamps that render as relative time ("2 months ago"). Pin the
-// browser clock to when the baselines were captured, as shell.spec.ts does, so that text does
-// not drift as real time passes.
-const VISUAL_NOW = new Date('2026-09-04T12:00:00Z')
-
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(VISUAL_NOW)
-})
+import { blockServiceWorker, freezeClock } from './helpers'
 
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
@@ -176,6 +167,7 @@ test.describe('Commit change view', () => {
 
   test('commit page renders diff', async ({ page }) => {
     await installCommitRoutes(page)
+    await freezeClock(page)
     await page.goto('/demo-user/hello-world/commit/abc123de?from=mr/7', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
     await expect(page.getByText('src/policy.ts')).toBeVisible()

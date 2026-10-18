@@ -1201,6 +1201,60 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("PublicGitSshKey", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectCopyEntity", b =>
+                {
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Oid")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("StorageNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("StoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("RepositoryId", "Oid", "StorageNodeId");
+
+                    b.HasIndex("StorageNodeId");
+
+                    b.ToTable("LfsObjectCopy", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", b =>
+                {
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Oid")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("KeyVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("RepositoryId", "Oid");
+
+                    b.ToTable("LfsObject", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.ProtectedBranchAllowedUserEntity", b =>
                 {
                     b.Property<Guid>("ProtectedBranchRuleId")
@@ -1292,6 +1346,9 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<string>("DefaultBranchName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<long>("GitBytesUsed")
+                        .HasColumnType("bigint");
 
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
@@ -2031,6 +2088,28 @@ namespace OpenGitBase.Common.Migrations
                         .IsRequired();
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectCopyEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", "Object")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId", "Oid")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Object");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.LfsObjectEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Repository.Entities.RepositoryEntity", "Repository")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Repository");
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.Repository.Entities.ProtectedBranchAllowedUserEntity", b =>

@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using System.Globalization;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using OpenGitBase.Api.Models.StorageContent;
@@ -86,6 +87,22 @@ public sealed class StorageContentClient(HttpClient httpClient) : IStorageConten
     {
         var uri =
             $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/blob/raw?physicalPath={Uri.EscapeDataString(physicalPath)}&ref={Uri.EscapeDataString(refName)}&path={Uri.EscapeDataString(path)}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+        return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<HttpResponseMessage> GetArchiveAsync(
+        RepositoryRoutingTargetDto target,
+        string apiToken,
+        string physicalPath,
+        string commitSha,
+        int gitDepth,
+        CancellationToken cancellationToken
+    )
+    {
+        var uri =
+            $"http://{target.InternalHost}:{target.InternalHttpPort}/internal/repos/content/archive?physicalPath={Uri.EscapeDataString(physicalPath)}&sha={Uri.EscapeDataString(commitSha)}&depth={gitDepth.ToString(CultureInfo.InvariantCulture)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
         return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);

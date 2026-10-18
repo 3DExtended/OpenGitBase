@@ -617,7 +617,9 @@
       "warningTitle": "Storage almost full",
       "warningDescription": "This repository is using over 80% of its quota. Consider cleaning up or self-hosting.",
       "limitTitle": "Storage limit reached",
-      "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage."
+      "limitDescription": "This repository has reached its storage limit. Self-host OpenGitBase for unlimited storage.",
+      "gitBytes": "Git: {bytes}",
+      "lfsBytes": "Git LFS: {bytes}"
     },
     "byteOverride": {
       "title": "Per-repository storage limit",
@@ -778,7 +780,11 @@
       "binaryNotShown": "Binary file not shown.",
       "svgDownloadOnly": "SVG files cannot be previewed inline. Download the file instead.",
       "rendered": "Rendered",
-      "raw": "Raw"
+      "raw": "Raw",
+      "lfsBadge": "Stored with Git LFS",
+      "lfsDownloadOnly": "This file is stored with Git LFS. Download it to view it.",
+      "lfsNotAvailable": "LFS object not available",
+      "lfsNotAvailableDescription": "The repository never received this Git LFS object. Push it from a clone that has it with git lfs push --all origin."
     }
   },
   "notifications": {
@@ -976,6 +982,21 @@
         "primary": "Primary repos",
         "replica": "Replica repos",
         "spare": "Spare"
+      },
+      "lfs": {
+        "title": "Git LFS",
+        "objects": "{count} objects",
+        "stored": "{bytes} stored",
+        "missingCopies": "{count} missing copies",
+        "complete": "All copies present",
+        "plaintext": "Plaintext",
+        "encrypted": "Encrypted",
+        "primary": "Primary",
+        "copies": "{copies} of {total}",
+        "missing": "{count} missing",
+        "restoring": "Restoring LFS objects to {node}: {restored} of {total}",
+        "fleetTitle": "Git LFS across all repositories",
+        "fleetMissing": "{count} missing copies in {repositories} repositories"
       }
     }
   }

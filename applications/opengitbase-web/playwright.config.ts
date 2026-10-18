@@ -11,6 +11,7 @@ const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:$
 
 export default defineConfig({
   testDir: './tests/visual',
+  globalSetup: './tests/visual/global-setup.ts',
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

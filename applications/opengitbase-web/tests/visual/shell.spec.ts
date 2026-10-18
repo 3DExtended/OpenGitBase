@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -39,13 +40,8 @@ async function waitForApp(page: import('@playwright/test').Page) {
   })
 }
 
-// The MSW fixtures carry fixed timestamps (e.g. repo updatedAt in tests/mocks/handlers.ts)
-// that render as relative time ("Updated 3 months ago"). Pin the browser clock to when the
-// baselines were captured so that text does not drift as real time passes.
-const VISUAL_NOW = new Date('2026-09-04T12:00:00Z')
-
 test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(VISUAL_NOW)
+  await freezeClock(page)
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     void navigator.serviceWorker.getRegistrations().then(registrations =>

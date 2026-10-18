@@ -12,14 +12,17 @@ public sealed class PromotePrimaryReplicaQueryHandler
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IColdRecoveryService _coldRecoveryService;
+    private readonly ILfsRepairQueue _lfsRepairs;
 
     public PromotePrimaryReplicaQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
-        IColdRecoveryService coldRecoveryService
+        IColdRecoveryService coldRecoveryService,
+        ILfsRepairQueue lfsRepairs
     )
     {
         _contextFactory = contextFactory;
         _coldRecoveryService = coldRecoveryService;
+        _lfsRepairs = lfsRepairs;
     }
 
     public async Task<Option<PromotePrimaryReplicaResult>> RunQueryAsync(
@@ -70,7 +73,7 @@ public sealed class PromotePrimaryReplicaQueryHandler
         return await PromoteRf3Async(context, entity, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<Option<PromotePrimaryReplicaResult>> PromoteRf3Async(
+    private async Task<Option<PromotePrimaryReplicaResult>> PromoteRf3Async(
         OpenGitBaseDbContext context,
         RepositoryEntity entity,
         CancellationToken cancellationToken
@@ -103,6 +106,7 @@ public sealed class PromotePrimaryReplicaQueryHandler
 
         entity.ReplicationState = ReplicationState.Rf3Healthy;
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _lfsRepairs.Schedule(entity.Id);
 
         return Option.From(
             new PromotePrimaryReplicaResult
@@ -149,6 +153,9 @@ public sealed class PromotePrimaryReplicaQueryHandler
 
             entity.ReplicationState = ReplicationState.Rf4Healthy;
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            // LFS objects the promoted node never received are restored first, ahead of the next reconciler pass.
+            _lfsRepairs.Schedule(entity.Id);
 
             return Option.From(
                 new PromotePrimaryReplicaResult

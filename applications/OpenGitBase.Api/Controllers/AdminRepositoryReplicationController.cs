@@ -139,7 +139,14 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
             return NotFound();
         }
 
-        var nodeIds = repository.Replicas.Select(replica => replica.StorageNodeId).ToList();
+        var lfs = await _queryProcessor
+            .RunQueryAsync(new GetLfsCopyStatusQuery { RepositoryId = RepositoryId.From(repositoryId) }, cancellationToken)
+            .ConfigureAwait(false);
+        var nodeIds = repository.Replicas
+            .Select(replica => replica.StorageNodeId)
+            .Concat(lfs.IsSome ? lfs.Get().Nodes.Select(node => node.StorageNodeId) : [])
+            .Distinct()
+            .ToList();
         var nodes = new Dictionary<Guid, StorageNodeEntity>();
         if (
             nodeIds.Count > 0
@@ -197,9 +204,50 @@ public sealed class AdminRepositoryReplicationController : ControllerBase
                         LastSyncedAt = replica.LastSyncedAt,
                     })
                     .ToList(),
+                Lfs = lfs.IsSome ? ToResponse(lfs.Get(), nodes) : null,
             }
         );
     }
+
+    [HttpGet("lfs/summary")]
+    public async Task<ActionResult<AdminLfsFleetSummaryResponse>> GetLfsSummary(CancellationToken cancellationToken)
+    {
+        var totals = await _queryProcessor
+            .RunQueryAsync(new GetLfsFleetTotalsQuery(), cancellationToken)
+            .ConfigureAwait(false);
+        var value = totals.IsSome ? totals.Get() : new LfsFleetTotalsDto();
+        return Ok(
+            new AdminLfsFleetSummaryResponse
+            {
+                ObjectCount = value.ObjectCount,
+                TotalBytes = value.TotalBytes,
+                MissingCopies = value.MissingCopies,
+                RepositoriesWithMissingCopies = value.RepositoriesWithMissingCopies,
+            }
+        );
+    }
+
+    private static AdminRepositoryLfsStatusResponse ToResponse(
+        LfsCopyStatusDto status,
+        IReadOnlyDictionary<Guid, StorageNodeEntity> nodes
+    ) =>
+        new()
+        {
+            ObjectCount = status.ObjectCount,
+            TotalBytes = status.TotalBytes,
+            MissingCopies = status.Nodes.Sum(node => node.Missing),
+            Nodes = status.Nodes
+                .Select(node => new AdminLfsNodeStatusResponse
+                {
+                    StorageNodeId = node.StorageNodeId,
+                    NodeId = nodes.TryGetValue(node.StorageNodeId, out var entity) ? entity.NodeId : string.Empty,
+                    Kind = node.Kind.ToString(),
+                    IsPrimary = node.IsPrimary,
+                    Copies = node.Copies,
+                    Missing = node.Missing,
+                })
+                .ToList(),
+        };
 
     private static async Task<string> ResolveOwnerSlugAsync(
         OpenGitBaseDbContext context,

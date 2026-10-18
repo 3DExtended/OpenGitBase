@@ -1,0 +1,436 @@
+using System.Net;
+using NSubstitute;
+using OpenGitBase.Api.Models.StorageContent;
+using OpenGitBase.Api.Services;
+using OpenGitBase.Cqrs;
+using OpenGitBase.Features.Pipeline.Services;
+using OpenGitBase.Features.Repository.Contracts;
+using OpenGitBase.Features.StorageNode.Contracts;
+
+namespace OpenGitBase.Api.Tests.Services;
+
+public class StorageRepositoryFileReaderTests
+{
+    private const string PhysicalPath = "/srv/git/repo.git";
+    private const string CommitSha = "3f786850e387550fdab836ed7e6dc881de23001b";
+    private const string CiYaml = "build:\n  script: echo build\n";
+
+    private static readonly Guid RepositoryGuid = Guid.NewGuid();
+
+    private static readonly RepositoryRoutingTargetDto Primary = new()
+    {
+        StorageNodeId = Guid.NewGuid(),
+        InternalHost = "storage-1",
+        InternalHttpPort = 8081,
+        IsPrimary = true,
+        IsHealthy = true,
+        IsInSync = true,
+    };
+
+    private static readonly RepositoryRoutingTargetDto Replica = new()
+    {
+        StorageNodeId = Guid.NewGuid(),
+        InternalHost = "storage-2",
+        InternalHttpPort = 8081,
+        IsPrimary = false,
+        IsHealthy = true,
+        IsInSync = true,
+    };
+
+    private readonly IQueryProcessor _queryProcessor = Substitute.For<IQueryProcessor>();
+    private readonly IStorageContentClient _storage = Substitute.For<IStorageContentClient>();
+
+    public StorageRepositoryFileReaderTests()
+    {
+        GivenTargets(Replica, Primary);
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+                Option.From($"token-{callInfo.Arg<GetStorageNodeApiTokenQuery>().StorageNodeId.Value}")
+            );
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenFileExistsAtCommit_ReturnsItsTextFromThePrimary()
+    {
+        GivenTree(Primary, string.Empty, Blob(".opengitbase-ci.yml"), Blob("README.md"));
+        GivenRaw(Primary, ".opengitbase-ci.yml", HttpStatusCode.OK, CiYaml);
+
+        var text = await CreateReader().ReadTextAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            ".opengitbase-ci.yml",
+            CancellationToken.None
+        );
+
+        Assert.Equal(CiYaml, text);
+        await _storage
+            .Received(1)
+            .GetRawAsync(
+                Primary,
+                $"token-{Primary.StorageNodeId}",
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenCommitHasNoSuchFile_ReturnsNullWithoutFetchingIt()
+    {
+        GivenTree(Primary, string.Empty, Blob("README.md"));
+
+        var text = await CreateReader().ReadTextAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            ".opengitbase-ci.yml",
+            CancellationToken.None
+        );
+
+        Assert.Null(text);
+        await _storage
+            .DidNotReceiveWithAnyArgs()
+            .GetRawAsync(default!, default!, default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenParentDirectoryIsMissing_ReturnsNull()
+    {
+        GivenTree(Primary, string.Empty, Blob("README.md"));
+
+        var text = await CreateReader().ReadTextAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            "ci/pipeline.yml",
+            CancellationToken.None
+        );
+
+        Assert.Null(text);
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenFileIsNested_WalksDownToIt()
+    {
+        GivenTree(Primary, string.Empty, Tree("ci"));
+        GivenTree(Primary, "ci", Blob("ci/pipeline.yml"));
+        GivenRaw(Primary, "ci/pipeline.yml", HttpStatusCode.OK, CiYaml);
+
+        var text = await CreateReader().ReadTextAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            "ci/pipeline.yml",
+            CancellationToken.None
+        );
+
+        Assert.Equal(CiYaml, text);
+    }
+
+    [Fact]
+    public Task ReadTextAsync_WhenStorageCannotListTheCommit_Throws()
+    {
+        // A missing commit (e.g. not replicated yet) and an outage both leave the listing
+        // without a payload, and neither means the file is absent.
+        GivenTreeFails(Primary, string.Empty, isMissing: false);
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                CancellationToken.None
+            )
+        );
+    }
+
+    // The walk only lists directories the parent listing showed, so even a "missing directory"
+    // answer is the node's error, not proof that the file is absent.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task ReadTextAsync_WhenStorageCannotListAListedDirectory_Throws(bool isMissing)
+    {
+        GivenTree(Primary, string.Empty, Tree("ci"));
+        GivenTreeFails(Primary, "ci", isMissing);
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                "ci/pipeline.yml",
+                CancellationToken.None
+            )
+        );
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public Task ReadTextAsync_WhenFetchingTheListedFileFails_Throws(HttpStatusCode status)
+    {
+        GivenTree(Primary, string.Empty, Blob(".opengitbase-ci.yml"));
+        GivenRaw(Primary, ".opengitbase-ci.yml", status, "{\"error\":\"boom\"}");
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                CancellationToken.None
+            )
+        );
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenStorageNodeIsUnreachable_Throws()
+    {
+        _storage
+            .GetTreeAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<StorageContentTreeResult>(_ => throw new HttpRequestException("Connection refused"));
+
+        var exception = await Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                CancellationToken.None
+            )
+        );
+        Assert.IsType<HttpRequestException>(exception.InnerException);
+    }
+
+    [Fact]
+    public async Task ReadTextAsync_WhenPrimaryIsUnhealthy_ReadsFromAHealthyReplica()
+    {
+        GivenTargets(new RepositoryRoutingTargetDto
+        {
+            StorageNodeId = Primary.StorageNodeId,
+            InternalHost = Primary.InternalHost,
+            InternalHttpPort = Primary.InternalHttpPort,
+            IsPrimary = true,
+            IsHealthy = false,
+        }, Replica);
+        GivenTree(Replica, string.Empty, Blob(".opengitbase-ci.yml"));
+        GivenRaw(Replica, ".opengitbase-ci.yml", HttpStatusCode.OK, CiYaml);
+
+        var text = await CreateReader().ReadTextAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            ".opengitbase-ci.yml",
+            CancellationToken.None
+        );
+
+        Assert.Equal(CiYaml, text);
+    }
+
+    [Fact]
+    public Task ReadTextAsync_WhenNoStorageNodeIsHealthy_Throws()
+    {
+        GivenTargets(new RepositoryRoutingTargetDto
+        {
+            StorageNodeId = Primary.StorageNodeId,
+            IsPrimary = true,
+            IsHealthy = false,
+        });
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                CancellationToken.None
+            )
+        );
+    }
+
+    [Fact]
+    public Task ReadTextAsync_WhenRepositoryHasNoRouting_Throws()
+    {
+        _queryProcessor
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryReplicationRoutingDto>.None);
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadTextAsync(
+                RepositoryGuid,
+                PhysicalPath,
+                CommitSha,
+                ".opengitbase-ci.yml",
+                CancellationToken.None
+            )
+        );
+    }
+
+    [Fact]
+    public async Task ReadWorkspaceArchiveAsync_ReturnsTheArchiveFromThePrimary()
+    {
+        byte[] archive = [0x1f, 0x8b, 0x08];
+        GivenArchive(Primary, gitDepth: 2, HttpStatusCode.OK, archive);
+
+        var bytes = await CreateReader().ReadWorkspaceArchiveAsync(
+            RepositoryGuid,
+            PhysicalPath,
+            CommitSha,
+            2,
+            CancellationToken.None
+        );
+
+        Assert.Equal(archive, bytes);
+    }
+
+    // A replica that has not caught up answers 404 invalid_ref; neither that nor an outage
+    // may hand the job an empty workspace.
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public Task ReadWorkspaceArchiveAsync_WhenStorageAnswersAnError_Throws(HttpStatusCode status)
+    {
+        GivenArchive(Primary, gitDepth: 0, status, "{\"error\":\"boom\"}"u8.ToArray());
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+    }
+
+    [Fact]
+    public async Task ReadWorkspaceArchiveAsync_WhenStorageNodeIsUnreachable_Throws()
+    {
+        _storage
+            .GetArchiveAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<HttpResponseMessage>(_ => throw new HttpRequestException("Connection refused"));
+
+        var exception = await Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+        Assert.IsType<HttpRequestException>(exception.InnerException);
+    }
+
+    [Fact]
+    public Task ReadWorkspaceArchiveAsync_WhenNoStorageNodeIsHealthy_Throws()
+    {
+        GivenTargets(new RepositoryRoutingTargetDto
+        {
+            StorageNodeId = Primary.StorageNodeId,
+            IsPrimary = true,
+            IsHealthy = false,
+        });
+
+        return Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            CreateReader().ReadWorkspaceArchiveAsync(RepositoryGuid, PhysicalPath, CommitSha, 0, CancellationToken.None)
+        );
+    }
+
+    private static StorageContentEntryPayload Blob(string path) =>
+        new() { Name = path.Split('/')[^1], Path = path, Type = "blob" };
+
+    private static StorageContentEntryPayload Tree(string path) =>
+        new() { Name = path.Split('/')[^1], Path = path, Type = "tree" };
+
+    private StorageRepositoryFileReader CreateReader() => new(_queryProcessor, _storage);
+
+    private void GivenTargets(params RepositoryRoutingTargetDto[] targets) =>
+        _queryProcessor
+            .RunQueryAsync(
+                Arg.Is<RepositoryReplicationRoutingQuery>(query => query.RepositoryId.Value == RepositoryGuid),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Option.From(new RepositoryReplicationRoutingDto { Targets = targets }));
+
+    private void GivenTree(
+        RepositoryRoutingTargetDto target,
+        string directory,
+        params StorageContentEntryPayload[] entries
+    ) =>
+        GivenTreeResult(
+            target,
+            directory,
+            new StorageContentTreeResult
+            {
+                Payload = new StorageContentTreePayload
+                {
+                    Ref = CommitSha,
+                    Path = directory,
+                    Entries = [.. entries],
+                },
+            }
+        );
+
+    private void GivenTreeFails(RepositoryRoutingTargetDto target, string directory, bool isMissing) =>
+        GivenTreeResult(target, directory, new StorageContentTreeResult { IsMissing = isMissing });
+
+    private void GivenTreeResult(
+        RepositoryRoutingTargetDto target,
+        string directory,
+        StorageContentTreeResult result
+    ) =>
+        _storage
+            .GetTreeAsync(
+                target,
+                $"token-{target.StorageNodeId}",
+                PhysicalPath,
+                CommitSha,
+                directory,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(result);
+
+    private void GivenArchive(
+        RepositoryRoutingTargetDto target,
+        int gitDepth,
+        HttpStatusCode status,
+        byte[] body
+    ) =>
+        _storage
+            .GetArchiveAsync(
+                target,
+                $"token-{target.StorageNodeId}",
+                PhysicalPath,
+                CommitSha,
+                gitDepth,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ => new HttpResponseMessage(status) { Content = new ByteArrayContent(body) });
+
+    private void GivenRaw(
+        RepositoryRoutingTargetDto target,
+        string path,
+        HttpStatusCode status,
+        string body
+    ) =>
+        _storage
+            .GetRawAsync(
+                target,
+                $"token-{target.StorageNodeId}",
+                PhysicalPath,
+                CommitSha,
+                path,
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ => new HttpResponseMessage(status) { Content = new StringContent(body) });
+}

@@ -4,6 +4,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using OpenGitBase.Api.Controllers;
 using OpenGitBase.Api.Models;
+using OpenGitBase.Api.Models.StorageContent;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
@@ -802,7 +803,7 @@ public class RepositoryAccessChecksControllerTests
     public async Task CheckRepositoryAccess_WhenWriteExceedsMaxBytesOverride_ReturnsQuotaDenied()
     {
         var authenticatingUserId = UserId.From(Guid.NewGuid());
-        var ownerUserId = UserId.From(Guid.NewGuid());
+        var ownerUserId = authenticatingUserId;
         var repositoryId = RepositoryId.From(Guid.NewGuid());
         var queryProcessor = Substitute.For<IQueryProcessor>();
         var storageNodeId = StorageNodeId.From(Guid.NewGuid());
@@ -900,7 +901,7 @@ public class RepositoryAccessChecksControllerTests
     public async Task CheckRepositoryAccess_WhenWriteExceedsDefaultQuotaWithoutOverride_ReturnsQuotaDenied()
     {
         var authenticatingUserId = UserId.From(Guid.NewGuid());
-        var ownerUserId = UserId.From(Guid.NewGuid());
+        var ownerUserId = authenticatingUserId;
         var repositoryId = RepositoryId.From(Guid.NewGuid());
         var queryProcessor = Substitute.For<IQueryProcessor>();
         var storageNodeId = StorageNodeId.From(Guid.NewGuid());
@@ -951,14 +952,218 @@ public class RepositoryAccessChecksControllerTests
         Assert.Equal("Repository storage quota exceeded.", response.Reason);
     }
 
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenLiveGitBytesPlusPackExceedLimit_ReturnsQuotaDeniedDespiteStaleCounter()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        ConfigureOwnedRepositoryWithQuota(
+            queryProcessor,
+            userId,
+            storageNodeId,
+            storageBytesUsed: 0,
+            maxBytesOverride: 1_000
+        );
+        ConfigurePrimaryDiskUsage(queryProcessor, storageContentClient, gitBytes: 950, recordedTotal: 950);
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            storageContentClient: storageContentClient
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            WritePackRequest(packSizeBytes: 100),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("Repository storage quota exceeded.", response.Reason);
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenPushingPack_RecordsGitBytesMeasuredOnThePrimary()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        var repositoryId = ConfigureOwnedRepositoryWithQuota(
+            queryProcessor,
+            userId,
+            storageNodeId,
+            storageBytesUsed: 0,
+            maxBytesOverride: 1_000
+        );
+        ConfigurePrimaryDiskUsage(queryProcessor, storageContentClient, gitBytes: 300, recordedTotal: 300);
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            storageContentClient: storageContentClient
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            WritePackRequest(packSizeBytes: 100),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.True(response.Allowed);
+        await storageContentClient
+            .Received(1)
+            .GetDiskUsageAsync(
+                Arg.Is<RepositoryRoutingTargetDto>(target => target.StorageNodeId == storageNodeId.Value),
+                "storage-token",
+                $"/srv/git/{repositoryId.Value}.git",
+                Arg.Any<CancellationToken>()
+            );
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<RecordRepositoryGitBytesQuery>(query =>
+                    query.RepositoryId == repositoryId && query.GitBytes == 300
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenPrimaryCannotBeMeasured_FallsBackToStoredCounter()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        ConfigureOwnedRepositoryWithQuota(
+            queryProcessor,
+            userId,
+            storageNodeId,
+            storageBytesUsed: 900,
+            maxBytesOverride: 1_000
+        );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From("storage-token"));
+        storageContentClient
+            .GetDiskUsageAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(new HttpRequestException("storage-1 refused the connection"));
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            storageContentClient: storageContentClient
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            WritePackRequest(packSizeBytes: 200),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("Repository storage quota exceeded.", response.Reason);
+        await queryProcessor
+            .DidNotReceive()
+            .RunQueryAsync(Arg.Any<RecordRepositoryGitBytesQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenNonMemberPushesPack_DeniesAccessWithoutMeasuringOrRevealingQuota()
+    {
+        var authenticatingUserId = UserId.From(Guid.NewGuid());
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        ConfigureOwnedRepositoryWithQuota(
+            queryProcessor,
+            ownerUserId,
+            storageNodeId,
+            storageBytesUsed: 1_000,
+            maxBytesOverride: 1_000
+        );
+        // After the owner setup, so the pusher authenticates as someone else.
+        ConfigureTokenValidation(queryProcessor, authenticatingUserId, GitAccessTokenScopes.Write);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryMemberDto>.None);
+        ConfigurePrimaryDiskUsage(queryProcessor, storageContentClient, gitBytes: 1_000, recordedTotal: 1_000);
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            storageContentClient: storageContentClient
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            WritePackRequest(packSizeBytes: 100),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.False(response.Allowed);
+        Assert.Equal("No access to repository for user.", response.Reason);
+        await storageContentClient
+            .DidNotReceive()
+            .GetDiskUsageAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task CheckRepositoryAccess_WhenPlatformIdentityPushesPack_SkipsRepositoryQuota()
+    {
+        var ownerUserId = UserId.From(Guid.NewGuid());
+        var storageNodeId = StorageNodeId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        var storageContentClient = Substitute.For<IStorageContentClient>();
+        ConfigureOwnedRepositoryWithQuota(
+            queryProcessor,
+            ownerUserId,
+            storageNodeId,
+            storageBytesUsed: 1_000,
+            maxBytesOverride: 1_000
+        );
+        ConfigurePrimaryDiskUsage(queryProcessor, storageContentClient, gitBytes: 1_000, recordedTotal: 1_000);
+
+        var controller = CreateController(
+            queryProcessor: queryProcessor,
+            storageContentClient: storageContentClient
+        );
+
+        var result = await controller.CheckRepositoryAccess(
+            WritePackRequest(packSizeBytes: 100, accessToken: "platform-token"),
+            CancellationToken.None
+        );
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RepositoryAccessCheckResponse>(ok.Value);
+        Assert.True(response.Allowed);
+        Assert.Equal("PlatformMerge", response.EffectiveRole);
+    }
+
     private static RepositoryAccessChecksController CreateController(
         IQueryProcessor? queryProcessor = null,
         ISshKeyService? sshKeyService = null,
-        PlatformMergeIdentityOptions? platformMergeOptions = null
+        PlatformMergeIdentityOptions? platformMergeOptions = null,
+        IStorageContentClient? storageContentClient = null
     )
     {
         queryProcessor ??= Substitute.For<IQueryProcessor>();
         sshKeyService ??= CreateSshKeyService();
+        storageContentClient ??= Substitute.For<IStorageContentClient>();
         platformMergeOptions ??= new PlatformMergeIdentityOptions
         {
             AccessToken = "platform-token",
@@ -972,6 +1177,11 @@ public class RepositoryAccessChecksControllerTests
                 Substitute.For<IStorageContentClient>(),
                 new WebReadReplicaSelector()
             ),
+            new RepositoryGitUsageMeter(
+                queryProcessor,
+                storageContentClient,
+                NullLogger<RepositoryGitUsageMeter>.Instance
+            ),
             NullLogger<RepositoryAccessChecksController>.Instance,
             new RepositoryStorageQuotaOptions(),
             platformMergeOptions
@@ -980,6 +1190,75 @@ public class RepositoryAccessChecksControllerTests
             ControllerContext = new ControllerContext(),
         };
     }
+
+    private static RepositoryId ConfigureOwnedRepositoryWithQuota(
+        IQueryProcessor queryProcessor,
+        UserId ownerUserId,
+        StorageNodeId storageNodeId,
+        long storageBytesUsed,
+        long maxBytesOverride
+    )
+    {
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        ConfigureTokenValidation(queryProcessor, ownerUserId, GitAccessTokenScopes.Write);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UserExistsByUsernameQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(ownerUserId));
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryByOwnerSlugQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = ownerUserId,
+                        Slug = "repo",
+                        Name = "Repo",
+                        PhysicalPath = $"/srv/git/{repositoryId.Value}.git",
+                        StorageNodeId = storageNodeId,
+                        StorageBytesUsed = storageBytesUsed,
+                        MaxBytesOverride = maxBytesOverride,
+                    }
+                )
+            );
+        ConfigureReplicationRouting(queryProcessor, storageNodeId);
+        return repositoryId;
+    }
+
+    private static void ConfigurePrimaryDiskUsage(
+        IQueryProcessor queryProcessor,
+        IStorageContentClient storageContentClient,
+        long gitBytes,
+        long recordedTotal
+    )
+    {
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From("storage-token"));
+        storageContentClient
+            .GetDiskUsageAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new StorageContentUsagePayload { BytesUsed = gitBytes });
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RecordRepositoryGitBytesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(recordedTotal));
+    }
+
+    private static RepositoryAccessCheckRequest WritePackRequest(
+        long packSizeBytes,
+        string accessToken = "ogb_test_token"
+    ) =>
+        new()
+        {
+            AccessToken = accessToken,
+            RepositoryPath = "alice/repo",
+            Operation = RepositoryOperation.WriteGit,
+            PackSizeBytes = packSizeBytes,
+        };
 
     private static ISshKeyService CreateSshKeyService()
     {

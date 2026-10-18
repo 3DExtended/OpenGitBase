@@ -17,4 +17,7 @@ public sealed class StorageContentBlobPayload
     public string? TextContent { get; init; }
 
     public string? ContentBase64 { get; init; }
+
+    /// <summary>Set when the blob is a Git LFS pointer; the content fields then stay empty.</summary>
+    public StorageContentLfsPointerPayload? Lfs { get; init; }
 }
