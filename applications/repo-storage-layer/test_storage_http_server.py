@@ -745,6 +745,144 @@ class LfsInternalEndpointTests(unittest.TestCase):
             connection.close()
 
 
+class ImportBundleTests(unittest.TestCase):
+    """Cold recovery imports a bundle as the repository's new primary, with its hooks installed: it must come out
+    like a created repository, as git-http-backend and the replication hooks see it in production."""
+
+    REPOSITORY_ID = "7805ee16-0199-49ba-a84d-1569ba6e96af"
+    TOKEN = "node-token"
+
+    def setUp(self) -> None:
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.repos_root = self.temp_dir / "git"
+        self.repos_root.mkdir()
+        self.physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        self.replicate_log = self.temp_dir / "replicate.log"
+        replicate_stub = self.temp_dir / "replicate.sh"
+        replicate_stub.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{self.replicate_log}"\n', encoding="utf-8")
+        replicate_stub.chmod(0o755)
+        real_run = subprocess.run
+
+        def run_without_chown(command, *args, **kwargs):
+            # chown to the git user needs root.
+            if command[0] == "chown":
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, *args, **kwargs)
+
+        self.patches = [
+            # git as the storage image runs it: no global config, and git 2.47's built-in default branch name
+            # (master; newer git says main, which hides a wrong HEAD guess).
+            mock.patch.dict(
+                os.environ,
+                {
+                    "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "init.defaultBranch",
+                    "GIT_CONFIG_VALUE_0": "master",
+                },
+            ),
+            mock.patch.object(storage_http_server, "REPOS_ROOT", self.repos_root),
+            mock.patch.object(storage_http_server, "ROLE_DIR", self.temp_dir / "roles"),
+            mock.patch.object(storage_http_server, "WATERMARK_DIR", self.temp_dir / "watermarks"),
+            mock.patch.object(storage_http_server, "REPLICATE_SCRIPT", str(replicate_stub)),
+            mock.patch.object(storage_http_server, "STORAGE_API_TOKEN", self.TOKEN),
+            mock.patch.object(storage_http_server, "STORAGE_TOKEN_FILE", str(self.temp_dir / "no-token-file")),
+            mock.patch.object(storage_http_server.subprocess, "run", side_effect=run_without_chown),
+        ]
+        for patch in self.patches:
+            patch.start()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), storage_http_server.StorageHttpHandler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        for patch in reversed(self.patches):
+            patch.stop()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_head_stays_on_main_when_another_branch_shares_its_commit(self) -> None:
+        # A bundle carries no symref: a clone guesses HEAD from the commit it points at and picked "release".
+        self._import(self._bundle(branches_at_main=("release",)))
+
+        self.assertEqual("refs/heads/main", self._git("symbolic-ref", "HEAD"))
+        self.assertEqual(self._source_refs, self._git("for-each-ref", "--format=%(objectname) %(refname)"))
+
+    def test_the_imported_repository_accepts_pushes_over_http(self) -> None:
+        self._import(self._bundle())
+
+        # As nginx calls it in production: Debian's fastcgi_params hands git-http-backend an empty REMOTE_USER
+        # before the config's own, so receive-pack runs only where http.receivepack is set (otherwise 403).
+        backend = Path(self._git_exec_path()) / "git-http-backend"
+        result = subprocess.run(
+            [str(backend)],
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "HOME": str(self.temp_dir),
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_PROJECT_ROOT": str(self.repos_root),
+                "GIT_HTTP_EXPORT_ALL": "",
+                "PATH_INFO": f"/{self.physical_path.name}/info/refs",
+                "QUERY_STRING": "service=git-receive-pack",
+                "REQUEST_METHOD": "GET",
+                "REMOTE_USER": "",
+            },
+            capture_output=True,
+            check=False,
+        )
+        headers = result.stdout.split(b"\r\n\r\n", 1)[0].decode("utf-8", errors="replace")
+
+        self.assertNotIn("403", headers)
+        self.assertIn("application/x-git-receive-pack-advertisement", headers)
+
+    def test_git_runs_the_replication_hooks_of_the_imported_repository(self) -> None:
+        self._import(self._bundle())
+
+        # git -C finds the git directory the way receive-pack does; the hooks must be where git looks.
+        subprocess.run(["git", "-C", str(self.physical_path), "hook", "run", "post-receive"], check=True, capture_output=True)
+
+        self.assertEqual(f"{self.physical_path} --post-receive\n", self.replicate_log.read_text(encoding="utf-8"))
+        pre_receive = Path(self._git("rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-receive"))
+        self.assertTrue(os.access(pre_receive, os.X_OK))
+
+    def _bundle(self, branches_at_main: tuple[str, ...] = ()) -> bytes:
+        work = self.temp_dir / "work"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+        git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        (work / "README.md").write_text("hello", encoding="utf-8")
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+        for branch in branches_at_main:
+            subprocess.run([*git, "branch", branch], check=True)
+        self._source_refs = subprocess.run(
+            [*git, "for-each-ref", "--format=%(objectname) %(refname)"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        bundle_path = self.temp_dir / "repo.bundle"
+        subprocess.run([*git, "bundle", "create", "-q", str(bundle_path), "--all"], check=True)
+        return bundle_path.read_bytes()
+
+    def _import(self, bundle: bytes) -> None:
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=30)
+        body = json.dumps({"physicalPath": str(self.physical_path), "bundleBase64": base64.b64encode(bundle).decode()})
+        try:
+            connection.request(
+                "POST", "/internal/repos/import-bundle", body=body, headers={"Authorization": f"Bearer {self.TOKEN}"}
+            )
+            response = connection.getresponse()
+            self.assertEqual(201, response.status, response.read())
+        finally:
+            connection.close()
+
+    def _git(self, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(self.physical_path), *args], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    @staticmethod
+    def _git_exec_path() -> str:
+        return subprocess.run(["git", "--exec-path"], check=True, capture_output=True, text=True).stdout.strip()
+
+
 class StorageHttpMissingBlobTests(unittest.TestCase):
     """The file endpoints answer 404 for a file that does not exist, never 500.
 

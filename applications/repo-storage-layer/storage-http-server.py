@@ -1322,6 +1322,15 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
+            # A bundle carries no symref, so the clone guessed HEAD from its commit: git 2.47 picks another branch at
+            # main's commit (a release branch cut from main). Repository creation puts HEAD on main, and nothing moves it.
+            subprocess.run(
+                ["git", "symbolic-ref", "HEAD", "refs/heads/main"],
+                env=git_config_env,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
             subprocess.run(
                 ["git", "config", "http.receivepack", "true"],
                 env=git_config_env,
