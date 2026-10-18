@@ -1,7 +1,6 @@
 ﻿#pragma warning disable SA1402
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
@@ -210,13 +209,13 @@ public class CreateDiscussionCommentQueryHandlerTests
     {
         // Prod, 2026-10-18: a 14k-character spec part committed, but the COMMIT outlived the command timeout, the
         // retrying execution strategy re-ran the INSERT, and its duplicate key turned the saved comment into a 500.
-        var lostCommit = new LostCommitAcknowledgementInterceptor();
+        var lostCommit = new LostCommitSimulator();
         await using var scope = new DiscussionHandlerTestScope(lostCommit.Configure);
         await scope.EnsureCreatedAsync();
         await using var context = await scope.CreateDbContextAsync();
         var discussion = await DiscussionTestData.SeedDiscussionAsync(context);
         var body = string.Join("\n\n", Enumerable.Range(1, 16).Select(index => $"## Section {index}\n\n{new string('x', 870)}"));
-        lostCommit.LoseNextCommentCommit();
+        lostCommit.LoseNextCommitInserting("discussion_comments");
 
         var handler = scope.GetHandler<CreateDiscussionCommentQueryHandler>();
         var result = await handler.RunQueryAsync(
@@ -230,7 +229,7 @@ public class CreateDiscussionCommentQueryHandlerTests
             CancellationToken.None
         );
 
-        Assert.Equal(1, lostCommit.LostAcknowledgements);
+        Assert.Equal(1, lostCommit.LostCommits);
         Assert.True(result.IsSome);
         await using var verifyContext = await scope.CreateDbContextAsync();
         var stored = Assert.Single(
@@ -248,7 +247,7 @@ public class CreateDiscussionCommentQueryHandlerTests
     public async Task RunQueryAsync_NotifiesReopenOnceWhenTheReopeningCommitAcknowledgementIsLost()
     {
         // The retry sees the discussion its lost attempt already reopened; the subscribers still hear of the reopen.
-        var lostCommit = new LostCommitAcknowledgementInterceptor();
+        var lostCommit = new LostCommitSimulator();
         await using var scope = new DiscussionHandlerTestScope(lostCommit.Configure);
         await scope.EnsureCreatedAsync();
         await using var context = await scope.CreateDbContextAsync();
@@ -267,7 +266,7 @@ public class CreateDiscussionCommentQueryHandlerTests
             }
         );
         await context.SaveChangesAsync();
-        lostCommit.LoseNextCommentCommit();
+        lostCommit.LoseNextCommitInserting("discussion_comments");
 
         var handler = scope.GetHandler<CreateDiscussionCommentQueryHandler>();
         var result = await handler.RunQueryAsync(
@@ -281,7 +280,7 @@ public class CreateDiscussionCommentQueryHandlerTests
             CancellationToken.None
         );
 
-        Assert.Equal(1, lostCommit.LostAcknowledgements);
+        Assert.Equal(1, lostCommit.LostCommits);
         Assert.True(result.IsSome);
         await using var verifyContext = await scope.CreateDbContextAsync();
         var creatorNotifications = await verifyContext
@@ -301,7 +300,7 @@ public class CreateDiscussionCommentQueryHandlerTests
     {
         // Notifications go out after the comment commits; a failure there must not report the saved comment as failed.
         await using var scope = new DiscussionHandlerTestScope(options =>
-            options.AddInterceptors(new FailCommandsInterceptor("INSERT INTO \"user_notifications\""))
+            options.AddInterceptors(new FailingCommandInterceptor("INSERT INTO \"user_notifications\""))
         );
         await scope.EnsureCreatedAsync();
         await using var context = await scope.CreateDbContextAsync();
@@ -336,46 +335,6 @@ public class CreateDiscussionCommentQueryHandlerTests
                 .Set<DiscussionCommentEntity>()
                 .AnyAsync(c => c.Id == result.Get().Id.Value)
         );
-    }
-
-    private sealed class FailCommandsInterceptor : DbCommandInterceptor
-    {
-        private readonly string _sqlFragment;
-
-        public FailCommandsInterceptor(string sqlFragment)
-        {
-            _sqlFragment = sqlFragment;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default
-        )
-        {
-            ThrowIfMatched(command);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command,
-            CommandEventData eventData,
-            InterceptionResult<int> result,
-            CancellationToken cancellationToken = default
-        )
-        {
-            ThrowIfMatched(command);
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        private void ThrowIfMatched(DbCommand command)
-        {
-            if (command.CommandText.Contains(_sqlFragment, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Simulated failure of: {_sqlFragment}");
-            }
-        }
     }
 }
 

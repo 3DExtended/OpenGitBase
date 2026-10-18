@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -50,37 +51,14 @@ public partial class CreateDiscussionCommentQueryHandler
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        // Production's retry strategy replays an attempt whose COMMIT timed out, yet such a COMMIT may have landed.
-        // Every attempt writes the same comment id, so a replay that hits that primary key knows an earlier attempt
-        // committed: the comment is saved once and reported as saved.
-        CommentWrite? write = null;
-        await context
-            .Database.CreateExecutionStrategy()
-            .ExecuteAsync(async () =>
-            {
-                context.ChangeTracker.Clear();
-                await using var transaction = await context
-                    .Database.BeginTransactionAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                try
-                {
-                    write = await WriteCommentAsync(context, query, commentId, utcNow, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (DbUpdateException)
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    if (await CommentExistsAsync(context, commentId, cancellationToken).ConfigureAwait(false))
-                    {
-                        // A failed attempt leaves `write` as the earlier attempt that committed: keep its outcome.
-                        return;
-                    }
-
-                    throw;
-                }
-
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            })
+        // Every attempt writes the same comment id, so a replayed COMMIT that already landed saves the comment once
+        // and keeps the outcome of the attempt that committed it.
+        var write = await context
+            .InsertOnceAsync(
+                ct => WriteCommentAsync(context, query, commentId, utcNow, ct),
+                ct => CommentExistsAsync(context, commentId, ct),
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         if (write is null)
