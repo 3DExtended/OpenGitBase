@@ -14,6 +14,19 @@ export const mockTotpSetup = {
   secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
 }
 
+export const mockRecoveryCodes = [
+  'abcde-fghij',
+  'klmno-pqrst',
+  'uvwxy-z2345',
+  '67abc-defgh',
+  'ijklm-nopqr',
+  'stuvw-xyz23',
+  '4567a-bcdef',
+  'ghijk-lmnop',
+  'qrstu-vwxyz',
+  '23456-7abcd',
+]
+
 const mockRepos = [
   {
     id: '11111111-1111-1111-1111-111111111111',
@@ -353,6 +366,7 @@ export const handlers = [
       twoFactorEnabled: mockUser.twoFactorEnabled,
       totpConfigured: mockUser.twoFactorEnabled,
       hasPassword: true,
+      recoveryCodesRemaining: mockUser.twoFactorEnabled ? mockRecoveryCodes.length : 0,
     })
   }),
 
@@ -365,8 +379,16 @@ export const handlers = [
   }),
 
   http.post('/api/account/two-factor/totp/confirm', () => {
+    const newlyEnabled = !mockUser.twoFactorEnabled
     mockUser.twoFactorEnabled = true
-    return HttpResponse.json({ twoFactorEnabled: true })
+    return HttpResponse.json({ twoFactorEnabled: true, recoveryCodes: newlyEnabled ? mockRecoveryCodes : null })
+  }),
+
+  http.post('/api/account/two-factor/recovery-codes', () => {
+    if (!mockUser.twoFactorEnabled) {
+      return HttpResponse.json({ error: 'two_factor_not_enabled' }, { status: 400 })
+    }
+    return HttpResponse.json({ recoveryCodes: mockRecoveryCodes })
   }),
 
   http.post('/api/account/two-factor/disable', () => {

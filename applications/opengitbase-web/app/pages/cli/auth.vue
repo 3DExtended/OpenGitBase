@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TwoFactorChallenge } from '~/utils/twoFactor'
+import type { SecondFactorAnswer, TwoFactorChallenge } from '~/utils/twoFactor'
 import { isTwoFactorChallenge, secondFactorErrorKey } from '~/utils/twoFactor'
 
 definePageMeta({
@@ -56,7 +56,7 @@ async function onSubmit() {
   }
 }
 
-async function onSubmitCode(code: string) {
+async function onSubmitCode(answer: SecondFactorAnswer) {
   if (!queryParams.value || !challenge.value) {
     return
   }
@@ -64,12 +64,12 @@ async function onSubmitCode(code: string) {
   loading.value = true
   error.value = null
   try {
-    const result = await useApi().auth.completeTwoFactor({ challengeToken: challenge.value.challengeToken, code })
+    const result = await useApi().auth.completeTwoFactor({ challengeToken: challenge.value.challengeToken, ...answer })
     if (result.error || !result.data) {
       if (result.error === 'challenge_expired') {
         backToPassword()
       }
-      error.value = t(secondFactorErrorKey(result.error, result.status))
+      error.value = t(secondFactorErrorKey(result.error, result.status, 'recoveryCode' in answer ? 'recovery' : 'code'))
       return
     }
 
@@ -122,7 +122,9 @@ function backToPassword() {
       v-else-if="challenge"
       :loading="loading"
       :error="error"
+      :recovery-available="challenge.methods.includes('recovery')"
       @submit="onSubmitCode"
+      @switch-method="error = null"
       @back="backToPassword"
     />
 

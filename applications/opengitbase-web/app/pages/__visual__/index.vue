@@ -22,8 +22,28 @@ const securityOffFixture: AccountSecurity = {
   twoFactorEnabled: false,
   totpConfigured: false,
   hasPassword: true,
+  recoveryCodesRemaining: 0,
 }
-const securityOnFixture: AccountSecurity = { ...securityOffFixture, twoFactorEnabled: true, totpConfigured: true }
+const securityOnFixture: AccountSecurity = {
+  ...securityOffFixture,
+  twoFactorEnabled: true,
+  totpConfigured: true,
+  recoveryCodesRemaining: 10,
+}
+// mfa-02: two codes left shows the warning.
+const securityLowFixture: AccountSecurity = { ...securityOnFixture, recoveryCodesRemaining: 2 }
+const recoveryCodesFixture = [
+  'abcde-fghij',
+  'klmno-pqrst',
+  'uvwxy-z2345',
+  '67abc-defgh',
+  'ijklm-nopqr',
+  'stuvw-xyz23',
+  '4567a-bcdef',
+  'ghijk-lmnop',
+  'qrstu-vwxyz',
+  '23456-7abcd',
+]
 
 // A fixed inline image, so the LFS preview snapshot does not depend on the network.
 const lfsImageFixtureUrl = `data:image/svg+xml,${encodeURIComponent(
@@ -403,6 +423,31 @@ const selfHostOptions = [
         <AuthTwoFactorCodeForm
           initial-code="123 456"
           :error="t('auth.twoFactor.errors.invalidCode')"
+          recovery-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-recovery-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in with a recovery code
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          initial-code="abcde-fghij"
+          initial-recovery
+          recovery-available
         />
       </UCard>
     </section>
@@ -416,6 +461,28 @@ const selfHostOptions = [
       </h2>
       <SettingsTwoFactorStatusCard :status="securityOffFixture" />
       <SettingsTwoFactorStatusCard :status="securityOnFixture" />
+      <SettingsTwoFactorStatusCard :status="securityLowFixture" />
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-recovery-codes"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Recovery codes
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.recoveryCodes.title') }}
+          </h3>
+        </template>
+        <SettingsRecoveryCodesPanel
+          :codes="recoveryCodesFixture"
+          account="demo-user"
+          initial-stored
+        />
+      </UCard>
     </section>
 
     <section
@@ -445,6 +512,7 @@ const selfHostOptions = [
         <SettingsReauthenticateForm
           needs-password
           needs-code
+          recovery-available
         />
       </UCard>
     </section>

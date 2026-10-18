@@ -6,7 +6,7 @@ import type {
   PublicStatusOutageWindowDto,
   PublicStatusSnapshot,
 } from './publicStatus'
-import type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
+import type { AccountSecurity, SecondFactorAnswer, TotpSetup, TwoFactorChallenge } from './twoFactor'
 
 export type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
 
@@ -1654,7 +1654,7 @@ export function createApi(baseUrl: string) {
       login: (body: { username: string, password: string }) =>
         request<string | TwoFactorChallenge>('/signin/login', { method: 'POST', body: JSON.stringify(body) }),
 
-      completeTwoFactor: (body: { challengeToken: string, code: string }) =>
+      completeTwoFactor: (body: { challengeToken: string } & SecondFactorAnswer) =>
         request<string>('/signin/two-factor', { method: 'POST', body: JSON.stringify(body) }),
 
       register: (body: { username: string, email: string, password: string }) =>
@@ -1707,17 +1707,21 @@ export function createApi(baseUrl: string) {
         request<AccountSecurity>('/account/security'),
 
       /** Confirms the caller again for 10 minutes before a security change. */
-      reauthenticate: (body: { password: string, code?: string }) =>
+      reauthenticate: (body: { password: string, code?: string, recoveryCode?: string }) =>
         request<null>('/account/reauthenticate', { method: 'POST', body: JSON.stringify(body) }),
 
       startTotpSetup: () =>
         request<TotpSetup>('/account/two-factor/totp/setup', { method: 'POST' }),
 
       confirmTotpSetup: (body: { code: string }) =>
-        request<{ twoFactorEnabled: boolean }>('/account/two-factor/totp/confirm', {
+        request<{ twoFactorEnabled: boolean, recoveryCodes?: string[] | null }>('/account/two-factor/totp/confirm', {
           method: 'POST',
           body: JSON.stringify(body),
         }),
+
+      /** Replaces every recovery code; the new set is only in this answer. */
+      regenerateRecoveryCodes: () =>
+        request<{ recoveryCodes: string[] }>('/account/two-factor/recovery-codes', { method: 'POST' }),
 
       disableTwoFactor: () =>
         request<{ twoFactorEnabled: boolean }>('/account/two-factor/disable', { method: 'POST' }),
