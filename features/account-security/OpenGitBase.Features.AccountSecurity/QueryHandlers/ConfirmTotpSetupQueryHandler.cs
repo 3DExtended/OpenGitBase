@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -15,16 +16,19 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IEmailProtectionService _protection;
     private readonly ISystemClock _clock;
+    private readonly ILogger<ConfirmTotpSetupQueryHandler> _logger;
 
     public ConfirmTotpSetupQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IEmailProtectionService protection,
-        ISystemClock clock
+        ISystemClock clock,
+        ILogger<ConfirmTotpSetupQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _protection = protection;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<Option<TotpConfirmation>> RunQueryAsync(
@@ -70,6 +74,11 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        if (newlyEnabled)
+        {
+            _logger.LogInformation("Two-factor sign-in enabled for user {UserId} with an authenticator app", query.UserId.Value);
+        }
+
         return new TotpConfirmation(TotpConfirmationStatus.Confirmed, newlyEnabled);
     }
 }

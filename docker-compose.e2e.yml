@@ -1,4 +1,4 @@
-# E2E overlay — enables in-memory email capture, internal E2E endpoints and Git LFS on API services.
+# E2E overlay — enables in-memory email capture, internal E2E endpoints, Git LFS and two-factor sign-in on API services.
 services:
   api-1:
     environment:
@@ -10,6 +10,8 @@ services:
       SendGrid__FromSenderName: "OpenGitBase E2E"
       # Git LFS stays off by default (lfs-09 switches it on in production); the E2E suite covers it.
       Lfs__Enabled: "true"
+      # Two-factor sign-in stays off until mfa-06 ships recovery paths; the E2E suite covers it.
+      TwoFactor__Enabled: "true"
     volumes:
       - opengitbase_e2e_shared:/shared
   api-2:
@@ -22,6 +24,8 @@ services:
       SendGrid__FromSenderName: "OpenGitBase E2E"
       # Git LFS stays off by default (lfs-09 switches it on in production); the E2E suite covers it.
       Lfs__Enabled: "true"
+      # Two-factor sign-in stays off until mfa-06 ships recovery paths; the E2E suite covers it.
+      TwoFactor__Enabled: "true"
     volumes:
       - opengitbase_e2e_shared:/shared
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -16,18 +17,21 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
     private readonly IPasswordHasherService _passwordHasher;
     private readonly IEmailProtectionService _protection;
     private readonly ISystemClock _clock;
+    private readonly ILogger<ReauthenticateQueryHandler> _logger;
 
     public ReauthenticateQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IPasswordHasherService passwordHasher,
         IEmailProtectionService protection,
-        ISystemClock clock
+        ISystemClock clock,
+        ILogger<ReauthenticateQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _passwordHasher = passwordHasher;
         _protection = protection;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<Option<ReauthenticationResult>> RunQueryAsync(
@@ -75,6 +79,11 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
             {
                 var lockStarted = SecondFactorAttempts.RecordFailure(credentials, now);
                 await context.SaveChangesAsync(cancellationToken);
+                if (lockStarted)
+                {
+                    SecondFactorAttempts.LogLockout(_logger, credentials, "re-authentication");
+                }
+
                 return lockStarted
                     ? new ReauthenticationResult(ReauthenticationStatus.LockedOut, credentials.SecondFactorLockedUntil)
                     : new ReauthenticationResult(ReauthenticationStatus.InvalidCode);

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -18,16 +19,19 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IEmailProtectionService _protection;
     private readonly ISystemClock _clock;
+    private readonly ILogger<CompleteTwoFactorSignInQueryHandler> _logger;
 
     public CompleteTwoFactorSignInQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IEmailProtectionService protection,
-        ISystemClock clock
+        ISystemClock clock,
+        ILogger<CompleteTwoFactorSignInQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _protection = protection;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<Option<TwoFactorSignInResult>> RunQueryAsync(
@@ -78,6 +82,7 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
         {
             await AuthenticationChallenges.TryConsumeAsync(context, challenge.Id, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
+            SecondFactorAttempts.LogLockout(_logger, credentials, "sign-in");
             return new TwoFactorSignInResult(TwoFactorSignInStatus.LockedOut, LockedUntil: credentials.SecondFactorLockedUntil);
         }
 

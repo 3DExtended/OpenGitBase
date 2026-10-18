@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -14,11 +15,17 @@ public class DisableTwoFactorQueryHandler : IQueryHandler<DisableTwoFactorQuery,
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly ISystemClock _clock;
+    private readonly ILogger<DisableTwoFactorQueryHandler> _logger;
 
-    public DisableTwoFactorQueryHandler(IDbContextFactory<OpenGitBaseDbContext> contextFactory, ISystemClock clock)
+    public DisableTwoFactorQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        ISystemClock clock,
+        ILogger<DisableTwoFactorQueryHandler> logger
+    )
     {
         _contextFactory = contextFactory;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<Option<Unit>> RunQueryAsync(DisableTwoFactorQuery query, CancellationToken cancellationToken)
@@ -40,10 +47,16 @@ public class DisableTwoFactorQueryHandler : IQueryHandler<DisableTwoFactorQuery,
             context.Set<UserTotpAuthenticatorEntity>().Remove(authenticator);
         }
 
+        var wasEnabled = credentials.TwoFactorEnabledAt is not null;
         credentials.TwoFactorEnabledAt = null;
         SecondFactorAttempts.RecordSuccess(credentials);
         UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, _clock.UtcNow);
         await context.SaveChangesAsync(cancellationToken);
+        if (wasEnabled)
+        {
+            _logger.LogInformation("Two-factor sign-in disabled for user {UserId}", query.UserId.Value);
+        }
+
         return Unit.Value;
     }
 }

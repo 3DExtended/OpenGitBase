@@ -5,6 +5,13 @@ const mockUser = {
   username: 'demo-user',
   emailVerified: false,
   isAdmin: false,
+  twoFactorEnabled: false,
+}
+
+// A fixed secret, so the setup QR code stays the same in every snapshot.
+export const mockTotpSetup = {
+  otpauthUri: 'otpauth://totp/OpenGitBase:demo-user?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=OpenGitBase',
+  secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
 }
 
 const mockRepos = [
@@ -334,6 +341,37 @@ export const handlers = [
 
   http.post('/api/signin/login', async () => {
     return HttpResponse.json('mock-token')
+  }),
+
+  http.post('/api/signin/two-factor', async () => {
+    return HttpResponse.json('mock-token')
+  }),
+
+  http.get('/api/account/security', () => {
+    return HttpResponse.json({
+      twoFactorAvailable: true,
+      twoFactorEnabled: mockUser.twoFactorEnabled,
+      totpConfigured: mockUser.twoFactorEnabled,
+      hasPassword: true,
+    })
+  }),
+
+  http.post('/api/account/reauthenticate', () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('/api/account/two-factor/totp/setup', () => {
+    return HttpResponse.json(mockTotpSetup)
+  }),
+
+  http.post('/api/account/two-factor/totp/confirm', () => {
+    mockUser.twoFactorEnabled = true
+    return HttpResponse.json({ twoFactorEnabled: true })
+  }),
+
+  http.post('/api/account/two-factor/disable', () => {
+    mockUser.twoFactorEnabled = false
+    return HttpResponse.json({ twoFactorEnabled: false })
   }),
 
   http.post('/api/register/register', async () => {

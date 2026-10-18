@@ -6,6 +6,8 @@ public sealed class FakeLoopbackAuthServer : OpenGitBase.Cli.Auth.ILoopbackAuthS
 
     public string TokenToReturn { get; set; } = "fake-token";
 
+    public TimeSpan? RequestedTimeout { get; private set; }
+
     public Task<OpenGitBase.Cli.Auth.LoopbackAuthSession> StartAsync(CancellationToken cancellationToken = default)
     {
         Session = new OpenGitBase.Cli.Auth.LoopbackAuthSession
@@ -16,8 +18,11 @@ public sealed class FakeLoopbackAuthServer : OpenGitBase.Cli.Auth.ILoopbackAuthS
         return Task.FromResult(Session);
     }
 
-    public Task<string> WaitForTokenAsync(TimeSpan timeout, CancellationToken cancellationToken = default) =>
-        Task.FromResult(TokenToReturn);
+    public Task<string> WaitForTokenAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        RequestedTimeout = timeout;
+        return Task.FromResult(TokenToReturn);
+    }
 
     public Task StopAsync() => Task.CompletedTask;
 }
