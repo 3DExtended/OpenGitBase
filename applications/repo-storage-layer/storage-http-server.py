@@ -21,6 +21,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 from storage_content import (
     GitContentError,
+    build_workspace_archive,
     count_commits_ahead,
     get_blob,
     get_disk_usage,
@@ -541,6 +542,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         if parsed.path == "/internal/repos/content/blob/raw":
             self._handle_get_blob_raw()
             return
+        if parsed.path == "/internal/repos/content/archive":
+            self._handle_get_workspace_archive()
+            return
         if parsed.path == "/internal/repos/content/readme":
             self._handle_get_readme()
             return
@@ -721,6 +725,31 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             self.send_header("X-OpenGitBase-Lfs-Size", str(pointer[1]))
         self.end_headers()
         self.wfile.write(raw)
+
+    def _handle_get_workspace_archive(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        sha = params.get("sha", [""])[0]
+        depth = params.get("depth", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not sha or not (depth.isascii() and depth.isdigit()):
+            self._send_json(400, {"error": "sha and a non-negative depth are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            archive = build_workspace_archive(physical_path, sha, int(depth))
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/gzip")
+        self.send_header("Content-Length", str(len(archive)))
+        self.end_headers()
+        self.wfile.write(archive)
 
     def _handle_get_readme(self) -> None:
         physical_path = self._physical_path_from_query()

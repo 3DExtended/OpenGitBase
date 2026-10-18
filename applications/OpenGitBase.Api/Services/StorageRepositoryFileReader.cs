@@ -5,7 +5,8 @@ using OpenGitBase.Features.StorageNode.Contracts;
 
 namespace OpenGitBase.Api.Services;
 
-public sealed class StorageRepositoryFileReader : IRepositoryFileReader
+/// <summary>Reads repository files and CI workspaces from the storage node that holds the repository.</summary>
+public sealed class StorageRepositoryFileReader : IRepositoryFileReader, IRepositoryArchiveReader
 {
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageContentClient _storageContentClient;
@@ -24,6 +25,58 @@ public sealed class StorageRepositoryFileReader : IRepositoryFileReader
         string physicalPath,
         string commitSha,
         string path,
+        CancellationToken cancellationToken
+    )
+    {
+        var (target, apiToken) = await ResolveNodeAsync(repositoryId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await ReadFromNodeAsync(target, apiToken, physicalPath, commitSha, path, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw Unreachable(target, ex);
+        }
+    }
+
+    public async Task<byte[]> ReadWorkspaceArchiveAsync(
+        Guid repositoryId,
+        string physicalPath,
+        string commitSha,
+        int gitDepth,
+        CancellationToken cancellationToken
+    )
+    {
+        var (target, apiToken) = await ResolveNodeAsync(repositoryId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var response = await _storageContentClient
+                .GetArchiveAsync(target, apiToken, physicalPath, commitSha, gitDepth, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new RepositoryFileUnavailableException(
+                    $"Storage node {target.StorageNodeId} returned {(int)response.StatusCode} for the workspace of {commitSha}."
+                );
+            }
+
+            return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw Unreachable(target, ex);
+        }
+    }
+
+    private static RepositoryFileUnavailableException Unreachable(
+        RepositoryRoutingTargetDto target,
+        HttpRequestException ex
+    ) =>
+        new($"Storage node {target.StorageNodeId} could not be reached: {ex.Message}", ex);
+
+    private async Task<(RepositoryRoutingTargetDto Target, string ApiToken)> ResolveNodeAsync(
+        Guid repositoryId,
         CancellationToken cancellationToken
     )
     {
@@ -61,25 +114,7 @@ public sealed class StorageRepositoryFileReader : IRepositoryFileReader
             );
         }
 
-        try
-        {
-            return await ReadFromNodeAsync(
-                    target,
-                    tokenResult.Get(),
-                    physicalPath,
-                    commitSha,
-                    path,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new RepositoryFileUnavailableException(
-                $"Storage node {target.StorageNodeId} could not be reached: {ex.Message}",
-                ex
-            );
-        }
+        return (target, tokenResult.Get());
     }
 
     private async Task<string?> ReadFromNodeAsync(

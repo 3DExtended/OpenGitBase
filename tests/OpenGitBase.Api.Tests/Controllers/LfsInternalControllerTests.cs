@@ -124,6 +124,11 @@ public class LfsInternalControllerTests
                     Substitute.For<IStorageContentClient>(),
                     new WebReadReplicaSelector()
                 ),
+                new RepositoryGitUsageMeter(
+                    queryProcessor,
+                    Substitute.For<IStorageContentClient>(),
+                    NullLogger<RepositoryGitUsageMeter>.Instance
+                ),
                 NullLogger.Instance,
                 new RepositoryStorageQuotaOptions(),
                 new PlatformMergeIdentityOptions()

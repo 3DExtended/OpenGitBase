@@ -148,6 +148,7 @@ public class Startup
         services.AddScoped<MergeRequestCompareService>();
         services.AddScoped<MergeRequestMergeService>();
         services.AddScoped<GitPushEnforcementService>();
+        services.AddScoped<RepositoryGitUsageMeter>();
         services.AddSingleton<WebReadReplicaSelector>();
         services.AddScoped<ILfsContentReader, LfsContentReader>();
         services.AddScoped<RepositoryContentService>();
@@ -155,6 +156,7 @@ public class Startup
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddScoped<IRepositoryFileReader, StorageRepositoryFileReader>();
+        services.AddScoped<IRepositoryArchiveReader, StorageRepositoryFileReader>();
         services.AddHttpClient<ILayerStoreClient, LayerStoreClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
@@ -191,6 +193,7 @@ public class Startup
             sp.GetRequiredService<IQueryProcessor>(),
             sp.GetRequiredService<ISshKeyService>(),
             sp.GetRequiredService<GitPushEnforcementService>(),
+            sp.GetRequiredService<RepositoryGitUsageMeter>(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<RepositoryAccessCheckEvaluator>(),
             sp.GetRequiredService<RepositoryStorageQuotaOptions>(),
             sp.GetRequiredService<PlatformMergeIdentityOptions>()

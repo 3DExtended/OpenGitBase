@@ -769,6 +769,11 @@ public class LfsServiceTests
                     Substitute.For<IStorageContentClient>(),
                     new WebReadReplicaSelector()
                 ),
+                new RepositoryGitUsageMeter(
+                    _queryProcessor,
+                    Substitute.For<IStorageContentClient>(),
+                    NullLogger<RepositoryGitUsageMeter>.Instance
+                ),
                 NullLogger.Instance,
                 _quotaOptions,
                 new PlatformMergeIdentityOptions()

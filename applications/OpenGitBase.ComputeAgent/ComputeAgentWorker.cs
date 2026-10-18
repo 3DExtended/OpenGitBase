@@ -310,7 +310,6 @@ public sealed class ComputeAgentWorker : BackgroundService
         env["OGB_DISK_GIB"] = payload.Job.DiskGiB.ToString();
         var imageSlug = TryGetImageSlug(payload.Job.ResolvedSpecJson);
         string? overlayRoot = null;
-        string? workspaceRoot = null;
         if (!string.IsNullOrWhiteSpace(imageSlug))
         {
             var fetch = await _baseImageResolver
@@ -402,18 +401,35 @@ public sealed class ComputeAgentWorker : BackgroundService
             return;
         }
 
-        var workspacePath = await MaterializeWorkspaceAsync(
-            client,
-            payload.Job,
-            payload.JobIdentityToken,
-            env,
-            cancellationToken
-        )
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), "opengitbase-agent", payload.Job.Id.Value.ToString("N"));
+        var workspacePath = Path.Combine(workspaceRoot, "repo");
+        Directory.CreateDirectory(workspacePath);
+        var workspace = await JobWorkspaceMaterializer
+            .MaterializeAsync(client, payload.Job.Id.Value, payload.JobIdentityToken, workspacePath, cancellationToken)
             .ConfigureAwait(false);
-        if (env.TryGetValue("OGB_WORKSPACE_ROOT", out var workspaceRootValue))
+        if (!workspace.Success)
         {
-            workspaceRoot = workspaceRootValue;
+            await PostJobStatusAsync(
+                client,
+                payload.Job.Id.Value,
+                PipelineJobStatus.Failed,
+                "Workspace preparation failed.",
+                "workspace",
+                [workspace.ErrorMessage ?? "Workspace download failed."],
+                cancellationToken
+            ).ConfigureAwait(false);
+            if (overlayRoot is not null)
+            {
+                await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
+            }
+
+            TeardownWorkspaceRoot(workspaceRoot);
+            return;
         }
+
+        env["CI_PROJECT_DIR"] = workspacePath;
+        env["OGB_WORKSPACE_SHARE"] = workspacePath;
+        env["OGB_WORKSPACE_ROOT"] = workspaceRoot;
 
         var installsSucceeded = await ExecuteDependencyInstallsAsync(
             client,
@@ -431,6 +447,7 @@ public sealed class ComputeAgentWorker : BackgroundService
                 await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
             }
 
+            TeardownWorkspaceRoot(workspaceRoot);
             return;
         }
 
@@ -499,10 +516,7 @@ public sealed class ComputeAgentWorker : BackgroundService
             await _overlayStackAssembler.TeardownAsync(overlayRoot, cancellationToken).ConfigureAwait(false);
         }
 
-        if (workspaceRoot is not null)
-        {
-            TeardownWorkspaceRoot(workspaceRoot);
-        }
+        TeardownWorkspaceRoot(workspaceRoot);
     }
 
     private static async Task TryCompleteLayerPromotionAsync(
@@ -571,76 +585,6 @@ public sealed class ComputeAgentWorker : BackgroundService
         {
             // best effort workspace cleanup
         }
-    }
-
-    private async Task<string> MaterializeWorkspaceAsync(
-        HttpClient nodeClient,
-        PipelineJobDto job,
-        string jobIdentityToken,
-        Dictionary<string, string> env,
-        CancellationToken cancellationToken
-    )
-    {
-        var workspaceRoot = Path.Combine(Path.GetTempPath(), "opengitbase-agent", job.Id.Value.ToString("N"));
-        Directory.CreateDirectory(workspaceRoot);
-        var projectDir = Path.Combine(workspaceRoot, "repo");
-        Directory.CreateDirectory(projectDir);
-
-        if (string.IsNullOrWhiteSpace(jobIdentityToken))
-        {
-            env["CI_PROJECT_DIR"] = projectDir;
-            return projectDir;
-        }
-
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"pipeline/jobs/{job.Id.Value}/workspace-archive"
-        );
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jobIdentityToken);
-        var response = await nodeClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            env["CI_PROJECT_DIR"] = projectDir;
-            return projectDir;
-        }
-
-        var archivePath = Path.Combine(workspaceRoot, "workspace.tar.gz");
-        await using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken)
-            .ConfigureAwait(false))
-        await using (var archiveFile = File.Create(archivePath))
-        {
-            await responseStream.CopyToAsync(archiveFile, cancellationToken).ConfigureAwait(false);
-        }
-
-        await RunGitCommandAsync($"tar -xzf \"{archivePath}\" -C \"{projectDir}\"", workspaceRoot, cancellationToken)
-            .ConfigureAwait(false);
-        env["CI_PROJECT_DIR"] = projectDir;
-        env["OGB_WORKSPACE_SHARE"] = projectDir;
-        env["OGB_WORKSPACE_ROOT"] = workspaceRoot;
-        return projectDir;
-    }
-
-    private async Task RunGitCommandAsync(
-        string args,
-        string workingDirectory,
-        CancellationToken cancellationToken
-    )
-    {
-        var info = new System.Diagnostics.ProcessStartInfo("sh")
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            WorkingDirectory = workingDirectory,
-        };
-        info.ArgumentList.Add("-c");
-        info.ArgumentList.Add($"git {args}");
-        using var process = System.Diagnostics.Process.Start(info);
-        if (process is null)
-        {
-            return;
-        }
-
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> ExecuteDependencyInstallsAsync(

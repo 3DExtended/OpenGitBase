@@ -384,6 +384,38 @@ public class StorageContentClientTests
         Assert.Equal(expectedMissing, result.IsMissing);
     }
 
+    [Fact]
+    public async Task GetArchiveAsync_RequestsTheWorkspaceArchiveOfTheCommitAtTheDepth()
+    {
+        HttpRequestMessage? sent = null;
+        var handler = new StubHttpMessageHandler(
+            (request, _) =>
+            {
+                sent = request;
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([0x1f, 0x8b]) }
+                );
+            }
+        );
+
+        var client = new StorageContentClient(new HttpClient(handler));
+        using var response = await client.GetArchiveAsync(
+            CreateTarget(),
+            "secret-token",
+            "/srv/git/repo.git",
+            "3f786850e387550fdab836ed7e6dc881de23001b",
+            2,
+            CancellationToken.None
+        );
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            "http://storage-1:8081/internal/repos/content/archive?physicalPath=%2Fsrv%2Fgit%2Frepo.git&sha=3f786850e387550fdab836ed7e6dc881de23001b&depth=2",
+            sent?.RequestUri?.AbsoluteUri
+        );
+        Assert.Equal("Bearer secret-token", sent?.Headers.Authorization?.ToString());
+    }
+
     private static RepositoryRoutingTargetDto CreateTarget() =>
         new()
         {

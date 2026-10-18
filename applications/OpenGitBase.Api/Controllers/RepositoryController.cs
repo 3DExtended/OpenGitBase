@@ -294,6 +294,7 @@ public class RepositoryController : ControllerBase
                 OwnerUserId = existing.OwnerUserId,
                 PhysicalPath = existing.PhysicalPath,
                 StorageBytesUsed = existing.StorageBytesUsed,
+                GitBytesUsed = existing.GitBytesUsed,
             },
         };
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);

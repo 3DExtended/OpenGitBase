@@ -21,6 +21,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
         IQueryProcessor queryProcessor,
         ISshKeyService sshKeyService,
         GitPushEnforcementService gitPushEnforcementService,
+        RepositoryGitUsageMeter gitUsageMeter,
         ILogger<RepositoryAccessChecksController> logger,
         RepositoryStorageQuotaOptions quotaOptions,
         PlatformMergeIdentityOptions platformMergeOptions
@@ -30,6 +31,7 @@ public sealed class RepositoryAccessChecksController : ControllerBase
             queryProcessor,
             sshKeyService,
             gitPushEnforcementService,
+            gitUsageMeter,
             logger,
             quotaOptions,
             platformMergeOptions
