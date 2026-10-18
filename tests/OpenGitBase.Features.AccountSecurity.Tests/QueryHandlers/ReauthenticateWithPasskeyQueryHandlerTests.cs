@@ -92,6 +92,47 @@ public class ReauthenticateWithPasskeyQueryHandlerTests
         Assert.Equal(ReauthenticationStatus.ChallengeExpired, result.Status);
     }
 
+    [Fact]
+    public async Task RunQueryAsync_PasswordPlusPasskeyWithoutUserVerification_Reauthenticates()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var securityKey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, securityKey);
+        await scope.EnableTwoFactorWithPasskeysAsync(userId);
+        // With the password, the passkey stands in for the authenticator code: a touch is enough.
+        securityKey.UserVerified = false;
+
+        var result = await ReauthenticateAsync(
+            scope,
+            userId,
+            securityKey.GetAssertion(await OptionsAsync(scope, userId)),
+            AccountSecurityTestScope.Password
+        );
+
+        Assert.Equal(ReauthenticationStatus.Succeeded, result.Status);
+        Assert.True(await IsRecentAsync(scope, userId, SessionId));
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WrongPasswordPlusValidPasskey_IsRejected()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+
+        var result = await ReauthenticateAsync(
+            scope,
+            userId,
+            passkey.GetAssertion(await OptionsAsync(scope, userId)),
+            "not the password"
+        );
+
+        Assert.Equal(ReauthenticationStatus.InvalidCredentials, result.Status);
+        Assert.False(await IsRecentAsync(scope, userId, SessionId));
+    }
+
     private static async Task<string> OptionsAsync(AccountSecurityTestScope scope, UserId userId) =>
         QueryHandlerResultAssert.AssertSome(
             await scope
@@ -102,7 +143,8 @@ public class ReauthenticateWithPasskeyQueryHandlerTests
     private static async Task<ReauthenticationResult> ReauthenticateAsync(
         AccountSecurityTestScope scope,
         UserId userId,
-        string assertionJson
+        string assertionJson,
+        string password = ""
     ) =>
         QueryHandlerResultAssert.AssertSome(
             await scope
@@ -113,6 +155,7 @@ public class ReauthenticateWithPasskeyQueryHandlerTests
                         UserId = userId,
                         SessionId = SessionId,
                         AssertionResponseJson = assertionJson,
+                        Password = password,
                     },
                     CancellationToken.None
                 )

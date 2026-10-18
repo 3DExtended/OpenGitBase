@@ -17,18 +17,21 @@ public class ReauthenticateWithPasskeyQueryHandler
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly WebAuthnOptions _webAuthnOptions;
+    private readonly IPasswordHasherService _passwordHasher;
     private readonly ISystemClock _clock;
     private readonly ILogger<ReauthenticateWithPasskeyQueryHandler> _logger;
 
     public ReauthenticateWithPasskeyQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         WebAuthnOptions webAuthnOptions,
+        IPasswordHasherService passwordHasher,
         ISystemClock clock,
         ILogger<ReauthenticateWithPasskeyQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _webAuthnOptions = webAuthnOptions;
+        _passwordHasher = passwordHasher;
         _clock = clock;
         _logger = logger;
     }
@@ -40,13 +43,22 @@ public class ReauthenticateWithPasskeyQueryHandler
     {
         var now = _clock.UtcNow;
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        if (
-            !await context
-                .Set<UserCredentialsEntity>()
-                .AnyAsync(c => c.UserId == query.UserId.Value && !c.Deleted, cancellationToken)
-        )
+        var credentials = await context
+            .Set<UserCredentialsEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.UserId == query.UserId.Value && !c.Deleted, cancellationToken);
+        if (credentials is null)
         {
             return Option<ReauthenticationResult>.None;
+        }
+
+        var withPassword = !string.IsNullOrEmpty(query.Password);
+        if (
+            withPassword
+            && (credentials.PasswordHash is null || !_passwordHasher.VerifyPassword(credentials.PasswordHash, query.Password))
+        )
+        {
+            return new ReauthenticationResult(ReauthenticationStatus.InvalidCredentials);
         }
 
         var assertion = await PasskeyCeremonies.VerifyAssertionAsync(
@@ -57,7 +69,8 @@ public class ReauthenticateWithPasskeyQueryHandler
             query.AssertionResponseJson,
             now,
             _logger,
-            cancellationToken
+            cancellationToken,
+            requireUserVerification: !withPassword
         );
         if (assertion.Outcome == PasskeyAssertionOutcome.ChallengeExpired)
         {

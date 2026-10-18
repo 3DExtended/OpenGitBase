@@ -170,6 +170,50 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
         );
     }
 
+    /// <summary>
+    /// Confirms the browser's session with the password plus <paramref name="passkey"/>, the way an account
+    /// with 2FA on uses a passkey in place of the authenticator code.
+    /// </summary>
+    protected static async Task<HttpResponseMessage> ReauthenticateWithPasswordAndPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey,
+        string password = Password
+    )
+    {
+        var options = await browser.PostAsync("/account/reauthenticate/passkey-options", null);
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                Password = password,
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
+
+    /// <summary>Asks for passkey options for the open second step, then answers it with <paramref name="passkey"/>.</summary>
+    protected static async Task<HttpResponseMessage> CompleteTwoFactorWithPasskeyAsync(
+        HttpClient browser,
+        string challengeToken,
+        SoftwarePasskeyAuthenticator passkey
+    )
+    {
+        var options = await browser.PostAsJsonAsync(
+            "/signin/two-factor/passkey-options",
+            new TwoFactorPasskeyOptionsDto { ChallengeToken = challengeToken }
+        );
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto
+            {
+                ChallengeToken = challengeToken,
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
+
     /// <summary>A browser: a client with its own cookie jar.</summary>
     protected HttpClient NewBrowser() => TwoFactorFactory.CreateClient();
 

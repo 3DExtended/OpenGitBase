@@ -16,4 +16,7 @@ public enum AuthenticationChallengePurpose
 
     /// <summary>Request options for signing in with any passkey were handed out; nobody is known yet.</summary>
     PasskeySignIn = 5,
+
+    /// <summary>Request options for answering an open two-factor sign-in with a passkey were handed out.</summary>
+    PasskeySecondFactor = 6,
 }

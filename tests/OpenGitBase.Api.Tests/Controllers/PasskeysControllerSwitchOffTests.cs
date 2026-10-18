@@ -31,6 +31,9 @@ public class PasskeysControllerSwitchOffTests : TwoFactorControllerTestBase
             await browser.PostAsJsonAsync("/account/reauthenticate", new { passkeyAssertion = new { } }),
             await browser.PostAsync("/signin/passkey/options", null),
             await browser.PostAsJsonAsync("/signin/passkey", new { assertion = new { } }),
+            await browser.PostAsJsonAsync("/signin/two-factor/passkey-options", new { challengeToken = "token" }),
+            await browser.PostAsJsonAsync("/signin/two-factor", new { challengeToken = "token", passkeyAssertion = new { } }),
+            await browser.PostAsync("/account/two-factor/enable", null),
         ];
 
         Assert.All(responses, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));

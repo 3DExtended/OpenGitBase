@@ -19,14 +19,20 @@ public class AccountSecurityControllerSwitchOffTests : TwoFactorControllerTestBa
         await RegisterAsync(browser, "earlybird");
         (await ReauthenticateAsync(browser)).EnsureSuccessStatusCode();
 
+        using var passkey = NewPasskey();
+        (await RegisterPasskeyAsync(browser, passkey)).EnsureSuccessStatusCode();
+
         var setup = await browser.PostAsync("/account/two-factor/totp/setup", null);
         var confirm = await browser.PostAsJsonAsync(
             "/account/two-factor/totp/confirm",
             new ConfirmTotpSetupDto { Code = "123456" }
         );
+        var enableWithPasskeys = await browser.PostAsync("/account/two-factor/enable", null);
 
         Assert.Equal(HttpStatusCode.NotFound, setup.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, confirm.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, enableWithPasskeys.StatusCode);
+        Assert.Null((await GetCredentialsAsync("earlybird")).TwoFactorEnabledAt);
         var status = await browser.GetFromJsonAsync<AccountSecurityResponse>("/account/security");
         Assert.False(status?.TwoFactorAvailable);
     }

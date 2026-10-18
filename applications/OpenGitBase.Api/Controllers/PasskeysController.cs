@@ -192,7 +192,9 @@ public class PasskeysController : ControllerBase
             return NotFound();
         }
 
-        return NoContent();
+        return result.Get().Status == PasskeyDeletionStatus.LastSecondFactor
+            ? Conflict(Error(SecondFactorErrorResponse.LastSecondFactor))
+            : NoContent();
     }
 
     private static SecondFactorErrorResponse Error(string error) => new() { Error = error };

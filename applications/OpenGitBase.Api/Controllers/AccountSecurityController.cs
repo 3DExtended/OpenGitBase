@@ -70,8 +70,8 @@ public class AccountSecurityController : ControllerBase
     }
 
     /// <summary>
-    /// Confirms the caller again for 10 minutes: the password, plus a code or a recovery code while 2FA is on,
-    /// or an assertion of one of the caller's passkeys.
+    /// Confirms the caller again for 10 minutes: the password, plus a code, a recovery code or a passkey
+    /// assertion while 2FA is on, or a user-verified assertion of one of the caller's passkeys alone.
     /// </summary>
     [HttpPost("reauthenticate")]
     [EnableRateLimiting("sensitive")]
@@ -88,7 +88,8 @@ public class AccountSecurityController : ControllerBase
 
         if (requestDto.PasskeyAssertion is { } assertion)
         {
-            return await ReauthenticateWithPasskeyAsync(sessionId, assertion, cancellationToken).ConfigureAwait(false);
+            return await ReauthenticateWithPasskeyAsync(sessionId, assertion, requestDto.Password, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var result = await _queryProcessor
@@ -232,6 +233,48 @@ public class AccountSecurityController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Turns 2FA on with the caller's passkeys as the second factor, without an authenticator app. Like the
+    /// first authenticator confirmation, it returns the first recovery codes once and keeps only the caller
+    /// signed in.
+    /// </summary>
+    [HttpPost("two-factor/enable")]
+    public async Task<ActionResult<TwoFactorStatusResponse>> EnableTwoFactorWithPasskeysAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_twoFactorOptions.Enabled || !_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        if (!await HasRecentReauthenticationAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ReauthenticationRequired();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(new EnableTwoFactorWithPasskeysQuery { UserId = CurrentUserId }, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        var activation = result.Get();
+        switch (activation.Status)
+        {
+            case PasskeyTwoFactorActivationStatus.Enabled:
+                // Turning 2FA on revoked every session, this one included. Keep only the caller signed in.
+                await _sessionIssuer.IssueAsync(Response, CurrentUserId, cancellationToken).ConfigureAwait(false);
+                return Ok(new TwoFactorStatusResponse { TwoFactorEnabled = true, RecoveryCodes = activation.RecoveryCodes });
+            case PasskeyTwoFactorActivationStatus.AlreadyEnabled:
+                return Conflict(Error(SecondFactorErrorResponse.TwoFactorAlreadyEnabled));
+            default:
+                return BadRequest(Error(SecondFactorErrorResponse.NoPasskeys));
+        }
+    }
+
     /// <summary>Turns 2FA off and removes the authenticator. Stays available while the switch is off.</summary>
     [HttpPost("two-factor/disable")]
     public async Task<ActionResult<TwoFactorStatusResponse>> DisableTwoFactorAsync(CancellationToken cancellationToken)
@@ -289,6 +332,7 @@ public class AccountSecurityController : ControllerBase
     private async Task<ActionResult> ReauthenticateWithPasskeyAsync(
         string sessionId,
         JsonElement assertion,
+        string password,
         CancellationToken cancellationToken
     )
     {
@@ -304,6 +348,7 @@ public class AccountSecurityController : ControllerBase
                     UserId = CurrentUserId,
                     SessionId = sessionId,
                     AssertionResponseJson = assertion.GetRawText(),
+                    Password = password,
                 },
                 cancellationToken
             )
@@ -317,6 +362,7 @@ public class AccountSecurityController : ControllerBase
         {
             ReauthenticationStatus.Succeeded => NoContent(),
             ReauthenticationStatus.ChallengeExpired => Unauthorized(Error(SecondFactorErrorResponse.ChallengeExpired)),
+            ReauthenticationStatus.InvalidCredentials => Unauthorized(Error(SecondFactorErrorResponse.InvalidCredentials)),
             _ => Unauthorized(Error(SecondFactorErrorResponse.PasskeyRejected)),
         };
     }

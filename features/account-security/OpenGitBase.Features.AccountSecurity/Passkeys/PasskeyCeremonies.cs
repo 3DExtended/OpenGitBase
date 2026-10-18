@@ -84,7 +84,9 @@ internal static class PasskeyCeremonies
     /// must come from one of that user's passkeys, with user verification. Without a user (sign-in), any
     /// registered passkey may answer an anonymous challenge, and the result names its owner. A verified
     /// assertion records the new signature counter, backup state and last use. A counter that does not
-    /// grow is rejected unless it stays 0, as synced passkeys report.
+    /// grow is rejected unless it stays 0, as synced passkeys report. Without
+    /// <paramref name="requireUserVerification"/> (a second factor after the password), the
+    /// authenticator only has to prove presence.
     /// </summary>
     public static async Task<PasskeyAssertion> VerifyAssertionAsync(
         OpenGitBaseDbContext context,
@@ -94,7 +96,8 @@ internal static class PasskeyCeremonies
         string assertionJson,
         DateTimeOffset now,
         ILogger logger,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool requireUserVerification = true
     )
     {
         var response = Parse<AuthenticatorAssertionRawResponse>(assertionJson);
@@ -154,6 +157,13 @@ internal static class PasskeyCeremonies
                     },
                     cancellationToken
                 );
+            if (requireUserVerification && !IsUserVerified(response.Response.AuthenticatorData))
+            {
+                // The options may only prefer verification; on its own, a passkey must have verified the user.
+                logger.LogInformation("Passkey assertion for user {UserId} rejected: user not verified", passkey.UserId);
+                return PasskeyAssertion.Rejected;
+            }
+
             passkey.SignCount = verified.SignCount;
             passkey.IsBackedUp = verified.IsBackedUp;
             passkey.LastUsedAt = now;
@@ -219,6 +229,10 @@ internal static class PasskeyCeremonies
             .Select(name => Enum.TryParse<AuthenticatorTransport>(name, out var transport) ? transport : (AuthenticatorTransport?)null)
             .OfType<AuthenticatorTransport>()
             .ToArray();
+
+    /// <summary>The UV flag (bit 2 of the flags byte after the RP ID hash); the signature covers it.</summary>
+    private static bool IsUserVerified(byte[] authenticatorData) =>
+        authenticatorData.Length > 32 && (authenticatorData[32] & 0x04) != 0;
 
     private static string? ReadChallenge(byte[] clientDataJson)
     {

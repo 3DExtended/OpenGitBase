@@ -15,7 +15,8 @@ public class ReauthenticateDto
 
     /// <summary>
     /// An assertion for <c>POST /account/reauthenticate/passkey-options</c>, as <c>PublicKeyCredential.toJSON()</c>
-    /// returns it. Replaces password and code.
+    /// returns it. On its own, a user-verified passkey replaces password and code; together with
+    /// <see cref="Password"/>, any of the caller's passkeys replaces the code.
     /// </summary>
     public JsonElement? PasskeyAssertion { get; set; }
 }

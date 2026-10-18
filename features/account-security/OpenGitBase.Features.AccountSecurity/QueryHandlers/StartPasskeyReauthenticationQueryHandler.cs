@@ -47,7 +47,9 @@ public class StartPasskeyReauthenticationQueryHandler
                 new GetAssertionOptionsParams
                 {
                     AllowedCredentials = passkeys,
-                    UserVerification = UserVerificationRequirement.Required,
+                    // Preferred, so a security key also works together with the password; on its own the
+                    // assertion must still carry the UV flag (see ReauthenticateWithPasskeyQueryHandler).
+                    UserVerification = UserVerificationRequirement.Preferred,
                 }
             );
         var optionsJson = options.ToJson();
