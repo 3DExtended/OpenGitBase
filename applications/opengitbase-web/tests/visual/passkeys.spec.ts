@@ -173,6 +173,16 @@ test.describe('passkeys', () => {
     await expect(section).toHaveScreenshot('visual-passkeys.png')
   })
 
+  test('gallery passkey sign-in with an error', async ({ page }) => {
+    await page.addInitScript(() => {
+      document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
+    })
+    await waitForGallery(page)
+    const section = page.getByTestId('visual-passkey-sign-in')
+    await expect(section.getByTestId('passkey-sign-in-error')).toBeVisible()
+    await expect(section).toHaveScreenshot('visual-passkey-sign-in.png')
+  })
+
   test('register, rename and delete a passkey with the virtual authenticator', async ({ page, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'One WebAuthn run is enough; the layout is covered by the gallery.')
     await blockServiceWorker(page)
