@@ -4,24 +4,34 @@ import { normalizeAuthenticatorCode } from '~/utils/twoFactor'
 const props = defineProps<{
   needsPassword: boolean
   needsCode: boolean
+  /** Unused recovery codes exist, so one can stand in for the authenticator code. */
+  recoveryAvailable?: boolean
   loading?: boolean
   error?: string | null
 }>()
 
 const emit = defineEmits<{
-  submit: [credentials: { password: string, code?: string }]
+  submit: [credentials: { password: string, code?: string, recoveryCode?: string }]
   cancel: []
 }>()
 
 const { t } = useI18n()
 const password = ref('')
 const code = ref('')
+const useRecovery = ref(false)
+
+function toggleMethod() {
+  useRecovery.value = !useRecovery.value
+  code.value = ''
+}
 
 function onSubmit() {
-  emit('submit', {
-    password: props.needsPassword ? password.value : '',
-    code: props.needsCode ? normalizeAuthenticatorCode(code.value) : undefined,
-  })
+  const secondFactor = !props.needsCode
+    ? {}
+    : useRecovery.value
+      ? { recoveryCode: code.value.trim() }
+      : { code: normalizeAuthenticatorCode(code.value) }
+  emit('submit', { password: props.needsPassword ? password.value : '', ...secondFactor })
 }
 </script>
 
@@ -49,21 +59,49 @@ function onSubmit() {
       />
     </UFormField>
 
-    <UFormField
-      v-if="needsCode"
-      :label="t('auth.twoFactor.codeLabel')"
-      required
-    >
-      <UInput
-        v-model="code"
-        autocomplete="one-time-code"
-        inputmode="numeric"
-        maxlength="9"
-        placeholder="123 456"
-        class="w-full font-mono"
+    <template v-if="needsCode">
+      <UFormField
+        v-if="useRecovery"
+        :label="t('auth.twoFactor.recoveryCodeLabel')"
         required
-      />
-    </UFormField>
+      >
+        <UInput
+          v-model="code"
+          autocomplete="off"
+          autocapitalize="off"
+          :spellcheck="false"
+          maxlength="20"
+          placeholder="xxxxx-xxxxx"
+          class="w-full font-mono"
+          required
+        />
+      </UFormField>
+      <UFormField
+        v-else
+        :label="t('auth.twoFactor.codeLabel')"
+        required
+      >
+        <UInput
+          v-model="code"
+          autocomplete="one-time-code"
+          inputmode="numeric"
+          maxlength="9"
+          placeholder="123 456"
+          class="w-full font-mono"
+          required
+        />
+      </UFormField>
+      <UButton
+        v-if="recoveryAvailable || useRecovery"
+        variant="link"
+        size="sm"
+        class="px-0"
+        :icon="useRecovery ? 'i-lucide-smartphone' : 'i-lucide-life-buoy'"
+        @click="toggleMethod"
+      >
+        {{ useRecovery ? t('auth.twoFactor.useAuthenticatorApp') : t('auth.twoFactor.useRecoveryCode') }}
+      </UButton>
+    </template>
 
     <UAlert
       v-if="error"

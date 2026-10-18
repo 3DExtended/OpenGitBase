@@ -32,6 +32,7 @@ See the "Deviations" section of #245: bare token string kept without 2FA; static
 ## Status
 
 - Branch: `claude/obg-multifactor-login-699197`, pushed to `main`
+- Production: deployed 2026-10-18 ~20:50 CEST (`4094ac1`; migration applied, api-1/api-2 and web-1/web-2 recreated, `POST /api/signin/two-factor` answers `challenge_expired` on both APIs); `TwoFactor:Enabled` stays off
 - Tests:
   - `dotnet test` (whole solution) green after merging `origin/main`; `OpenGitBase.Api.Tests` 988 passed
   - Web: `pnpm test` 163 passed; `pnpm test:visual` green

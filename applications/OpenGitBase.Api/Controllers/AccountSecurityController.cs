@@ -59,11 +59,14 @@ public class AccountSecurityController : ControllerBase
                 TwoFactorEnabled = status.TwoFactorEnabled,
                 TotpConfigured = status.TotpConfigured,
                 HasPassword = status.HasPassword,
+                RecoveryCodesRemaining = status.RecoveryCodesRemaining,
             }
         );
     }
 
-    /// <summary>Confirms the caller again for 10 minutes: the password, plus a code while 2FA is on.</summary>
+    /// <summary>
+    /// Confirms the caller again for 10 minutes: the password, plus a code or a recovery code while 2FA is on.
+    /// </summary>
     [HttpPost("reauthenticate")]
     [EnableRateLimiting("sensitive")]
     public async Task<ActionResult> ReauthenticateAsync(
@@ -85,6 +88,7 @@ public class AccountSecurityController : ControllerBase
                     SessionId = sessionId,
                     Password = requestDto.Password,
                     Code = requestDto.Code?.Trim(),
+                    RecoveryCode = requestDto.RecoveryCode,
                 },
                 cancellationToken
             )
@@ -186,7 +190,9 @@ public class AccountSecurityController : ControllerBase
                     await _sessionIssuer.IssueAsync(Response, CurrentUserId, cancellationToken).ConfigureAwait(false);
                 }
 
-                return Ok(new TwoFactorStatusResponse { TwoFactorEnabled = true });
+                return Ok(
+                    new TwoFactorStatusResponse { TwoFactorEnabled = true, RecoveryCodes = confirmation.RecoveryCodes }
+                );
             case TotpConfirmationStatus.NoPendingSetup:
                 return BadRequest(Error(SecondFactorErrorResponse.NoPendingSetup));
             default:
@@ -213,6 +219,31 @@ public class AccountSecurityController : ControllerBase
 
         await _sessionIssuer.IssueAsync(Response, CurrentUserId, cancellationToken).ConfigureAwait(false);
         return Ok(new TwoFactorStatusResponse { TwoFactorEnabled = false });
+    }
+
+    /// <summary>
+    /// Replaces every recovery code with a new set, shown once. Stays available while the switch is off,
+    /// like disabling, so accounts that already have 2FA keep a way back in.
+    /// </summary>
+    [HttpPost("two-factor/recovery-codes")]
+    public async Task<ActionResult<RecoveryCodesResponse>> RegenerateRecoveryCodesAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        if (!await HasRecentReauthenticationAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ReauthenticationRequired();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(new RegenerateRecoveryCodesQuery { UserId = CurrentUserId }, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.IsNone)
+        {
+            return BadRequest(Error(SecondFactorErrorResponse.TwoFactorNotEnabled));
+        }
+
+        return Ok(new RecoveryCodesResponse { RecoveryCodes = result.Get().Codes });
     }
 
     private static SecondFactorErrorResponse Error(string error) => new() { Error = error };

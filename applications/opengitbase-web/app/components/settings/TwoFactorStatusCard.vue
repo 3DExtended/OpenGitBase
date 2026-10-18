@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AccountSecurity } from '~/utils/twoFactor'
+import { recoveryCodesRunningLow } from '~/utils/twoFactor'
 
 defineProps<{
   status: AccountSecurity
@@ -9,6 +10,7 @@ defineProps<{
 const emit = defineEmits<{
   setup: []
   disable: []
+  regenerate: []
 }>()
 
 const { t } = useI18n()
@@ -44,6 +46,41 @@ const { t } = useI18n()
       />
       <span>{{ t('settings.security.twoFactor.authenticatorApp') }}</span>
     </div>
+
+    <template v-if="status.twoFactorEnabled">
+      <div
+        class="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm"
+        data-testid="recovery-codes-status"
+      >
+        <div class="flex items-center gap-2">
+          <UIcon
+            name="i-lucide-life-buoy"
+            class="size-4 text-[var(--ogb-accent)]"
+          />
+          <span>{{ t('settings.security.twoFactor.recoveryCodes') }}</span>
+          <span class="text-[var(--ogb-text-muted)]">
+            {{ t('settings.security.twoFactor.recoveryCodesRemaining', status.recoveryCodesRemaining) }}
+          </span>
+        </div>
+        <UButton
+          size="sm"
+          variant="soft"
+          icon="i-lucide-refresh-cw"
+          :disabled="busy"
+          @click="emit('regenerate')"
+        >
+          {{ t('settings.security.twoFactor.regenerate') }}
+        </UButton>
+      </div>
+      <UAlert
+        v-if="recoveryCodesRunningLow(status.recoveryCodesRemaining)"
+        class="mt-3"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        :description="t('settings.security.twoFactor.recoveryCodesLow')"
+      />
+    </template>
 
     <template #footer>
       <div class="flex flex-wrap gap-2">

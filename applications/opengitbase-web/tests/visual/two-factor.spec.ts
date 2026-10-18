@@ -35,6 +35,21 @@ test.describe('two-factor visuals', () => {
     await expect(page.getByTestId('visual-security-status')).toHaveScreenshot('visual-security-status.png')
   })
 
+  test('gallery two-step sign-in with a recovery code', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-two-factor-recovery-sign-in')
+    await expect(section.getByTestId('recovery-code-input')).toHaveValue('abcde-fghij')
+    await expect(section).toHaveScreenshot('visual-two-factor-recovery-sign-in.png')
+  })
+
+  test('gallery recovery codes panel', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-recovery-codes')
+    await expect(section.getByTestId('recovery-codes-list').locator('li')).toHaveCount(10)
+    await expect(section.getByTestId('recovery-codes-done')).toBeEnabled()
+    await expect(section).toHaveScreenshot('visual-recovery-codes.png')
+  })
+
   test('gallery authenticator setup', async ({ page }) => {
     await waitForApp(page)
     const setup = page.getByTestId('visual-totp-setup')

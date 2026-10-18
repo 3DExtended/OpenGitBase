@@ -26,6 +26,18 @@ public class DisableTwoFactorQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_DeletesAllRecoveryCodes()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        await DisableAsync(scope, userId);
+
+        Assert.Empty(await scope.GetRecoveryCodesAsync(userId));
+    }
+
+    [Fact]
     public async Task RunQueryAsync_AfterDisabling_SignInNeedsNoSecondStep()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();

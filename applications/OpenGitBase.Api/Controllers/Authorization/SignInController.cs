@@ -110,7 +110,7 @@ public class SignInController : ControllerBase
         if (
             requestDto == null
             || string.IsNullOrWhiteSpace(requestDto.ChallengeToken)
-            || string.IsNullOrWhiteSpace(requestDto.Code)
+            || string.IsNullOrWhiteSpace(requestDto.Code) == string.IsNullOrWhiteSpace(requestDto.RecoveryCode)
         )
         {
             return BadRequest();
@@ -118,7 +118,12 @@ public class SignInController : ControllerBase
 
         var result = await _queryProcessor
             .RunQueryAsync(
-                new CompleteTwoFactorSignInQuery { ChallengeToken = requestDto.ChallengeToken, Code = requestDto.Code.Trim() },
+                new CompleteTwoFactorSignInQuery
+                {
+                    ChallengeToken = requestDto.ChallengeToken,
+                    Code = requestDto.Code?.Trim() ?? string.Empty,
+                    RecoveryCode = requestDto.RecoveryCode,
+                },
                 cancellationToken
             )
             .ConfigureAwait(false);

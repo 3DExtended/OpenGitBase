@@ -70,12 +70,16 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
                 return new ReauthenticationResult(ReauthenticationStatus.LockedOut, credentials.SecondFactorLockedUntil);
             }
 
-            if (string.IsNullOrEmpty(query.Code))
+            var usesRecoveryCode = !string.IsNullOrWhiteSpace(query.RecoveryCode);
+            if (!usesRecoveryCode && string.IsNullOrEmpty(query.Code))
             {
                 return new ReauthenticationResult(ReauthenticationStatus.SecondFactorRequired);
             }
 
-            if (!await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code, now, cancellationToken))
+            var accepted = usesRecoveryCode
+                ? await RecoveryCodes.TryUseAsync(context, _passwordHasher, credentials.UserId, query.RecoveryCode!, now, cancellationToken)
+                : await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code!, now, cancellationToken);
+            if (!accepted)
             {
                 var lockStarted = SecondFactorAttempts.RecordFailure(credentials, now);
                 await context.SaveChangesAsync(cancellationToken);
@@ -91,6 +95,10 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
 
             SecondFactorAttempts.RecordSuccess(credentials);
             await context.SaveChangesAsync(cancellationToken);
+            if (usesRecoveryCode)
+            {
+                await RecoveryCodes.LogUseAsync(_logger, context, credentials.UserId, "re-authentication", cancellationToken);
+            }
         }
 
         await AuthenticationChallenges.CreateAsync(

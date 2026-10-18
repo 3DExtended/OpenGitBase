@@ -111,7 +111,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 ### Schema (EF Core migration in `common/OpenGitBase.Common/Migrations/`)
 
 - `UserTotpAuthenticators`: `UserId` (PK/FK), `SecretProtected`, `ConfirmedAt` (null = never confirmed), `PendingSecretProtected`, `LastUsedTimeStep`, `CreatedAt`. One per user. A new setup writes the pending secret and replaces an earlier pending one; it only replaces the confirmed secret when it is confirmed, so the old authenticator keeps working until then.
-- `UserRecoveryCodes`: `Id`, `UserId`, `LookupHash`, `CodeHash`, `UsedAt`, `CreatedAt`. 10 codes per set; regenerating deletes the old set.
+- `UserRecoveryCodes`: `Id`, `UserId`, `CodeHash`, `UsedAt`, `CreatedAt`. 10 codes per set; regenerating deletes the old set.
 - `UserPasskeys`: `Id`, `UserId`, `CredentialId` (bytes, unique), `PublicKey` (COSE bytes), `SignCount`, `Aaguid`, `Transports`, `IsBackupEligible`, `IsBackedUp`, `Name`, `CreatedAt`, `LastUsedAt`.
 - `AuthenticationChallenges`: `Id`, `Purpose` (`TwoFactorSignIn`, `PasskeyRegistration`, `PasskeySignIn`, `PasskeySecondFactor`, `ReAuthentication`), `UserId` (nullable for usernameless passkey sign-in), `TokenHash` or `Challenge`, `ExpiresAt`, `CreatedAt`. No per-challenge attempt counter (see *Attempt limits*).
 - `UserCredentials` gains `TwoFactorEnabledAt`, `SecondFactorFailedAttempts`, `SecondFactorLockedUntil`.
@@ -120,7 +120,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 - The TOTP secret is encrypted with `EncryptSecret` (AES-256-GCM, byte-for-byte). **Never `EncryptEmail`**, which lowercases and trims — the same mistake corrupted the fleet dispatcher SSH key.
 - `UserTotpAuthenticators.SecretProtected` and `PendingSecretProtected` are added to the hand-maintained column list in `EncryptionKeyRotation`, with a test.
-- Recovery codes are hashed like personal access tokens (SHA-256 lookup hash plus `PasswordHasher` hash).
+- Recovery codes are stored only as `PasswordHasher` hashes. Unlike personal access tokens they get no SHA-256 lookup hash: a code has 50 bits, so an unsalted hash could be brute-forced from a database leak. The second step checks the input against the user's at most 10 unused hashes.
 - Passkey public keys are not secret and are stored in plain form; they need no rotation entry.
 
 ### Sign-in contract
@@ -158,14 +158,14 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 
 ### Account endpoints
 
-- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, and later the passkeys and the unused recovery-code count. `/account/me` gains `twoFactorEnabled`.
+- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, `recoveryCodesRemaining` (unused codes), and later the passkeys. `/account/me` gains `twoFactorEnabled`.
 - TOTP:
   - `POST /account/two-factor/totp/setup` returns `{ otpauthUri, secret }` and stores the pending secret.
   - `POST /account/two-factor/totp/confirm` with `{ code }`. The first confirmation sets `TwoFactorEnabledAt` and returns 10 recovery codes once.
   - `DELETE /account/two-factor/totp` is allowed only if another second factor remains or 2FA is being disabled. It arrives with the last-factor rule in mfa-05; until then the authenticator is removed by disabling 2FA.
 - `POST /account/two-factor/enable` (requires at least one passkey) turns 2FA on without an authenticator app and returns recovery codes.
 - `POST /account/two-factor/disable` takes no body. Like every sensitive change it needs a recent re-authentication of the session, which already asks for the password and a second factor. It removes the TOTP authenticator and recovery codes and clears `TwoFactorEnabledAt`. Passkeys stay as sign-in methods.
-- `POST /account/two-factor/recovery-codes` regenerates the set.
+- `POST /account/two-factor/recovery-codes` regenerates the set and returns it once (`400 two_factor_not_enabled` without 2FA).
 - Deleting the last second factor while 2FA is on returns `409`.
 - Turning 2FA on or off sets `SessionsValidAfter` and re-issues the caller's token, reusing the change-password pattern.
 - otpauth label: `{issuer}:{username}` with `issuer={issuer}`. The issuer comes from configuration (`TwoFactor:Issuer`, default `OpenGitBase`) so self-hosted instances show their own name.
@@ -174,7 +174,7 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 
 Turning 2FA on or off, adding or removing a passkey, setting up or removing TOTP, and regenerating recovery codes require a recent confirmation. Any of these counts:
 
-- the current password (and, with 2FA on, a second factor) via `POST /account/reauthenticate`;
+- the current password (and, with 2FA on, a second factor; a recovery code counts, so a lost phone can still be replaced) via `POST /account/reauthenticate`;
 - a passkey assertion within the last 10 minutes;
 - for accounts without a password and without passkeys (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim).
 

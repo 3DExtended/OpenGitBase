@@ -57,6 +57,33 @@ namespace OpenGitBase.Common.Migrations
                     b.ToTable("AuthenticationChallenges", (string)null);
                 });
 
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserRecoveryCodeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserRecoveryCodes", (string)null);
+                });
+
             modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserTotpAuthenticatorEntity", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -1990,6 +2017,17 @@ namespace OpenGitBase.Common.Migrations
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.AuthenticationChallengeEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserRecoveryCodeEntity", b =>
                 {
                     b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
                         .WithMany()

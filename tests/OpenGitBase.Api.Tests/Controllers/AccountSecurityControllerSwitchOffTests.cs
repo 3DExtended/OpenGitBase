@@ -46,4 +46,18 @@ public class AccountSecurityControllerSwitchOffTests : TwoFactorControllerTestBa
         disable.EnsureSuccessStatusCode();
         Assert.Null((await GetCredentialsAsync("keepsit")).TwoFactorEnabledAt);
     }
+
+    [Fact]
+    public async Task AccountWithTwoFactor_CanStillGetAndUseRecoveryCodes()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "stillrecovers");
+
+        var (_, codes) = await EnableTotpWithRecoveryCodesAsync("stillrecovers");
+
+        Assert.Equal(10, codes.Count);
+        using var browser = NewBrowser();
+        var challenge = await LoginForChallengeAsync(browser, "stillrecovers");
+        (await CompleteTwoFactorWithRecoveryCodeAsync(browser, challenge.ChallengeToken, codes[0])).EnsureSuccessStatusCode();
+    }
 }

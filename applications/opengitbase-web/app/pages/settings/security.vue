@@ -20,6 +20,9 @@ const setup = ref<TotpSetup | null>(null)
 const confirmLoading = ref(false)
 const confirmError = ref<string | null>(null)
 
+const recoveryCodes = ref<string[] | null>(null)
+const showRegenerateConfirm = ref(false)
+
 const showDisableConfirm = ref(false)
 const showReauth = ref(false)
 const reauthLoading = ref(false)
@@ -100,6 +103,7 @@ async function confirmSetup(code: string) {
       return
     }
     setup.value = null
+    recoveryCodes.value = result.data?.recoveryCodes?.length ? result.data.recoveryCodes : null
     notice.value = t('settings.security.enabledNotice')
     await Promise.all([load(), auth.fetchMe()])
   }
@@ -130,14 +134,50 @@ async function disable() {
   }
 }
 
-async function reauthenticate(credentials: { password: string, code?: string }) {
+async function regenerate() {
+  showRegenerateConfirm.value = false
+  busy.value = true
+  actionError.value = null
+  notice.value = null
+  try {
+    const result = await api.account.regenerateRecoveryCodes()
+    if (needsReauthentication(result, regenerate)) {
+      return
+    }
+    if (result.error || !result.data) {
+      actionError.value = t(secondFactorErrorKey(result.error, result.status))
+      return
+    }
+    recoveryCodes.value = result.data.recoveryCodes
+    await load()
+  }
+  finally {
+    busy.value = false
+  }
+}
+
+async function finishRecoveryCodes() {
+  recoveryCodes.value = null
+  notice.value = null
+  await load()
+}
+
+async function reauthenticate(credentials: { password: string, code?: string, recoveryCode?: string }) {
   reauthLoading.value = true
   reauthError.value = null
   try {
     const result = await api.account.reauthenticate(credentials)
     if (result.error) {
-      reauthError.value = t(secondFactorErrorKey(result.error, result.status))
+      reauthError.value = t(secondFactorErrorKey(
+        result.error,
+        result.status,
+        credentials.recoveryCode ? 'recovery' : 'code',
+      ))
       return
+    }
+    // A recovery code was just spent; keep the count shown behind the dialog honest.
+    if (credentials.recoveryCode) {
+      await load()
     }
     showReauth.value = false
     const retry = retryAfterReauth
@@ -221,12 +261,26 @@ onMounted(load)
           />
         </UCard>
 
+        <UCard v-else-if="recoveryCodes">
+          <template #header>
+            <h2 class="font-semibold">
+              {{ t('settings.security.recoveryCodes.title') }}
+            </h2>
+          </template>
+          <SettingsRecoveryCodesPanel
+            :codes="recoveryCodes"
+            :account="auth.user?.username ?? ''"
+            @done="finishRecoveryCodes"
+          />
+        </UCard>
+
         <SettingsTwoFactorStatusCard
           v-else
           :status="status"
           :busy="busy"
           @setup="startSetup"
           @disable="showDisableConfirm = true"
+          @regenerate="showRegenerateConfirm = true"
         />
       </template>
 
@@ -267,6 +321,37 @@ onMounted(load)
       </template>
     </UModal>
 
+    <UModal v-model:open="showRegenerateConfirm">
+      <template #content>
+        <UCard>
+          <template #header>
+            <h3 class="font-semibold">
+              {{ t('settings.security.twoFactor.regenerateConfirmTitle') }}
+            </h3>
+          </template>
+          <p class="text-sm text-[var(--ogb-text-muted)]">
+            {{ t('settings.security.twoFactor.regenerateConfirmDescription') }}
+          </p>
+          <div class="mt-4 flex justify-end gap-2">
+            <UButton
+              variant="ghost"
+              @click="showRegenerateConfirm = false"
+            >
+              {{ t('common.cancel') }}
+            </UButton>
+            <UButton
+              color="warning"
+              :loading="busy"
+              data-testid="recovery-codes-regenerate-confirm"
+              @click="regenerate"
+            >
+              {{ t('settings.security.twoFactor.regenerateConfirmButton') }}
+            </UButton>
+          </div>
+        </UCard>
+      </template>
+    </UModal>
+
     <UModal v-model:open="showReauth">
       <template #content>
         <UCard>
@@ -278,6 +363,7 @@ onMounted(load)
           <SettingsReauthenticateForm
             :needs-password="status?.hasPassword ?? true"
             :needs-code="status?.twoFactorEnabled ?? false"
+            :recovery-available="(status?.recoveryCodesRemaining ?? 0) > 0"
             :loading="reauthLoading"
             :error="reauthError"
             @submit="reauthenticate"

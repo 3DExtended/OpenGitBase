@@ -163,13 +163,18 @@
     },
     "twoFactor": {
       "title": "Two-step verification",
-      "subtitle": "Enter the code from your authenticator app.",
+      "subtitle": "One more step to confirm it is you.",
       "instructions": "Open Microsoft Authenticator, Google Authenticator or another authenticator app and enter the 6-digit code it shows for this account.",
       "codeLabel": "Authentication code",
       "submit": "Verify",
       "back": "Back to sign in",
+      "recoveryInstructions": "Enter one of the recovery codes you saved when you turned on two-factor authentication. Each code works once.",
+      "recoveryCodeLabel": "Recovery code",
+      "useRecoveryCode": "Use a recovery code",
+      "useAuthenticatorApp": "Use your authenticator app",
       "errors": {
         "invalidCode": "That code is not valid. Make sure the time on your phone is set automatically, then try the current code.",
+        "invalidRecoveryCode": "That recovery code is not valid or has already been used.",
         "challengeExpired": "This sign-in took too long. Please sign in again.",
         "setupExpired": "This setup is no longer open. Start the setup again.",
         "lockedOut": "Too many wrong codes. Try again in 15 minutes.",
@@ -177,6 +182,7 @@
         "codeRequired": "Enter the code from your authenticator app.",
         "reauthenticationRequired": "Please confirm it is you first.",
         "reauthenticationUnavailable": "For your security, sign out and sign in again, then make this change within 10 minutes.",
+        "notEnabled": "Two-factor authentication is not on for this account.",
         "generic": "Something went wrong. Please try again."
       }
     },
@@ -259,12 +265,19 @@
         "onDescription": "Signing in needs your password and a code from your authenticator app.",
         "offDescription": "Add a second step to signing in: a 6-digit code from Microsoft Authenticator, Google Authenticator or a similar app.",
         "authenticatorApp": "Authenticator app",
+        "recoveryCodes": "Recovery codes",
+        "recoveryCodesRemaining": "no codes left | 1 code left | {count} codes left",
+        "recoveryCodesLow": "Only a few recovery codes are left. Generate new ones so you can still sign in if you lose your phone.",
+        "regenerate": "Generate new codes",
         "enable": "Set up authenticator app",
         "replace": "Set up a new phone",
         "disable": "Turn off",
         "disableConfirmTitle": "Turn off two-factor authentication?",
         "disableConfirmDescription": "Signing in will only need your password again, and your other devices will be signed out.",
-        "disableConfirmButton": "Turn off"
+        "disableConfirmButton": "Turn off",
+        "regenerateConfirmTitle": "Generate new recovery codes?",
+        "regenerateConfirmDescription": "Your current recovery codes stop working right away, including any you have not used yet.",
+        "regenerateConfirmButton": "Generate new codes"
       },
       "setup": {
         "title": "Set up authenticator app",
@@ -274,6 +287,15 @@
         "qrLabel": "QR code for your authenticator app",
         "manualHint": "Cannot scan? Enter this setup key:",
         "confirm": "Turn on"
+      },
+      "recoveryCodes": {
+        "title": "Save your recovery codes",
+        "description": "If you lose your phone, each of these codes signs you in once. Store them somewhere safe, such as a password manager. They are shown only now.",
+        "copy": "Copy",
+        "copied": "Recovery codes copied",
+        "download": "Download .txt",
+        "stored": "I have stored these codes",
+        "done": "Done"
       },
       "reauth": {
         "title": "Confirm it is you",

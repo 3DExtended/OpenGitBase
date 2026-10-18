@@ -5,6 +5,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.AccountSecurity.Totp;
 using OpenGitBase.Features.Users;
 using OpenGitBase.Features.Users.Entities;
@@ -15,18 +16,21 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IEmailProtectionService _protection;
+    private readonly IPasswordHasherService _hasher;
     private readonly ISystemClock _clock;
     private readonly ILogger<ConfirmTotpSetupQueryHandler> _logger;
 
     public ConfirmTotpSetupQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IEmailProtectionService protection,
+        IPasswordHasherService hasher,
         ISystemClock clock,
         ILogger<ConfirmTotpSetupQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _protection = protection;
+        _hasher = hasher;
         _clock = clock;
         _logger = logger;
     }
@@ -67,10 +71,12 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
         authenticator.LastUsedTimeStep = step;
 
         var newlyEnabled = credentials.TwoFactorEnabledAt is null;
+        IReadOnlyList<string>? recoveryCodes = null;
         if (newlyEnabled)
         {
             credentials.TwoFactorEnabledAt = now;
             UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, now);
+            recoveryCodes = await RecoveryCodes.ReplaceSetAsync(context, _hasher, credentials.UserId, now, cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -79,6 +85,6 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
             _logger.LogInformation("Two-factor sign-in enabled for user {UserId} with an authenticator app", query.UserId.Value);
         }
 
-        return new TotpConfirmation(TotpConfirmationStatus.Confirmed, newlyEnabled);
+        return new TotpConfirmation(TotpConfirmationStatus.Confirmed, newlyEnabled, recoveryCodes);
     }
 }

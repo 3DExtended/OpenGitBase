@@ -76,12 +76,41 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
     ) =>
         browser.PostAsJsonAsync("/signin/two-factor", new TwoFactorSignInDto { ChallengeToken = challengeToken, Code = code });
 
+    protected static Task<HttpResponseMessage> CompleteTwoFactorWithRecoveryCodeAsync(
+        HttpClient browser,
+        string challengeToken,
+        string recoveryCode
+    ) =>
+        browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto { ChallengeToken = challengeToken, RecoveryCode = recoveryCode }
+        );
+
     protected static Task<HttpResponseMessage> ReauthenticateAsync(
         HttpClient browser,
         string password = Password,
-        string? code = null
+        string? code = null,
+        string? recoveryCode = null
     ) =>
-        browser.PostAsJsonAsync("/account/reauthenticate", new ReauthenticateDto { Password = password, Code = code });
+        browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                Password = password,
+                Code = code,
+                RecoveryCode = recoveryCode,
+            }
+        );
+
+    /// <summary>Asks for a new set of recovery codes; the browser must have re-authenticated.</summary>
+    protected static async Task<IReadOnlyList<string>> RegenerateRecoveryCodesAsync(HttpClient browser)
+    {
+        var response = await browser.PostAsync("/account/two-factor/recovery-codes", null);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<RecoveryCodesResponse>();
+        Assert.NotNull(body);
+        return body.RecoveryCodes;
+    }
 
     protected static string WrongCode(string code) => code == "000000" ? "111111" : "000000";
 
@@ -124,6 +153,21 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
         credentials.TwoFactorEnabledAt = Clock.UtcNow;
         await context.SaveChangesAsync();
         return secret;
+    }
+
+    /// <summary>
+    /// Turns 2FA on for an existing account and asks the API for its recovery codes, from a browser
+    /// that signs in and re-authenticates for that alone.
+    /// </summary>
+    protected async Task<(string Secret, IReadOnlyList<string> RecoveryCodes)> EnableTotpWithRecoveryCodesAsync(
+        string username
+    )
+    {
+        var secret = await EnableTotpAsync(username);
+        using var browser = NewBrowser();
+        await SignInWithCodeAsync(browser, username, secret);
+        (await ReauthenticateAsync(browser, code: NextCode(secret))).EnsureSuccessStatusCode();
+        return (secret, await RegenerateRecoveryCodesAsync(browser));
     }
 
     /// <summary>Moves to the next 30-second step and returns the authenticator code shown there.</summary>
