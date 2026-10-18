@@ -37,6 +37,8 @@ const {
   resume: resumePasskeyAutofill,
 } = usePasskeySignIn(token => returnTokenToCli(token), () => queryParams.value !== null)
 
+const { supported: passkeySecondFactorSupported, answer: answerWithPasskey } = usePasskeySecondFactor()
+
 useHead({ title: 'CLI sign in' })
 
 async function onSubmit() {
@@ -91,6 +93,29 @@ async function onSubmitCode(answer: SecondFactorAnswer) {
   }
 }
 
+async function onPasskeySecondFactor() {
+  if (!queryParams.value || !challenge.value) {
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    const outcome = await answerWithPasskey(challenge.value.challengeToken)
+    if ('answer' in outcome) {
+      await onSubmitCode(outcome.answer)
+      return
+    }
+    if (outcome.expired) {
+      backToPassword()
+    }
+    error.value = outcome.errorKey ? t(outcome.errorKey) : null
+  }
+  finally {
+    loading.value = false
+  }
+}
+
 function returnTokenToCli(token: string) {
   if (!queryParams.value) {
     return
@@ -135,7 +160,10 @@ function backToPassword() {
       :loading="loading"
       :error="error"
       :recovery-available="challenge.methods.includes('recovery')"
+      :code-available="challenge.methods.includes('totp')"
+      :passkey-available="passkeySecondFactorSupported && challenge.methods.includes('passkey')"
       @submit="onSubmitCode"
+      @passkey="onPasskeySecondFactor"
       @switch-method="error = null"
       @back="backToPassword"
     />

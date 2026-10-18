@@ -4,6 +4,7 @@ using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
 using OpenGitBase.Features.AccountSecurity.QueryHandlers;
 using OpenGitBase.Features.AccountSecurity.Tests.Testing;
+using OpenGitBase.Features.Users.Contracts.Models;
 
 namespace OpenGitBase.Features.AccountSecurity.Tests.QueryHandlers;
 
@@ -85,6 +86,35 @@ public class BeginTwoFactorSignInQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_UserWithAPasskey_OffersPasskey()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+
+        var start = QueryHandlerResultAssert.AssertSome(await BeginAsync(scope, userId));
+
+        Assert.Equal(["totp", "passkey", "recovery"], start.Methods);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_PasskeyOnlyTwoFactor_OffersPasskeyAndRecoveryButNoCode()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+        await scope.EnableTwoFactorWithPasskeysAsync(userId);
+
+        var start = QueryHandlerResultAssert.AssertSome(await BeginAsync(scope, userId));
+
+        Assert.True(start.Required);
+        Assert.Equal(["passkey", "recovery"], start.Methods);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_RemovesTheUsersExpiredChallenges()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();
@@ -100,4 +130,9 @@ public class BeginTwoFactorSignInQueryHandlerTests
         var challenge = await context.Set<AuthenticationChallengeEntity>().SingleAsync();
         Assert.Equal(scope.Clock.UtcNow.AddMinutes(5), challenge.ExpiresAt);
     }
+
+    private static Task<OpenGitBase.Cqrs.Option<TwoFactorSignInStart>> BeginAsync(AccountSecurityTestScope scope, UserId userId) =>
+        scope
+            .GetHandler<BeginTwoFactorSignInQueryHandler>()
+            .RunQueryAsync(new BeginTwoFactorSignInQuery { UserId = userId }, CancellationToken.None);
 }

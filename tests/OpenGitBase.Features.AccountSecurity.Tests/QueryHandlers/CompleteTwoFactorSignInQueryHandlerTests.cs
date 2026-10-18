@@ -183,6 +183,83 @@ public class CompleteTwoFactorSignInQueryHandlerTests
         Assert.All(await scope.GetRecoveryCodesAsync(userId), row => Assert.Null(row.UsedAt));
     }
 
+    [Fact]
+    public async Task RunQueryAsync_PasskeyAssertion_SignsInOnceWithoutUserVerification()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpAsync(userId);
+        using var securityKey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, securityKey);
+        // After the password, a touch of a security key is enough.
+        securityKey.UserVerified = false;
+        var token = await BeginAsync(scope, userId);
+
+        var result = await CompleteWithPasskeyAsync(scope, token, securityKey);
+
+        Assert.Equal(TwoFactorSignInStatus.Succeeded, result.Status);
+        Assert.Equal(userId, result.UserId);
+        Assert.Equal(scope.Clock.UtcNow, Assert.Single(await scope.GetPasskeysAsync(userId)).LastUsedAt);
+        Assert.Equal(TwoFactorSignInStatus.ChallengeExpired, (await CompleteWithPasskeyAsync(scope, token, securityKey)).Status);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_PasskeyOnlyTwoFactor_SignsInWithThePasskey()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+        await scope.EnableTwoFactorWithPasskeysAsync(userId);
+
+        var result = await CompleteWithPasskeyAsync(scope, await BeginAsync(scope, userId), passkey);
+
+        Assert.Equal(TwoFactorSignInStatus.Succeeded, result.Status);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_AnotherUsersPasskey_IsRejectedAndCounted()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var alice = await scope.SeedUserAsync("alice");
+        var mallory = await scope.SeedUserAsync("mallory");
+        await scope.EnableTotpAsync(alice);
+        using var alicesPasskey = AccountSecurityTestScope.NewPasskey();
+        using var mallorysPasskey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(alice, alicesPasskey);
+        await scope.RegisterPasskeyAsync(mallory, mallorysPasskey);
+
+        var result = await CompleteWithPasskeyAsync(scope, await BeginAsync(scope, alice), mallorysPasskey);
+
+        Assert.Equal(TwoFactorSignInStatus.PasskeyRejected, result.Status);
+        Assert.Null(result.UserId);
+        Assert.Equal(1, (await scope.GetCredentialsAsync(alice)).SecondFactorFailedAttempts);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_FiveRejectedPasskeys_LockTheSecondStep()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpAsync(userId);
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+        var token = await BeginAsync(scope, userId);
+        passkey.Origin = "https://opengitbase.evil.example";
+
+        var results = new List<TwoFactorSignInResult>();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            results.Add(await CompleteWithPasskeyAsync(scope, token, passkey));
+        }
+
+        Assert.All(results.Take(4), result => Assert.Equal(TwoFactorSignInStatus.PasskeyRejected, result.Status));
+        Assert.Equal(TwoFactorSignInStatus.LockedOut, results[4].Status);
+        passkey.Origin = AccountSecurityTestScope.WebAuthnOrigin;
+        var afterLockout = await CompleteWithPasskeyAsync(scope, await BeginAsync(scope, userId), passkey);
+        Assert.Equal(TwoFactorSignInStatus.LockedOut, afterLockout.Status);
+    }
+
     private static async Task<string> BeginAsync(AccountSecurityTestScope scope, UserId userId)
     {
         var start = QueryHandlerResultAssert.AssertSome(
@@ -198,6 +275,36 @@ public class CompleteTwoFactorSignInQueryHandlerTests
         Option<TwoFactorSignInResult> result = await scope
             .GetHandler<CompleteTwoFactorSignInQueryHandler>()
             .RunQueryAsync(new CompleteTwoFactorSignInQuery { ChallengeToken = token, Code = code }, CancellationToken.None);
+        return QueryHandlerResultAssert.AssertSome(result);
+    }
+
+    /// <summary>Asks for passkey options with the challenge token, then answers with <paramref name="passkey"/>.</summary>
+    private static async Task<TwoFactorSignInResult> CompleteWithPasskeyAsync(
+        AccountSecurityTestScope scope,
+        string token,
+        SoftwarePasskeyAuthenticator passkey
+    )
+    {
+        var options = QueryHandlerResultAssert.AssertSome(
+            await scope
+                .GetHandler<StartTwoFactorPasskeyQueryHandler>()
+                .RunQueryAsync(new StartTwoFactorPasskeyQuery { ChallengeToken = token }, CancellationToken.None)
+        );
+        if (options.OptionsJson is null)
+        {
+            return new TwoFactorSignInResult(TwoFactorSignInStatus.ChallengeExpired);
+        }
+
+        Option<TwoFactorSignInResult> result = await scope
+            .GetHandler<CompleteTwoFactorSignInQueryHandler>()
+            .RunQueryAsync(
+                new CompleteTwoFactorSignInQuery
+                {
+                    ChallengeToken = token,
+                    PasskeyAssertionJson = passkey.GetAssertion(options.OptionsJson),
+                },
+                CancellationToken.None
+            );
         return QueryHandlerResultAssert.AssertSome(result);
     }
 

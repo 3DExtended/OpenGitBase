@@ -102,7 +102,8 @@ public class SignInController : ControllerBase
 
     /// <summary>
     /// The second sign-in step for accounts with 2FA on: answers the challenge from <c>login</c>,
-    /// <c>google</c> or <c>apple</c> with an authenticator code and returns the session token.
+    /// <c>google</c> or <c>apple</c> with an authenticator code, a recovery code or a passkey assertion,
+    /// and returns the session token.
     /// </summary>
     [HttpPost("two-factor")]
     [AllowAnonymous]
@@ -112,13 +113,34 @@ public class SignInController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        if (
-            requestDto == null
-            || string.IsNullOrWhiteSpace(requestDto.ChallengeToken)
-            || string.IsNullOrWhiteSpace(requestDto.Code) == string.IsNullOrWhiteSpace(requestDto.RecoveryCode)
-        )
+        if (requestDto == null || string.IsNullOrWhiteSpace(requestDto.ChallengeToken))
         {
             return BadRequest();
+        }
+
+        var passkeyAssertion = requestDto.PasskeyAssertion is { ValueKind: not JsonValueKind.Null } assertion
+            ? assertion
+            : (JsonElement?)null;
+        var answers =
+            (string.IsNullOrWhiteSpace(requestDto.Code) ? 0 : 1)
+            + (string.IsNullOrWhiteSpace(requestDto.RecoveryCode) ? 0 : 1)
+            + (passkeyAssertion is null ? 0 : 1);
+        if (answers != 1)
+        {
+            return BadRequest();
+        }
+
+        if (passkeyAssertion is not null)
+        {
+            if (!_webAuthnOptions.Enabled)
+            {
+                return NotFound();
+            }
+
+            if (passkeyAssertion.Value.ValueKind != JsonValueKind.Object)
+            {
+                return BadRequest();
+            }
         }
 
         var result = await _queryProcessor
@@ -128,6 +150,7 @@ public class SignInController : ControllerBase
                     ChallengeToken = requestDto.ChallengeToken,
                     Code = requestDto.Code?.Trim() ?? string.Empty,
                     RecoveryCode = requestDto.RecoveryCode,
+                    PasskeyAssertionJson = passkeyAssertion?.GetRawText(),
                 },
                 cancellationToken
             )
@@ -145,6 +168,8 @@ public class SignInController : ControllerBase
                     : Ok(token);
             case TwoFactorSignInStatus.InvalidCode:
                 return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.InvalidCode });
+            case TwoFactorSignInStatus.PasskeyRejected:
+                return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.PasskeyRejected });
             case TwoFactorSignInStatus.LockedOut:
                 return StatusCode(
                     StatusCodes.Status429TooManyRequests,
@@ -157,6 +182,44 @@ public class SignInController : ControllerBase
             default:
                 return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.ChallengeExpired });
         }
+    }
+
+    /// <summary>
+    /// Request options for answering the second sign-in step with one of the user's passkeys. After the
+    /// password, user verification is only preferred, so a security-key touch is enough.
+    /// </summary>
+    [HttpPost("two-factor/passkey-options")]
+    [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult> StartTwoFactorPasskeyAsync(
+        [FromBody] TwoFactorPasskeyOptionsDto requestDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        if (requestDto == null || string.IsNullOrWhiteSpace(requestDto.ChallengeToken))
+        {
+            return BadRequest();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(new StartTwoFactorPasskeyQuery { ChallengeToken = requestDto.ChallengeToken }, cancellationToken)
+            .ConfigureAwait(false);
+        var options = result.IsSome
+            ? result.Get()
+            : new TwoFactorPasskeyOptions(TwoFactorPasskeyOptionsStatus.ChallengeExpired);
+        return options.Status switch
+        {
+            TwoFactorPasskeyOptionsStatus.Issued => Content(options.OptionsJson!, "application/json"),
+            TwoFactorPasskeyOptionsStatus.NoPasskeys => BadRequest(
+                new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.NoPasskeys }
+            ),
+            _ => Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.ChallengeExpired }),
+        };
     }
 
     /// <summary>

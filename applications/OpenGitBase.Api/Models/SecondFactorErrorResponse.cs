@@ -16,6 +16,8 @@ public class SecondFactorErrorResponse
     public const string PasskeyAlreadyRegistered = "passkey_already_registered";
     public const string NoPasskeys = "no_passkeys";
     public const string InvalidName = "invalid_name";
+    public const string TwoFactorAlreadyEnabled = "two_factor_already_enabled";
+    public const string LastSecondFactor = "last_second_factor";
 
     public string Error { get; set; } = string.Empty;
 

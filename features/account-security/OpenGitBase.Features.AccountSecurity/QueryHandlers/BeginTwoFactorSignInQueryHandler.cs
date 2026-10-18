@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Challenges;
@@ -15,11 +16,17 @@ public class BeginTwoFactorSignInQueryHandler : IQueryHandler<BeginTwoFactorSign
     private static readonly TimeSpan ChallengeLifetime = TimeSpan.FromMinutes(5);
 
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly WebAuthnOptions _webAuthnOptions;
     private readonly ISystemClock _clock;
 
-    public BeginTwoFactorSignInQueryHandler(IDbContextFactory<OpenGitBaseDbContext> contextFactory, ISystemClock clock)
+    public BeginTwoFactorSignInQueryHandler(
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        WebAuthnOptions webAuthnOptions,
+        ISystemClock clock
+    )
     {
         _contextFactory = contextFactory;
+        _webAuthnOptions = webAuthnOptions;
         _clock = clock;
     }
 
@@ -51,6 +58,14 @@ public class BeginTwoFactorSignInQueryHandler : IQueryHandler<BeginTwoFactorSign
         )
         {
             methods.Add("totp");
+        }
+
+        if (
+            _webAuthnOptions.Enabled
+            && await context.Set<UserPasskeyEntity>().AnyAsync(p => p.UserId == query.UserId.Value, cancellationToken)
+        )
+        {
+            methods.Add("passkey");
         }
 
         if (await RecoveryCodes.CountUnusedAsync(context, query.UserId.Value, cancellationToken) > 0)

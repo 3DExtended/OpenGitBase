@@ -62,6 +62,34 @@ public class DisableTwoFactorQueryHandlerTests
         Assert.True(result.IsNone);
     }
 
+    [Fact]
+    public async Task RunQueryAsync_PasskeyOnlyTwoFactor_TurnsOffAndThePasskeyStillSignsIn()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+        await scope.EnableTwoFactorWithPasskeysAsync(userId);
+
+        await DisableAsync(scope, userId);
+
+        Assert.Null((await scope.GetCredentialsAsync(userId)).TwoFactorEnabledAt);
+        Assert.Empty(await scope.GetRecoveryCodesAsync(userId));
+        Assert.Single(await scope.GetPasskeysAsync(userId));
+        var options = QueryHandlerResultAssert.AssertSome(
+            await scope.GetHandler<StartPasskeySignInQueryHandler>().RunQueryAsync(new StartPasskeySignInQuery(), CancellationToken.None)
+        );
+        var signIn = QueryHandlerResultAssert.AssertSome(
+            await scope
+                .GetHandler<CompletePasskeySignInQueryHandler>()
+                .RunQueryAsync(
+                    new CompletePasskeySignInQuery { AssertionResponseJson = passkey.GetAssertion(options.OptionsJson) },
+                    CancellationToken.None
+                )
+        );
+        Assert.Equal(PasskeySignInStatus.SignedIn, signIn.Status);
+    }
+
     private static Task<OpenGitBase.Cqrs.Option<OpenGitBase.Cqrs.Unit>> DisableAsync(
         AccountSecurityTestScope scope,
         UserId userId

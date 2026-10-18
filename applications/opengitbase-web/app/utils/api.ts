@@ -1658,6 +1658,13 @@ export function createApi(baseUrl: string) {
       completeTwoFactor: (body: { challengeToken: string } & SecondFactorAnswer) =>
         request<string>('/signin/two-factor', { method: 'POST', body: JSON.stringify(body) }),
 
+      /** Request options for answering the second step with one of the account's passkeys. */
+      twoFactorPasskeyOptions: (body: { challengeToken: string }) =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/signin/two-factor/passkey-options', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+
       /** Request options for any passkey of this site; `404` while passkeys are off. */
       passkeySignInOptions: () =>
         request<PublicKeyCredentialRequestOptionsJSON>('/signin/passkey/options', { method: 'POST' }),
@@ -1715,9 +1722,14 @@ export function createApi(baseUrl: string) {
       security: () =>
         request<AccountSecurity>('/account/security'),
 
-      /** Confirms the caller again for 10 minutes before a security change. */
+      /**
+       * Confirms the caller again for 10 minutes before a security change. With the password, a
+       * passkey stands in for the code; on its own it must verify the user.
+       */
       reauthenticate: (
-        body: { password: string, code?: string, recoveryCode?: string } | { passkeyAssertion: PasskeyCredentialJSON },
+        body:
+          | { password: string, code?: string, recoveryCode?: string }
+          | { passkeyAssertion: PasskeyCredentialJSON, password?: string },
       ) =>
         request<null>('/account/reauthenticate', { method: 'POST', body: JSON.stringify(body) }),
 
@@ -1752,6 +1764,12 @@ export function createApi(baseUrl: string) {
       /** Replaces every recovery code; the new set is only in this answer. */
       regenerateRecoveryCodes: () =>
         request<{ recoveryCodes: string[] }>('/account/two-factor/recovery-codes', { method: 'POST' }),
+
+      /** Turns 2FA on with the account's passkeys; the first recovery codes are only in this answer. */
+      enableTwoFactorWithPasskeys: () =>
+        request<{ twoFactorEnabled: boolean, recoveryCodes?: string[] | null }>('/account/two-factor/enable', {
+          method: 'POST',
+        }),
 
       disableTwoFactor: () =>
         request<{ twoFactorEnabled: boolean }>('/account/two-factor/disable', { method: 'POST' }),

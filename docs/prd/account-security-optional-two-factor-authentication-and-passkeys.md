@@ -127,7 +127,9 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 - `POST /signin/login` (and the Google/Apple sign-in endpoints) keep returning the session token string and cookie when 2FA is off, unchanged. When 2FA is on they return `200 { "twoFactorRequired": true, "challengeToken": "…", "methods": ["totp","passkey","recovery"] }` and set no cookie. Clients tell the two apart by the `twoFactorRequired` field (web `useAuth`, `cli/auth.vue`, MSW mocks); consumers that never meet 2FA, such as the API test base and E2E `TestIsolation`, are unaffected.
 - `challengeToken` is a random opaque value whose SHA-256 is stored in `AuthenticationChallenges` (purpose `TwoFactorSignIn`, 5-minute lifetime). It is not a JWT, so bearer authentication never accepts it.
-- `POST /signin/two-factor` with `{ challengeToken, code }`, `{ challengeToken, recoveryCode }`, or `{ challengeToken, passkeyAssertion }` (after `POST /signin/two-factor/passkey-options`). On success the challenge is consumed and the normal session token and cookie are issued. Errors: `401 { error: "invalid_code" | "challenge_expired" }`, `429 { error: "locked_out", lockedUntil }`.
+- `POST /signin/two-factor` with exactly one of `{ challengeToken, code }`, `{ challengeToken, recoveryCode }` and `{ challengeToken, passkeyAssertion }`. On success the challenge is consumed and the normal session token and cookie are issued. Errors: `401 { error: "invalid_code" | "passkey_rejected" | "challenge_expired" }`, `429 { error: "locked_out", lockedUntil }`.
+- The passkey answer needs `POST /signin/two-factor/passkey-options` with `{ challengeToken }` first. It returns request options for the user's passkeys (`401 challenge_expired`, `400 no_passkeys`) and stores them as a single-use `PasskeySecondFactor` challenge. A rejected assertion counts like a wrong code. `methods` only lists `passkey` while passkeys are switched on, so accounts with passkey-only 2FA fall back to their recovery codes if an instance switches passkeys off again.
+
 - Attempt limits:
   - One per-account counter (`SecondFactorFailedAttempts`) counts wrong second-factor attempts across challenges and re-authentications, so signing in again does not reset it.
   - The 5th consecutive failure sets `SecondFactorLockedUntil` to 15 minutes from now, returns `429`, consumes the current challenge (the user starts over with the password), and emails the user (email from mfa-06). The counter resets on success.
@@ -139,7 +141,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 - Registration (signed in, re-authenticated): `POST /account/passkeys/registration-options` → `POST /account/passkeys` with `{ name, attestationResponse }`. Errors: `400 { error: "invalid_name" | "passkey_rejected" | "challenge_expired" }`, `409 { error: "passkey_already_registered" }`. Management: `GET /account/passkeys`, `PATCH /account/passkeys/{id}` (rename, session only), `DELETE /account/passkeys/{id}` (re-authenticated); another user's passkey is `404`.
 - Sign-in: `POST /signin/passkey/options` → `POST /signin/passkey` with `{ assertion }`. Uses discoverable credentials (usernameless, empty `allowCredentials`), so the endpoint never reveals whether a username exists. The challenge in the answer's `clientDataJSON` finds the anonymous `PasskeySignIn` row, so no separate challenge token is needed. User verification is `required`; a successful passkey sign-in satisfies 2FA and returns the session token and cookie like `POST /signin/login`. Every failure is the same `401 { error: "passkey_rejected" }`. The web sign-in and CLI sign-in pages offer a "Sign in with a passkey" button and, where the browser supports conditional mediation, the passkeys in the username field (`autocomplete="username webauthn"`).
-- As a second factor, user verification is `preferred` (a security-key touch is enough after the password).
+- As a second factor, user verification is `preferred` (a security-key touch is enough after the password). The same holds for a passkey that comes with the password in a re-authentication. On its own, a passkey must verify the user; the server checks the UV flag in the signed authenticator data, not only the options.
 - Attestation conveyance `none`; no FIDO Metadata Service.
 - The WebAuthn user handle is the user's GUID bytes (no PII).
 - Configuration section `WebAuthn`:
@@ -162,11 +164,14 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 - TOTP:
   - `POST /account/two-factor/totp/setup` returns `{ otpauthUri, secret }` and stores the pending secret.
   - `POST /account/two-factor/totp/confirm` with `{ code }`. The first confirmation sets `TwoFactorEnabledAt` and returns 10 recovery codes once.
-  - `DELETE /account/two-factor/totp` is allowed only if another second factor remains or 2FA is being disabled. It arrives with the last-factor rule in mfa-05; until then the authenticator is removed by disabling 2FA.
-- `POST /account/two-factor/enable` (requires at least one passkey) turns 2FA on without an authenticator app and returns recovery codes.
+  - There is no endpoint that removes the authenticator app on its own (mfa-05 left out `DELETE /account/two-factor/totp`). Setting it up again replaces it, and disabling 2FA removes it. To move to passkeys only, a user turns 2FA off and on again with the passkeys.
+- `POST /account/two-factor/enable` turns 2FA on without an authenticator app.
+  - It requires re-authentication, at least one passkey, `TwoFactor:Enabled` and passkeys switched on.
+  - It returns 10 recovery codes once, revokes every session and re-issues the caller's.
+  - Errors: `400 no_passkeys`, `409 two_factor_already_enabled`, and `404` while a switch is off.
 - `POST /account/two-factor/disable` takes no body. Like every sensitive change it needs a recent re-authentication of the session, which already asks for the password and a second factor. It removes the TOTP authenticator and recovery codes and clears `TwoFactorEnabledAt`. Passkeys stay as sign-in methods.
 - `POST /account/two-factor/recovery-codes` regenerates the set and returns it once (`400 two_factor_not_enabled` without 2FA).
-- Deleting the last second factor while 2FA is on returns `409`.
+- Deleting the last second factor while 2FA is on returns `409 { error: "last_second_factor" }`. Since the authenticator app cannot be removed on its own, this means the last passkey of an account without one.
 - Turning 2FA on or off sets `SessionsValidAfter` and re-issues the caller's token, reusing the change-password pattern.
 - otpauth label: `{issuer}:{username}` with `issuer={issuer}`. The issuer comes from configuration (`TwoFactor:Issuer`, default `OpenGitBase`) so self-hosted instances show their own name.
 
@@ -175,7 +180,10 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 Turning 2FA on or off, adding or removing a passkey, setting up or removing TOTP, and regenerating recovery codes require a recent confirmation. Any of these counts:
 
 - the current password (and, with 2FA on, a second factor; a recovery code counts, so a lost phone can still be replaced) via `POST /account/reauthenticate`;
-- a passkey assertion: `POST /account/reauthenticate/passkey-options` (`400 no_passkeys` without one), then `POST /account/reauthenticate` with `{ passkeyAssertion }`. User verification is required, so no code is asked for; a used or expired challenge is `401 challenge_expired`, anything else `401 passkey_rejected`;
+- a passkey assertion: `POST /account/reauthenticate/passkey-options` (`400 no_passkeys` without one), then `POST /account/reauthenticate`.
+  - With `{ passkeyAssertion }` alone, user verification is required, so no code is asked for.
+  - With `{ password, passkeyAssertion }`, the passkey stands in for the code, and a security-key touch is enough. A wrong password is `401 invalid_credentials`.
+  - A used or expired challenge is `401 challenge_expired`, anything else `401 passkey_rejected`;
 - for accounts without a password (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim). Adding a passkey keeps this rule; such an account can also confirm with the passkey.
 
 A sensitive endpoint without a recent confirmation answers `403 { error: "reauthentication_required" }`; the web app then asks for it and repeats the action. The confirmation is recorded as a 10-minute `ReAuthentication` challenge bound to the user and the session's `jti`. This prevents someone holding a stolen session from enabling 2FA on the victim's account and locking them out.
@@ -211,9 +219,9 @@ There is no admin user management UI yet, so v1 exposes the API only; the operat
 - `sign-in.vue`:
   - "Sign in with a passkey" button.
   - Conditional mediation on the username field (`autocomplete="username webauthn"`).
-  - Second-step view with a 6-digit code field (`autocomplete="one-time-code"`, `inputmode="numeric"`) and switches to "Use a passkey" and "Use a recovery code".
+  - Second-step view with a 6-digit code field (`autocomplete="one-time-code"`, `inputmode="numeric"`) and switches to "Use a passkey" and "Use a recovery code". Accounts with passkey-only 2FA get the passkey as the main action and no code field.
 - New `settings/security.vue`:
-  - 2FA status.
+  - 2FA status, with "Turn on with your passkeys" once the account has a passkey.
   - Authenticator setup dialog with QR code and setup key.
   - Recovery codes (show once, copy, download as `.txt`, regenerate).
   - Passkey list (add, rename, delete).

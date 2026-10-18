@@ -146,6 +146,14 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
         return confirmation.Get().RecoveryCodes!;
     }
 
+    /// <summary>Turns 2FA on with the user's passkeys alone, as the security page does; returns the recovery codes.</summary>
+    public async Task<IReadOnlyList<string>> EnableTwoFactorWithPasskeysAsync(UserId userId)
+    {
+        var activation = await GetHandler<EnableTwoFactorWithPasskeysQueryHandler>()
+            .RunQueryAsync(new EnableTwoFactorWithPasskeysQuery { UserId = userId }, CancellationToken.None);
+        return activation.Get().RecoveryCodes!;
+    }
+
     /// <summary>Registers <paramref name="passkey"/> the way the browser does: options, then the attestation.</summary>
     public async Task<PasskeyRegistrationResult> RegisterPasskeyAsync(
         UserId userId,

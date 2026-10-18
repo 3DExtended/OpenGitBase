@@ -143,6 +143,29 @@ async function confirmSetup(code: string) {
   }
 }
 
+/** Turns 2FA on with the passkeys alone; the recovery codes panel follows, as after an authenticator setup. */
+async function enableWithPasskeys() {
+  busy.value = true
+  actionError.value = null
+  notice.value = null
+  try {
+    const result = await api.account.enableTwoFactorWithPasskeys()
+    if (needsReauthentication(result, enableWithPasskeys)) {
+      return
+    }
+    if (result.error) {
+      actionError.value = t(secondFactorErrorKey(result.error, result.status))
+      return
+    }
+    recoveryCodes.value = result.data?.recoveryCodes?.length ? result.data.recoveryCodes : null
+    notice.value = t('settings.security.enabledNotice')
+    await Promise.all([load(), auth.fetchMe()])
+  }
+  finally {
+    busy.value = false
+  }
+}
+
 async function disable() {
   showDisableConfirm.value = false
   busy.value = true
@@ -295,7 +318,8 @@ async function reauthenticate(credentials: { password: string, code?: string, re
   }
 }
 
-async function reauthenticateWithPasskey() {
+/** With the typed password the passkey stands in for the code; without one it must verify the user. */
+async function reauthenticateWithPasskey(password: string) {
   reauthLoading.value = true
   reauthError.value = null
   try {
@@ -312,7 +336,7 @@ async function reauthenticateWithPasskey() {
       reauthError.value = t(passkeyErrorKey(error))
       return
     }
-    const result = await api.account.reauthenticate({ passkeyAssertion })
+    const result = await api.account.reauthenticate(password ? { passkeyAssertion, password } : { passkeyAssertion })
     if (result.error) {
       reauthError.value = t(passkeyApiErrorKey(result.error, result.status))
       return
@@ -423,7 +447,9 @@ onMounted(() => {
           v-else
           :status="status"
           :busy="busy"
+          :passkey-count="showPasskeys ? passkeys.length : 0"
           @setup="startSetup"
+          @enable-with-passkeys="enableWithPasskeys"
           @disable="showDisableConfirm = true"
           @regenerate="showRegenerateConfirm = true"
         />
@@ -553,6 +579,7 @@ onMounted(() => {
           <SettingsReauthenticateForm
             :needs-password="status?.hasPassword ?? true"
             :needs-code="status?.twoFactorEnabled ?? false"
+            :totp-configured="status?.totpConfigured ?? true"
             :recovery-available="(status?.recoveryCodesRemaining ?? 0) > 0"
             :passkey-available="canReauthenticateWithPasskey"
             :loading="reauthLoading"

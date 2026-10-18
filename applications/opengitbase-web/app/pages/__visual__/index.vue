@@ -34,6 +34,8 @@ const securityOnFixture: AccountSecurity = {
 }
 // mfa-02: two codes left shows the warning.
 const securityLowFixture: AccountSecurity = { ...securityOnFixture, recoveryCodesRemaining: 2 }
+// mfa-05: 2FA on with the passkeys alone, no authenticator app.
+const securityPasskeysOnlyFixture: AccountSecurity = { ...securityOnFixture, totpConfigured: false }
 // mfa-03: one synced passkey in use and one never used; dates relative to the frozen visual clock.
 const passkeysFixture: Passkey[] = [
   {
@@ -469,6 +471,45 @@ const selfHostOptions = [
 
     <section
       class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-passkey-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in with a passkey
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          passkey-available
+          recovery-available
+        />
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          :code-available="false"
+          passkey-available
+          recovery-available
+          :error="t('settings.security.passkeys.errors.rejected')"
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
       data-testid="visual-two-factor-recovery-sign-in"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
@@ -487,6 +528,37 @@ const selfHostOptions = [
           initial-code="abcde-fghij"
           initial-recovery
           recovery-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-security-passkey-two-factor"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-factor authentication with passkeys
+      </h2>
+      <SettingsTwoFactorStatusCard
+        :status="securityOffFixture"
+        :passkey-count="2"
+      />
+      <SettingsTwoFactorStatusCard
+        :status="securityPasskeysOnlyFixture"
+        :passkey-count="2"
+      />
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          needs-code
+          :totp-configured="false"
+          recovery-available
+          passkey-available
         />
       </UCard>
     </section>
