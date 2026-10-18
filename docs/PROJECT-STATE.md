@@ -2,7 +2,7 @@
 
 **Purpose:** Baseline for planning encryption improvements and distributed-system evolution.  
 **Audience:** Agents and engineers entering the codebase cold.  
-**Last updated:** 2026-10-15
+**Last updated:** 2026-10-18
 
 For local setup and ports, see [README.md](../README.md). For feature-level design specs, see [prd/](prd/).
 
@@ -136,7 +136,7 @@ flowchart TB
 | Admin replication dashboard | Done | Web + API |
 | Git HTTPS via HAProxy | Done | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) |
 | Optional SSH git (`--profile ssh`) | Done | Port 2211 via HAProxy |
-| Git LFS over HTTPS | Done, off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
+| Git LFS over HTTPS | Done; on in production since 2026-10-18 (100 MiB per object), off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
 
 ### 3.4 Testing and ops
 

@@ -1,5 +1,4 @@
 ﻿using System.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -23,7 +22,6 @@ public sealed class LfsHandler
 
     // git-lfs waits this long before it retries a download that answered 503.
     private const int RepairRetryAfterSeconds = 10;
-    private static readonly byte[] NoLocks = Encoding.UTF8.GetBytes("""{"ours":[],"theirs":[]}""");
 
     private readonly LfsApiClient _api;
     private readonly LfsObjectTransferService _transfers;
@@ -55,10 +53,10 @@ public sealed class LfsHandler
                     await HandleVerifyAsync(context, request).ConfigureAwait(false);
                     break;
                 case LfsRequestKind.LocksVerify:
-                    // Locking is not offered. Answering "no locks" keeps git push from printing a hint.
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    context.Response.ContentType = LfsContentType;
-                    await context.Response.Body.WriteAsync(NoLocks, context.RequestAborted).ConfigureAwait(false);
+                    // Locking is not offered. On 501 git-lfs sets lfs.<url>.locksverify false once and pushes
+                    // without a hint; a 200 ("no locks") makes it suggest enabling locking on every push.
+                    await WriteErrorAsync(context, StatusCodes.Status501NotImplemented, "Locking is not supported.")
+                        .ConfigureAwait(false);
                     break;
                 default:
                     await WriteErrorAsync(context, StatusCodes.Status404NotFound, "Not found.").ConfigureAwait(false);

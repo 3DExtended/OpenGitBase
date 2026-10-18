@@ -20,7 +20,8 @@ End-to-end Git LFS over HTTPS with the basic transfer adapter, plaintext on the 
   Smart HTTP proxy: batch relay (`application/vnd.git-lfs+json`, `WWW-Authenticate` on 401), streaming
   upload with the request body limit set to exactly the declared size (Content-Length must match → 422,
   missing → 411), streaming download with target fallback on 404, verify relay, `locks/verify` stub
-  (`{"ours":[],"theirs":[]}`) so git-lfs never prompts about the locking API.
+  (`{"ours":[],"theirs":[]}`) so git-lfs never prompts about the locking API. lfs-09 replaced it with `501`: on
+  `200` git-lfs 3.7 suggests enabling locking on every push.
 
 ### Deviation from the slice text
 
