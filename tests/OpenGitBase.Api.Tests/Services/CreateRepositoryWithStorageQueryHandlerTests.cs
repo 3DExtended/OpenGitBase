@@ -51,73 +51,9 @@ public class CreateRepositoryWithStorageQueryHandlerTests
     public async Task RunQueryAsync_ProvisionsAllThreeNodesAndPersistsReplicaRows()
     {
         await using var connection = SqliteTestConnection.OpenInMemory();
-
-        var nodes = CreateNodes(3);
-        var queryProcessor = Substitute.For<IQueryProcessor>();
-        queryProcessor
-            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Option<OrganizationDto>.None);
-        queryProcessor
-            .RunQueryAsync(
-                Arg.Any<ListHealthyStorageNodesQuery>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(Option.From<IReadOnlyList<StorageNodeDto>>(nodes));
-
-        foreach (var node in nodes)
-        {
-            queryProcessor
-                .RunQueryAsync(
-                    Arg.Is<GetStorageNodeApiTokenQuery>(query =>
-                        query.StorageNodeId == node.Id
-                    ),
-                    Arg.Any<CancellationToken>()
-                )
-                .Returns(Option.From($"token-{node.NodeId}"));
-        }
-
         var provisioner = Substitute.For<IStorageProvisionerClient>();
-        provisioner
-            .ProvisionRepositoryAsync(
-                Arg.Any<StorageNodeDto>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<long>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(new StorageProvisionerResult { Success = true });
-
-        var services = new ServiceCollection();
-        services.AddSingleton<IFeatureAssemblyProvider>(
-            new FeatureAssemblyProvider([typeof(RepositoryMapsterConfig).Assembly])
-        );
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
-        var mapsterConfig = new TypeAdapterConfig();
-        new RepositoryMapsterConfig().Register(mapsterConfig);
-        services.AddSingleton(mapsterConfig);
-        services.AddSingleton<IMapper>(sp => new Mapper(
-            sp.GetRequiredService<TypeAdapterConfig>()
-        ));
-        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
-        repositoryKeyService
-            .GenerateAndStoreKeyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(1);
-
-        services.AddSingleton(queryProcessor);
-        services.AddSingleton(provisioner);
-        services.AddSingleton(repositoryKeyService);
-        services.AddSingleton(new RepositoryStorageQuotaOptions { Enabled = false });
-        services.AddSingleton<CreateRepositoryWithStorageQueryHandler>();
-
-        await using var serviceProvider = services.BuildServiceProvider();
-        var contextFactory = serviceProvider.GetRequiredService<
-            IDbContextFactory<OpenGitBaseDbContext>
-        >();
-        await using (var context = await contextFactory.CreateDbContextAsync())
-        {
-            await context.Database.EnsureCreatedAsync();
-        }
+        await using var serviceProvider = await BuildProvisioningServicesAsync(connection, provisioner);
+        var contextFactory = serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
 
         var handler = serviceProvider.GetRequiredService<CreateRepositoryWithStorageQueryHandler>();
         var result = await handler.RunQueryAsync(CreateQuery(), CancellationToken.None);
