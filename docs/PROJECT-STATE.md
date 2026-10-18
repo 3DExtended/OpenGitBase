@@ -101,6 +101,7 @@ flowchart TB
 | JWT in httpOnly cookies + Bearer | Done | [Startup.cs](../applications/OpenGitBase.Api/Startup.cs), [AuthCookieService.cs](../applications/OpenGitBase.Api/Services/AuthCookieService.cs) |
 | Admin role (`role=admin` claim) | Done | Admin controllers |
 | Two-factor sign-in (authenticator app, TOTP, recovery codes) | mfa-01 done, deployed 2026-10-18; mfa-02 (recovery codes) done; off by default and in production (`TwoFactor:Enabled`) until notifications and admin reset (mfa-06) ship | [features/account-security/](../features/account-security/), [AccountSecurityController.cs](../applications/OpenGitBase.Api/Controllers/AccountSecurityController.cs), `POST /signin/two-factor`, `settings/security.vue`; PRD [account-security-…](prd/account-security-optional-two-factor-authentication-and-passkeys.md) (#244) |
+| Passkeys (WebAuthn, Fido2NetLib) | mfa-03 done: register, rename, delete, re-authenticate with a passkey; sign-in with a passkey (mfa-04) and as second factor (mfa-05) open. Off while `WebAuthn:RelyingPartyId` is empty, which it is in production until mfa-06 | [PasskeysController.cs](../applications/OpenGitBase.Api/Controllers/PasskeysController.cs), [PasskeyCeremonies.cs](../features/account-security/OpenGitBase.Features.AccountSecurity/Passkeys/PasskeyCeremonies.cs), `utils/webauthn.ts`, `SettingsPasskeysCard` |
 | Personal access tokens (HTTPS git) | Done | [features/git-access-token/](../features/git-access-token/) |
 | SSH public keys (git over SSH) | Done | [features/public-git-ssh-key/](../features/public-git-ssh-key/) |
 | Repository-level authz (private repos) | Done | [RepositoryContentAuthorizationService.cs](../applications/OpenGitBase.Api/Services/RepositoryContentAuthorizationService.cs) |
@@ -265,6 +266,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 | 2FA recovery codes | ASP.NET `PasswordHasher` only; no SHA256 lookup hash (50-bit codes), checked against the user's unused hashes | `UserRecoveryCodeEntity.CodeHash` |
 | Git LFS objects on encrypted replicas | Segmented AES-256-GCM (1 MiB segments) with the Repository Key, encrypted and decrypted only in the API | [LfsObjectCipher.cs](../applications/OpenGitBase.Api/Services/LfsObjectCipher.cs), `/var/lib/opengitbase/lfs/` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
+| Passkey public keys | Plain (public keys are not secret); no rotation entry | `UserPasskeyEntity.PublicKey` |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
 | Transport: storage peer sync | mTLS (per-node X.509) | nginx :8443, [docker/pki/](../docker/pki/) |
 | Transport: user-facing | TLS at edge (deployment-dependent) | HAProxy/Caddy; local dev often HTTP |
@@ -311,7 +313,7 @@ From [code-review-remediation/](issues/code-review-remediation/README.md):
 | Module | DB | Public API | Notes |
 |--------|-----|------------|-------|
 | Users | yes | auth routes | Email encrypted |
-| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/signin/two-factor` | TOTP, recovery codes, challenges, lockout, re-authentication |
+| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/account/passkeys`, `/signin/two-factor` | TOTP, recovery codes, passkeys, challenges, lockout, re-authentication |
 | Repository | yes | yes | HA provisioning |
 | RepositoryMember | yes | yes | |
 | Organization | yes | yes | Invites |
