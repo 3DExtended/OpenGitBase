@@ -47,6 +47,41 @@ public class RepositoryKeyServiceTests
     }
 
     [Fact]
+    public async Task GenerateAndStoreKeyAsync_StoresOneKeyWhenTheCommitAcknowledgementIsLost()
+    {
+        // Repository create stores the key after the repository commits; a duplicate key there rolled back its storage.
+        var repositoryId = Guid.NewGuid();
+        var lostCommit = new LostCommitSimulator();
+        var (service, provider) = await CreateServiceAsync(
+            context =>
+                context.Set<RepositoryEntity>().Add(
+                    new RepositoryEntity
+                    {
+                        Id = repositoryId,
+                        Name = "demo",
+                        Slug = "demo",
+                        PhysicalPath = "/srv/git/demo.git",
+                        OwnerUserId = Guid.NewGuid(),
+                        ReplicationState = ReplicationState.Rf3Healthy,
+                    }
+                ),
+            lostCommit.Configure
+        );
+        await using (provider)
+        {
+            lostCommit.LoseNextCommitInserting("RepositoryKey");
+
+            var version = await service.GenerateAndStoreKeyAsync(repositoryId, CancellationToken.None);
+
+            Assert.Equal(1, lostCommit.LostCommits);
+            Assert.Equal(1, version);
+            var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync();
+            Assert.Single(await context.Set<RepositoryKeyEntity>().Where(key => key.RepositoryId == repositoryId).ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task TryGetEphemeralKeyForPrimaryAsync_WhenCallerIsPrimary_ReturnsKey()
     {
         var repositoryId = Guid.NewGuid();
@@ -141,7 +176,8 @@ public class RepositoryKeyServiceTests
     }
 
     private static async Task<(RepositoryKeyService Service, ServiceProvider Provider)> CreateServiceAsync(
-        Action<OpenGitBaseDbContext>? seed = null
+        Action<OpenGitBaseDbContext>? seed = null,
+        Action<DbContextOptionsBuilder>? configureDbContext = null
     )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -151,7 +187,7 @@ public class RepositoryKeyServiceTests
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([typeof(RepositoryMapsterConfig).Assembly])
         );
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection, configureDbContext);
         services.AddSingleton<IRepositoryKeyProtectionService>(
             new RepositoryKeyProtectionService(
                 new EmailProtectionService(

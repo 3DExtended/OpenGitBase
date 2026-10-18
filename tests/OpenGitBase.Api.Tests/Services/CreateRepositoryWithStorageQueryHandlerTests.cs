@@ -148,6 +148,37 @@ public class CreateRepositoryWithStorageQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_KeepsTheProvisionedStorageWhenTheCommitAcknowledgementIsLost()
+    {
+        // The COMMIT lands but its acknowledgement does not. Treating the retry's duplicate key as a failure deleted
+        // the bare repositories of a repository that exists.
+        await using var connection = SqliteTestConnection.OpenInMemory();
+        var lostCommit = new LostCommitSimulator();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        await using var serviceProvider = await BuildProvisioningServicesAsync(
+            connection,
+            provisioner,
+            lostCommit.Configure
+        );
+        lostCommit.LoseNextCommitInserting("Repository");
+
+        var handler = serviceProvider.GetRequiredService<CreateRepositoryWithStorageQueryHandler>();
+        var result = await handler.RunQueryAsync(CreateQuery(), CancellationToken.None);
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        Assert.True(result.IsSome);
+        Assert.Null(result.Get().Error);
+        await provisioner.DidNotReceiveWithAnyArgs().DeleteRepositoryAsync(default!, default!, default!, default);
+        var contextFactory = serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var verifyContext = await contextFactory.CreateDbContextAsync();
+        var stored = Assert.Single(
+            await verifyContext.Set<RepositoryEntity>().Include(entity => entity.Replicas).ToListAsync()
+        );
+        Assert.Equal(result.Get().RepositoryId!.Value, stored.Id);
+        Assert.Equal(3, stored.Replicas.Count);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_WhenSecondProvisionFails_RollsBackFirst()
     {
         var nodes = CreateNodes(3);
@@ -206,6 +237,68 @@ public class CreateRepositoryWithStorageQueryHandlerTests
             Arg.Any<string>(),
             Arg.Any<CancellationToken>()
         );
+    }
+
+    /// <summary>Three healthy nodes that provision successfully, over a real SQLite database.</summary>
+    private static async Task<ServiceProvider> BuildProvisioningServicesAsync(
+        SqliteConnection connection,
+        IStorageProvisionerClient provisioner,
+        Action<DbContextOptionsBuilder>? configureDbContext = null
+    )
+    {
+        var nodes = CreateNodes(3);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<ListHealthyStorageNodesQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From<IReadOnlyList<StorageNodeDto>>(nodes));
+        foreach (var node in nodes)
+        {
+            queryProcessor
+                .RunQueryAsync(
+                    Arg.Is<GetStorageNodeApiTokenQuery>(query => query.StorageNodeId == node.Id),
+                    Arg.Any<CancellationToken>()
+                )
+                .Returns(Option.From($"token-{node.NodeId}"));
+        }
+
+        provisioner
+            .ProvisionRepositoryAsync(
+                Arg.Any<StorageNodeDto>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new StorageProvisionerResult { Success = true });
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IFeatureAssemblyProvider>(
+            new FeatureAssemblyProvider([typeof(RepositoryMapsterConfig).Assembly])
+        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection, configureDbContext);
+        var mapsterConfig = new TypeAdapterConfig();
+        new RepositoryMapsterConfig().Register(mapsterConfig);
+        services.AddSingleton(mapsterConfig);
+        services.AddSingleton<IMapper>(sp => new Mapper(sp.GetRequiredService<TypeAdapterConfig>()));
+        var repositoryKeyService = Substitute.For<IRepositoryKeyService>();
+        repositoryKeyService
+            .GenerateAndStoreKeyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+        services.AddSingleton(queryProcessor);
+        services.AddSingleton(provisioner);
+        services.AddSingleton(repositoryKeyService);
+        services.AddSingleton(new RepositoryStorageQuotaOptions { Enabled = false });
+        services.AddSingleton<CreateRepositoryWithStorageQueryHandler>();
+
+        var serviceProvider = services.BuildServiceProvider();
+        var contextFactory = serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        await context.Database.EnsureCreatedAsync();
+        return serviceProvider;
     }
 
     private static CreateRepositoryWithStorageQueryHandler CreateHandler(
