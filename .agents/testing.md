@@ -51,6 +51,7 @@ Opt out: `[ExcludeFromCoverageTests]` on types that genuinely need no test class
 | Vue component/page | Gallery fixture + Playwright snapshot |
 | CLI `--json` contract | JSON golden in `Goldens/` (see [cli-goldens](skills/cli-goldens/SKILL.md)) |
 | API + compose path | Relevant E2E script or tier test |
+| API / ComputeAgent Dockerfile or compose service | `scripts/test-dotnet-abort-restart.sh` |
 
 ## TDD
 
@@ -67,3 +68,4 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |
+| `scripts/test-dotnet-abort-restart.sh` | Docker restarts the API and ComputeAgent containers after an unhandled .NET exception, and `docker stop` stops them gracefully (builds both images; needs Docker) |
