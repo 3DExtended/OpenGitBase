@@ -4,7 +4,7 @@
 **Work items:** [docs/issues/account-security/README.md](../../../docs/issues/account-security/README.md)  
 **Parent forge:** [#244](https://api.opengitbase.com/opengitbase/open-git-base/discussions/244)
 
-Branch strategy: one worktree branch per slice (`claude/obg-multifactor-login-699197` for mfa-01 to mfa-03), pushed to `main` once green.
+Branch strategy: one worktree branch per slice (`claude/obg-multifactor-login-699197` for mfa-01 to mfa-04), pushed to `main` once green.
 
 ## Dependency order
 
@@ -13,7 +13,7 @@ Branch strategy: one worktree branch per slice (`claude/obg-multifactor-login-69
 | 1 | mfa-01 | Tracer bullet: authenticator app and two-step sign-in | AFK | done | — | #245 | 11fa233, 69e6af0, 7be3a71 |
 | 2 | mfa-02 | Recovery codes | AFK | done | mfa-01 | #246 | f4662d4, 3fdf82c, 7c52265 |
 | 3 | mfa-03 | Passkey registration and management | AFK | done | mfa-01 | #247 | 0e39a9e, d2485fd, b197593 |
-| 4 | mfa-04 | Sign in with a passkey | AFK | ready | mfa-03 | #248 | |
+| 4 | mfa-04 | Sign in with a passkey | AFK | done | mfa-03 | #248 | 22fcc6e, 2602b96, 3fe0f77 |
 | 5 | mfa-05 | Passkey as second factor and passkey-only 2FA | AFK | ready | mfa-02, mfa-04 | #249 | |
 | 6 | mfa-06 | Notifications, admin reset and production rollout | HITL | ready | mfa-05 | #250 | |
 
