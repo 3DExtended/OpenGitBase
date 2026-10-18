@@ -19,13 +19,13 @@ Passkeys become a second factor. Users with 2FA on can confirm a password sign-i
    - **Second step:**
      - `methods` includes `passkey` when the user has at least one passkey.
      - `POST /signin/two-factor/passkey-options` with `{ challengeToken }` returns request options with `allowCredentials` set to the user's passkeys and user verification `preferred` (a security-key touch is enough after the password).
-     - `POST /signin/two-factor` also accepts `{ challengeToken, passkeyAssertion }`. Failures count toward the challenge and account limits.
+     - `POST /signin/two-factor` also accepts `{ challengeToken, passkeyAssertion }`. Failures count toward the per-account lockout, which also ends the challenge at the 5th failure (as built in mfa-01).
    - **`POST /account/two-factor/enable`** (re-authenticated, needs ≥1 passkey, honours `TwoFactor:Enabled`):
      - sets `TwoFactorEnabledAt`;
      - returns a fresh recovery-code set;
      - revokes other sessions.
    - **Last-factor rule:** while 2FA is on, removing the TOTP authenticator or a passkey so that no second factor remains returns `409`. Disabling 2FA is the way out.
-   - **Disabling 2FA** accepts a passkey assertion in place of a TOTP code. Passkeys remain as sign-in methods after 2FA is disabled.
+   - **Disabling 2FA** takes no body; it needs a recent re-authentication (mfa-01). With 2FA on, `POST /account/reauthenticate` accepts the password plus a passkey assertion in place of a TOTP code; a passkey re-authentication from mfa-03 counts as well. Passkeys remain as sign-in methods after 2FA is disabled.
 2. **Web.**
    - The second step shows "Use a passkey" in `sign-in.vue` and in `cli/auth.vue`.
    - The security page shows "Turn on 2FA with your passkeys" when passkeys exist but no authenticator app. The recovery-codes panel follows.
@@ -38,7 +38,7 @@ Passkeys become a second factor. Users with 2FA on can confirm a password sign-i
 - [ ] A user with passkeys and no TOTP can turn 2FA on; recovery codes are returned once; other sessions are revoked
 - [ ] Enabling with passkeys requires re-authentication, at least one passkey, and `TwoFactor:Enabled`
 - [ ] While 2FA is on, deleting the last remaining second factor (TOTP or passkey) returns `409`
-- [ ] Disabling 2FA works with password plus passkey; passkeys still sign in afterwards
+- [ ] Disabling 2FA works after re-authenticating with password plus passkey; passkeys still sign in afterwards
 - [ ] Playwright with the virtual authenticator: password plus passkey second step; enabling passkey-only 2FA
 - [ ] Controller and query-handler tests satisfy the coverage meta-tests
 
