@@ -1,6 +1,7 @@
 ﻿#pragma warning disable SA1402 // File may only contain a single type
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -18,16 +19,19 @@ public partial class CreateDiscussionCommentQueryHandler
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly ISystemClock _systemClock;
     private readonly IQueryProcessor _queryProcessor;
+    private readonly ILogger<CreateDiscussionCommentQueryHandler> _logger;
 
     public CreateDiscussionCommentQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         ISystemClock systemClock,
-        IQueryProcessor queryProcessor
+        IQueryProcessor queryProcessor,
+        ILogger<CreateDiscussionCommentQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _systemClock = systemClock;
         _queryProcessor = queryProcessor;
+        _logger = logger;
     }
 
     public async Task<Option<DiscussionCommentDto>> RunQueryAsync(
@@ -41,10 +45,97 @@ public partial class CreateDiscussionCommentQueryHandler
         }
 
         var utcNow = _systemClock.UtcNow;
+        var commentId = Guid.NewGuid();
         await using var context = await _contextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        // Production's retry strategy replays an attempt whose COMMIT timed out, yet such a COMMIT may have landed.
+        // Every attempt writes the same comment id, so a replay that hits that primary key knows an earlier attempt
+        // committed: the comment is saved once and reported as saved.
+        CommentWrite? write = null;
+        await context
+            .Database.CreateExecutionStrategy()
+            .ExecuteAsync(async () =>
+            {
+                context.ChangeTracker.Clear();
+                await using var transaction = await context
+                    .Database.BeginTransactionAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                try
+                {
+                    write = await WriteCommentAsync(context, query, commentId, utcNow, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (DbUpdateException)
+                {
+                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                    if (await CommentExistsAsync(context, commentId, cancellationToken).ConfigureAwait(false))
+                    {
+                        // A failed attempt leaves `write` as the earlier attempt that committed: keep its outcome.
+                        return;
+                    }
+
+                    throw;
+                }
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            })
+            .ConfigureAwait(false);
+
+        if (write is null)
+        {
+            return Option<DiscussionCommentDto>.None;
+        }
+
+        try
+        {
+            await NotifyAsync(write, query.AuthorUserId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The comment is committed: failing the request now would report a saved comment as lost.
+            _logger.LogWarning(
+                ex,
+                "Comment {CommentId} was saved, but notifying the discussion's subscribers failed.",
+                write.Comment.Id
+            );
+        }
+
+        var comment = write.Comment;
+        comment.Anchor ??= await context
+            .Set<CommentAnchorEntity>()
+            .FirstOrDefaultAsync(a => a.CommentId == comment.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        var usernames = await DiscussionProjection
+            .ResolveUsernamesAsync(context, [comment.AuthorUserId], cancellationToken)
+            .ConfigureAwait(false);
+
+        return Option.From(DiscussionProjection.ToCommentDto(comment, usernames: usernames));
+    }
+
+    internal static IReadOnlyList<UserId> ParseMentions(string body) =>
+        MentionRegex
+            .Matches(body)
+            .Select(m => m.Groups[1].Value)
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(u => UserId.From(Guid.Parse(u)))
+            .ToList();
+
+    /// <summary>
+    /// Adds the comment, moves the discussion's status, and subscribes the author and everyone mentioned, inside the
+    /// caller's transaction. Returns null when the discussion or the reply's parent rules out the comment.
+    /// </summary>
+    private static async Task<CommentWrite?> WriteCommentAsync(
+        OpenGitBaseDbContext context,
+        CreateDiscussionCommentQuery query,
+        Guid commentId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken
+    )
+    {
         var discussion = await DiscussionProjection
             .FindByNumberAsync(
                 context,
@@ -56,7 +147,7 @@ public partial class CreateDiscussionCommentQueryHandler
 
         if (discussion is null)
         {
-            return Option<DiscussionCommentDto>.None;
+            return null;
         }
 
         var isReply = query.ParentCommentId is not null;
@@ -78,7 +169,7 @@ public partial class CreateDiscussionCommentQueryHandler
                 || parentComment.DeletedAt is not null
             )
             {
-                return Option<DiscussionCommentDto>.None;
+                return null;
             }
         }
 
@@ -88,7 +179,7 @@ public partial class CreateDiscussionCommentQueryHandler
 
         var comment = new DiscussionCommentEntity
         {
-            Id = Guid.NewGuid(),
+            Id = commentId,
             DiscussionId = discussion.Id,
             AuthorUserId = query.AuthorUserId.Value,
             BodyMarkdown = query.BodyMarkdown.Trim(),
@@ -116,18 +207,6 @@ public partial class CreateDiscussionCommentQueryHandler
         if (wasClosed)
         {
             discussion.Status = (int)DiscussionStatus.Open;
-            await _queryProcessor
-                .RunQueryAsync(
-                    new CreateDiscussionNotificationQuery
-                    {
-                        DiscussionId = DiscussionId.From(discussion.Id),
-                        EventType = NotificationEventType.Reopened,
-                        ActorUserId = query.AuthorUserId,
-                        Message = "Discussion reopened",
-                    },
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
         }
         else if (
             !isReply
@@ -155,21 +234,6 @@ public partial class CreateDiscussionCommentQueryHandler
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var mentionedUserIds = ParseMentions(query.BodyMarkdown);
-        await _queryProcessor
-            .RunQueryAsync(
-                new CreateDiscussionNotificationQuery
-                {
-                    DiscussionId = DiscussionId.From(discussion.Id),
-                    CommentId = DiscussionCommentId.From(comment.Id),
-                    EventType = NotificationEventType.NewComment,
-                    ActorUserId = query.AuthorUserId,
-                    Message = "New comment",
-                    AdditionalRecipientUserIds = mentionedUserIds,
-                },
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-
         foreach (var mentionedUserId in mentionedUserIds)
         {
             await DiscussionProjection
@@ -181,21 +245,6 @@ public partial class CreateDiscussionCommentQueryHandler
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-
-            await _queryProcessor
-                .RunQueryAsync(
-                    new CreateDiscussionNotificationQuery
-                    {
-                        DiscussionId = DiscussionId.From(discussion.Id),
-                        CommentId = DiscussionCommentId.From(comment.Id),
-                        EventType = NotificationEventType.Mention,
-                        ActorUserId = query.AuthorUserId,
-                        Message = "You were mentioned",
-                        AdditionalRecipientUserIds = [mentionedUserId],
-                    },
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
         }
 
         if (mentionedUserIds.Count > 0)
@@ -203,29 +252,85 @@ public partial class CreateDiscussionCommentQueryHandler
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        comment.Anchor ??= await context
-            .Set<CommentAnchorEntity>()
-            .FirstOrDefaultAsync(a => a.CommentId == comment.Id, cancellationToken)
-            .ConfigureAwait(false);
-
-        var usernames = await DiscussionProjection
-            .ResolveUsernamesAsync(context, [comment.AuthorUserId], cancellationToken)
-            .ConfigureAwait(false);
-
-        return Option.From(DiscussionProjection.ToCommentDto(comment, usernames: usernames));
+        return new CommentWrite(comment, wasClosed, mentionedUserIds);
     }
 
-    internal static IReadOnlyList<UserId> ParseMentions(string body) =>
-        MentionRegex
-            .Matches(body)
-            .Select(m => m.Groups[1].Value)
-            .Where(u => !string.IsNullOrWhiteSpace(u))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(u => UserId.From(Guid.Parse(u)))
-            .ToList();
+    private static Task<bool> CommentExistsAsync(
+        OpenGitBaseDbContext context,
+        Guid commentId,
+        CancellationToken cancellationToken
+    ) =>
+        context
+            .Set<DiscussionCommentEntity>()
+            .AsNoTracking()
+            .AnyAsync(c => c.Id == commentId, cancellationToken);
 
     [GeneratedRegex(@"@\{([0-9a-fA-F\-]{36})\}")]
     private static partial Regex MentionPattern();
+
+    private async Task NotifyAsync(
+        CommentWrite write,
+        UserId authorUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        var discussionId = DiscussionId.From(write.Comment.DiscussionId);
+        var commentId = DiscussionCommentId.From(write.Comment.Id);
+        if (write.Reopened)
+        {
+            await _queryProcessor
+                .RunQueryAsync(
+                    new CreateDiscussionNotificationQuery
+                    {
+                        DiscussionId = discussionId,
+                        EventType = NotificationEventType.Reopened,
+                        ActorUserId = authorUserId,
+                        Message = "Discussion reopened",
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+
+        await _queryProcessor
+            .RunQueryAsync(
+                new CreateDiscussionNotificationQuery
+                {
+                    DiscussionId = discussionId,
+                    CommentId = commentId,
+                    EventType = NotificationEventType.NewComment,
+                    ActorUserId = authorUserId,
+                    Message = "New comment",
+                    AdditionalRecipientUserIds = write.MentionedUserIds,
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        foreach (var mentionedUserId in write.MentionedUserIds)
+        {
+            await _queryProcessor
+                .RunQueryAsync(
+                    new CreateDiscussionNotificationQuery
+                    {
+                        DiscussionId = discussionId,
+                        CommentId = commentId,
+                        EventType = NotificationEventType.Mention,
+                        ActorUserId = authorUserId,
+                        Message = "You were mentioned",
+                        AdditionalRecipientUserIds = [mentionedUserId],
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+    }
+
+    private sealed record CommentWrite(
+        DiscussionCommentEntity Comment,
+        bool Reopened,
+        IReadOnlyList<UserId> MentionedUserIds
+    );
 }
 
 public class ListDiscussionCommentsQueryHandler
