@@ -57,7 +57,9 @@ public abstract class CreateQueryHandlerBase<
                         await context.Set<TEntity>().AddAsync(entity, ct).ConfigureAwait(false);
                         return await context.SaveChangesAsync(ct).ConfigureAwait(false);
                     },
-                    ct => context.Set<TEntity>().AnyAsync(e => e.Id!.Equals(entity.Id), ct),
+                    // By the mapped primary key: an entity's Id may be an alias the database does not know.
+                    async ct =>
+                        await context.Entry(entity).GetDatabaseValuesAsync(ct).ConfigureAwait(false) is not null,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
