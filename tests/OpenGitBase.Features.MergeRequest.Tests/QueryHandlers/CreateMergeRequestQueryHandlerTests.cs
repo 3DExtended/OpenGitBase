@@ -77,6 +77,27 @@ public class CreateMergeRequestQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_ReturnsTheCreatedMergeRequestWhenLinkingItsDiscussionsFails()
+    {
+        // Links from the body are made after the merge request commits; failing there must not report it as failed.
+        await using var scope = new MergeRequestHandlerTestScope(options =>
+            options.AddInterceptors(new FailingCommandInterceptor("INSERT INTO \"merge_request_discussion_links\""))
+        );
+        await scope.EnsureCreatedAsync();
+        await using var context = await scope.CreateDbContextAsync();
+        var discussion = await MergeRequestTestData.SeedDiscussionAsync(context);
+        var query = MergeRequestTestData.CreateQuery();
+        query.Body = $"Implements #{discussion.Number}";
+
+        var handler = scope.GetHandler<CreateMergeRequestQueryHandler>();
+        var result = await handler.RunQueryAsync(query, CancellationToken.None);
+
+        Assert.True(result.IsSome);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        Assert.True(await verifyContext.Set<MergeRequestEntity>().AnyAsync(mr => mr.Id == result.Get().Id.Value));
+    }
+
+    [Fact]
     public async Task RunQueryAsync_RejectsDuplicateActivePair()
     {
         await using var scope = new MergeRequestHandlerTestScope();

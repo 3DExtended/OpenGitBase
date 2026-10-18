@@ -1,5 +1,6 @@
 ﻿#pragma warning disable SA1402 // File may only contain a single type
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
@@ -16,17 +17,20 @@ public class CreateMergeRequestQueryHandler : IQueryHandler<CreateMergeRequestQu
     private readonly ISystemClock _systemClock;
     private readonly IQueryProcessor _queryProcessor;
     private readonly MergeRequestGateCoordinator _gateCoordinator;
+    private readonly ILogger<CreateMergeRequestQueryHandler> _logger;
 
     public CreateMergeRequestQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         ISystemClock systemClock,
-        IQueryProcessor queryProcessor
+        IQueryProcessor queryProcessor,
+        ILogger<CreateMergeRequestQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _systemClock = systemClock;
         _queryProcessor = queryProcessor;
         _gateCoordinator = new MergeRequestGateCoordinator(systemClock);
+        _logger = logger;
     }
 
     public async Task<Option<MergeRequestDto>> RunQueryAsync(
@@ -88,17 +92,29 @@ public class CreateMergeRequestQueryHandler : IQueryHandler<CreateMergeRequestQu
 
         if (!string.IsNullOrWhiteSpace(entity.Body))
         {
-            await _queryProcessor
-                .RunQueryAsync(
-                    new SyncMergeRequestDiscussionLinksFromBodyQuery
-                    {
-                        RepositoryId = query.RepositoryId,
-                        Number = entity.Number,
-                        Body = entity.Body,
-                    },
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
+            try
+            {
+                await _queryProcessor
+                    .RunQueryAsync(
+                        new SyncMergeRequestDiscussionLinksFromBodyQuery
+                        {
+                            RepositoryId = query.RepositoryId,
+                            Number = entity.Number,
+                            Body = entity.Body,
+                        },
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The merge request is committed: failing the request now would report a created merge request as lost.
+                _logger.LogWarning(
+                    ex,
+                    "Merge request {MergeRequestId} was created, but linking the discussions its body references failed.",
+                    entity.Id
+                );
+            }
         }
 
         var usernames = await MergeRequestProjection
