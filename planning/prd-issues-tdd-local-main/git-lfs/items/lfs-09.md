@@ -130,8 +130,16 @@
       timeout). A primary that answers stays the primary, and the skip is logged.
       - Tests: `RunQueryAsync_WhenTheUnhealthyPrimaryStillAnswers_KeepsItAsThePrimary` and `…_StartsNoColdRecovery`,
         both red without the guard, plus `StorageNodeLivenessProbeTests`.
-    - Found in production, still open:
-      - Three more repositories are working-tree clones from earlier cold recoveries: `a1157eab…` (lifeChange) on
-        storage-1, and `26d1a49d…` and `7805ee16…` on storage-3.
-      - Their pushes are not replicated. That fits lifeChange's encrypted artifacts staying at watermark 3.
+    - Three more repositories were working-tree clones from earlier cold recoveries: `a1157eab…` (lifeChange) on
+      storage-1, and `26d1a49d…` (notes) and `7805ee16…` (SocialPoster) on storage-3.
+      - No push had landed in them since their import, so nothing was lost. lifeChange's second branch sat only
+        under `refs/remotes/origin/`, hidden from clones.
+      - All three were converted to bare repositories on 2026-10-18. lifeChange's original is kept in
+        `/var/lib/opengitbase/quarantine/`, and the storage-3 originals in `/srv/git/.nonbare-backup-20261018-*`.
+        Afterwards every repository on every node had `HEAD` on `main` and a `post-receive` hook where git runs it.
+    - Rollout: API with the guard (`0c10f74`) at 13:30 UTC, then `--full` for the storage nodes (exit 0, no
+      failover during the roll). Afterwards every repository's encrypted artifacts matched its primary watermark.
+    - Follow-up from another session: a bundle carries no symref, so `clone --mirror` guesses `HEAD`, and git 2.47
+      in the image can pick another branch on main's commit. `3158cf8` sets `HEAD` to `main` after the import. It
+      reaches the storage nodes with the next `--full`.
 - Commit(s): see `progress-log.md`
