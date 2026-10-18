@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
 
@@ -33,55 +34,19 @@ public class CreateDiscussionQueryHandler : IQueryHandler<CreateDiscussionQuery,
         }
 
         var utcNow = _systemClock.UtcNow;
+        var discussionId = Guid.NewGuid();
         await using var context = await _contextFactory
             .CreateDbContextAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var number = await DiscussionProjection
-            .AllocateNumberAsync(context, query.RepositoryId, cancellationToken)
-            .ConfigureAwait(false);
-
-        var entity = new DiscussionEntity
-        {
-            Id = Guid.NewGuid(),
-            RepositoryId = query.RepositoryId,
-            Number = number,
-            Title = query.Title.Trim(),
-            Body = string.IsNullOrWhiteSpace(query.Body) ? null : query.Body.Trim(),
-            Status = (int)DiscussionStatus.Open,
-            HasEverBeenEngaged = false,
-            CreatorUserId = query.CreatorUserId.Value,
-            AssigneeUserId = query.AssigneeUserId?.Value,
-            CreatedAt = utcNow,
-            UpdatedAt = utcNow,
-        };
-
-        context.Set<DiscussionEntity>().Add(entity);
-        await ApplyTagsAsync(context, entity, query.TagIds, cancellationToken).ConfigureAwait(false);
-        await DiscussionProjection
-            .EnsureSubscriptionAsync(
-                context,
-                entity.Id,
-                query.CreatorUserId.Value,
-                utcNow,
+        // Every attempt inserts the same id, so a replayed COMMIT that already landed creates the discussion once.
+        var number = await context
+            .InsertOnceAsync(
+                ct => InsertDiscussionAsync(context, query, discussionId, utcNow, ct),
+                ct => context.Set<DiscussionEntity>().AnyAsync(d => d.Id == discussionId, ct),
                 cancellationToken
             )
             .ConfigureAwait(false);
-
-        if (query.AssigneeUserId is not null)
-        {
-            await DiscussionProjection
-                .EnsureSubscriptionAsync(
-                    context,
-                    entity.Id,
-                    query.AssigneeUserId.Value,
-                    utcNow,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        }
-
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var loaded = await DiscussionProjection
             .FindByNumberAsync(context, query.RepositoryId, number, cancellationToken)
@@ -129,6 +94,63 @@ public class CreateDiscussionQueryHandler : IQueryHandler<CreateDiscussionQuery,
                 new DiscussionTagAssignmentEntity { DiscussionId = entity.Id, TagId = tag.Id }
             );
         }
+    }
+
+    /// <summary>Allocates the discussion's number and inserts it with its tags and subscriptions; returns the number.</summary>
+    private static async Task<int> InsertDiscussionAsync(
+        OpenGitBaseDbContext context,
+        CreateDiscussionQuery query,
+        Guid discussionId,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken
+    )
+    {
+        var number = await DiscussionProjection
+            .AllocateNumberAsync(context, query.RepositoryId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var entity = new DiscussionEntity
+        {
+            Id = discussionId,
+            RepositoryId = query.RepositoryId,
+            Number = number,
+            Title = query.Title.Trim(),
+            Body = string.IsNullOrWhiteSpace(query.Body) ? null : query.Body.Trim(),
+            Status = (int)DiscussionStatus.Open,
+            HasEverBeenEngaged = false,
+            CreatorUserId = query.CreatorUserId.Value,
+            AssigneeUserId = query.AssigneeUserId?.Value,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow,
+        };
+
+        context.Set<DiscussionEntity>().Add(entity);
+        await ApplyTagsAsync(context, entity, query.TagIds, cancellationToken).ConfigureAwait(false);
+        await DiscussionProjection
+            .EnsureSubscriptionAsync(
+                context,
+                entity.Id,
+                query.CreatorUserId.Value,
+                utcNow,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (query.AssigneeUserId is not null)
+        {
+            await DiscussionProjection
+                .EnsureSubscriptionAsync(
+                    context,
+                    entity.Id,
+                    query.AssigneeUserId.Value,
+                    utcNow,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return number;
     }
 }
 
