@@ -493,6 +493,44 @@ class LfsInternalEndpointTests(unittest.TestCase):
         self.assertFalse(storage_http_server._is_encrypted_replica(self.REPOSITORY_ID))
         self.assertEqual(200, put)
 
+    def test_importing_a_bundle_restores_a_bare_repository_that_takes_pushes(self) -> None:
+        # Cold recovery once left a working-tree clone: its hooks sat outside the git directory and git-http-backend
+        # refused the pushes, so the restored primary could not be written to.
+        physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        bundle = self._bundle_with_one_commit(extra_refs=("refs/tags/v1", "refs/internal/layer-promotion"))
+
+        status, _, body = self._request(
+            "POST",
+            "/internal/repos/import-bundle",
+            json.dumps({"physicalPath": str(physical_path), "bundleBase64": base64.b64encode(bundle).decode()}).encode(),
+        )
+
+        self.assertEqual(201, status, body)
+        git = ["git", "--git-dir", str(physical_path)]
+
+        def read(*args: str) -> str:
+            return subprocess.run([*git, *args], check=True, capture_output=True, text=True).stdout.strip()
+
+        self.assertEqual("true", read("rev-parse", "--is-bare-repository"))
+        self.assertEqual("true", read("config", "http.receivepack"))
+        self.assertEqual("refs/heads/main", read("symbolic-ref", "HEAD"))
+        self.assertEqual(
+            ["refs/heads/main", "refs/internal/layer-promotion", "refs/tags/v1"],
+            read("for-each-ref", "--format=%(refname)").splitlines(),
+        )
+        remotes = subprocess.run([*git, "config", "--get-regexp", "^remote\\."], capture_output=True, text=True)
+        self.assertEqual("", remotes.stdout, "the imported repository must not point at the deleted bundle file")
+
+        work = self.temp_dir / "after-recovery"
+        subprocess.run(["git", "clone", "-q", str(physical_path), str(work)], check=True)
+        author = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*author, "commit", "-q", "--allow-empty", "-m", "after recovery"], check=True)
+        subprocess.run([*author, "push", "-q", "origin", "main"], check=True)
+        self.assertEqual(
+            subprocess.run([*author, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip(),
+            read("rev-parse", "refs/heads/main"),
+        )
+
     def test_put_stores_a_plaintext_object_verified_against_its_oid(self) -> None:
         content = b"read replica copy" * 500
         oid = hashlib.sha256(content).hexdigest()
@@ -681,13 +719,15 @@ class LfsInternalEndpointTests(unittest.TestCase):
         storage_http_server.lfs_store().store(self.REPOSITORY_ID, oid, io.BytesIO(content), len(content))
         return oid
 
-    def _bundle_with_one_commit(self) -> bytes:
+    def _bundle_with_one_commit(self, extra_refs: tuple[str, ...] = ()) -> bytes:
         work = self.temp_dir / "work"
         subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
         (work / "README.md").write_text("hello", encoding="utf-8")
         git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
         subprocess.run([*git, "add", "."], check=True)
         subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+        for ref in extra_refs:
+            subprocess.run([*git, "update-ref", ref, "HEAD"], check=True)
         bundle_path = self.temp_dir / "repo.bundle"
         subprocess.run([*git, "bundle", "create", "-q", str(bundle_path), "--all"], check=True)
         return bundle_path.read_bytes()
