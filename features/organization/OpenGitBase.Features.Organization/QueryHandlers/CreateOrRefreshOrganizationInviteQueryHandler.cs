@@ -2,6 +2,7 @@
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 
@@ -85,8 +86,15 @@ public class CreateOrRefreshOrganizationInviteQueryHandler
             ExpiresAt = utcNow.Add(InviteLifetime),
             Status = OrganizationInviteStatus.Pending,
         };
-        context.Set<OrganizationInviteEntity>().Add(created);
-        await context.SaveChangesAsync(cancellationToken);
+        await context.InsertOnceAsync(
+            ct =>
+            {
+                context.Set<OrganizationInviteEntity>().Add(created);
+                return context.SaveChangesAsync(ct);
+            },
+            ct => context.Set<OrganizationInviteEntity>().AnyAsync(x => x.Id == created.Id, ct),
+            cancellationToken
+        );
 
         return Option.From(
             new CreateOrRefreshOrganizationInviteResult
