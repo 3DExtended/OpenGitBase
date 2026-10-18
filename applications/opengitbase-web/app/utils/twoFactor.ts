@@ -1,7 +1,10 @@
+import type { PasskeyCredentialJSON } from './webauthn'
+
 /** What sign-in answers instead of a session token when the account has 2FA on. */
 export interface TwoFactorChallenge {
   twoFactorRequired: true
   challengeToken: string
+  /** `totp`, `passkey` and `recovery`, as far as the account has them. */
   methods: string[]
 }
 
@@ -18,8 +21,11 @@ export interface AccountSecurity {
   passkeysAvailable: boolean
 }
 
-/** How the second step is answered: the authenticator code or one recovery code. */
-export type SecondFactorAnswer = { code: string } | { recoveryCode: string }
+/** How the second step is answered: the authenticator code, one recovery code or a passkey. */
+export type SecondFactorAnswer =
+  | { code: string }
+  | { recoveryCode: string }
+  | { passkeyAssertion: PasskeyCredentialJSON }
 
 export interface TotpSetup {
   otpauthUri: string
@@ -78,6 +84,8 @@ const errorKeys: Record<string, string> = {
   passkey_already_registered: 'settings.security.passkeys.errors.alreadyRegistered',
   no_passkeys: 'settings.security.passkeys.errors.noPasskeys',
   invalid_name: 'settings.security.passkeys.errors.invalidName',
+  last_second_factor: 'settings.security.passkeys.errors.lastSecondFactor',
+  two_factor_already_enabled: 'auth.twoFactor.errors.alreadyEnabled',
 }
 
 /** The translation key for a failed second-factor or re-authentication request. */

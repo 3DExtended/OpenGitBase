@@ -172,6 +172,9 @@
       "recoveryCodeLabel": "Recovery code",
       "useRecoveryCode": "Use a recovery code",
       "useAuthenticatorApp": "Use your authenticator app",
+      "usePasskey": "Use a passkey",
+      "usePasskeyInstead": "Use a passkey instead",
+      "passkeyInstructions": "Confirm with one of your passkeys: a security key, your phone or this device.",
       "errors": {
         "invalidCode": "That code is not valid. Make sure the time on your phone is set automatically, then try the current code.",
         "invalidRecoveryCode": "That recovery code is not valid or has already been used.",
@@ -183,6 +186,7 @@
         "reauthenticationRequired": "Please confirm it is you first.",
         "reauthenticationUnavailable": "For your security, sign out and sign in again, then make this change within 10 minutes.",
         "notEnabled": "Two-factor authentication is not on for this account.",
+        "alreadyEnabled": "Two-factor authentication is already on.",
         "generic": "Something went wrong. Please try again."
       }
     },
@@ -270,13 +274,19 @@
         "on": "On",
         "off": "Off",
         "onDescription": "Signing in needs your password and a code from your authenticator app.",
+        "onDescriptionWithPasskeys": "Signing in needs your password and a code from your authenticator app or one of your passkeys.",
+        "onDescriptionPasskeys": "Signing in needs your password and one of your passkeys.",
         "offDescription": "Add a second step to signing in: a 6-digit code from Microsoft Authenticator, Google Authenticator or a similar app.",
+        "offDescriptionWithPasskeys": "Add a second step to signing in: one of your passkeys, or a 6-digit code from an authenticator app.",
         "authenticatorApp": "Authenticator app",
+        "passkeys": "Passkeys",
+        "passkeysCount": "no passkeys | 1 passkey | {count} passkeys",
         "recoveryCodes": "Recovery codes",
         "recoveryCodesRemaining": "no codes left | 1 code left | {count} codes left",
         "recoveryCodesLow": "Only a few recovery codes are left. Generate new ones so you can still sign in if you lose your phone.",
         "regenerate": "Generate new codes",
         "enable": "Set up authenticator app",
+        "enableWithPasskeys": "Turn on with your passkeys",
         "replace": "Set up a new phone",
         "disable": "Turn off",
         "disableConfirmTitle": "Turn off two-factor authentication?",
@@ -332,7 +342,8 @@
           "expired": "The passkey prompt took too long. Please try again.",
           "noPasskeys": "This account has no passkeys yet.",
           "invalidName": "Give the passkey a name of up to 64 characters.",
-          "generic": "The passkey could not be used. Please try again."
+          "generic": "The passkey could not be used. Please try again.",
+          "lastSecondFactor": "This passkey is your only second factor. Add another passkey or an authenticator app first, or turn off two-factor authentication."
         }
       },
       "reauth": {
@@ -340,7 +351,8 @@
         "description": "For your security, confirm your identity before changing how you sign in.",
         "submit": "Confirm",
         "usePasskey": "Use a passkey",
-        "or": "or"
+        "or": "or",
+        "passkeyAfterPasswordHint": "Enter your password, then confirm with your passkey. A passkey that asks for your fingerprint, face or PIN also works without the password."
       }
     },
     "profile": {

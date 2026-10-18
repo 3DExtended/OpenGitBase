@@ -38,6 +38,9 @@ const mockPasskeys: Array<{ id: string, name: string, createdAt: string, lastUse
   },
 ]
 
+// mfa-05: 2FA turned on with the passkeys alone has no authenticator app.
+const mockTwoFactor = { passkeysOnly: false }
+
 function mockChallenge(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
     .replace(/\+/g, '-')
@@ -378,6 +381,10 @@ export const handlers = [
     return HttpResponse.json('mock-token')
   }),
 
+  http.post('/api/signin/two-factor/passkey-options', () => {
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, allowCredentials: [], userVerification: 'preferred' })
+  }),
+
   http.post('/api/signin/passkey/options', () => {
     return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, allowCredentials: [], userVerification: 'required' })
   }),
@@ -391,7 +398,7 @@ export const handlers = [
     return HttpResponse.json({
       twoFactorAvailable: true,
       twoFactorEnabled: mockUser.twoFactorEnabled,
-      totpConfigured: mockUser.twoFactorEnabled,
+      totpConfigured: mockUser.twoFactorEnabled && !mockTwoFactor.passkeysOnly,
       hasPassword: true,
       recoveryCodesRemaining: mockUser.twoFactorEnabled ? mockRecoveryCodes.length : 0,
       passkeysAvailable: true,
@@ -402,7 +409,7 @@ export const handlers = [
     if (mockPasskeys.length === 0) {
       return HttpResponse.json({ error: 'no_passkeys' }, { status: 400 })
     }
-    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, userVerification: 'required' })
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, userVerification: 'preferred' })
   }),
 
   http.get('/api/account/passkeys', () => {
@@ -449,6 +456,9 @@ export const handlers = [
     if (index < 0) {
       return new HttpResponse(null, { status: 404 })
     }
+    if (mockUser.twoFactorEnabled && mockTwoFactor.passkeysOnly && mockPasskeys.length === 1) {
+      return HttpResponse.json({ error: 'last_second_factor' }, { status: 409 })
+    }
     mockPasskeys.splice(index, 1)
     return new HttpResponse(null, { status: 204 })
   }),
@@ -464,6 +474,7 @@ export const handlers = [
   http.post('/api/account/two-factor/totp/confirm', () => {
     const newlyEnabled = !mockUser.twoFactorEnabled
     mockUser.twoFactorEnabled = true
+    mockTwoFactor.passkeysOnly = false
     return HttpResponse.json({ twoFactorEnabled: true, recoveryCodes: newlyEnabled ? mockRecoveryCodes : null })
   }),
 
@@ -474,8 +485,22 @@ export const handlers = [
     return HttpResponse.json({ recoveryCodes: mockRecoveryCodes })
   }),
 
+  // mfa-05: 2FA with the passkeys alone.
+  http.post('/api/account/two-factor/enable', () => {
+    if (mockUser.twoFactorEnabled) {
+      return HttpResponse.json({ error: 'two_factor_already_enabled' }, { status: 409 })
+    }
+    if (mockPasskeys.length === 0) {
+      return HttpResponse.json({ error: 'no_passkeys' }, { status: 400 })
+    }
+    mockUser.twoFactorEnabled = true
+    mockTwoFactor.passkeysOnly = true
+    return HttpResponse.json({ twoFactorEnabled: true, recoveryCodes: mockRecoveryCodes })
+  }),
+
   http.post('/api/account/two-factor/disable', () => {
     mockUser.twoFactorEnabled = false
+    mockTwoFactor.passkeysOnly = false
     return HttpResponse.json({ twoFactorEnabled: false })
   }),
 
