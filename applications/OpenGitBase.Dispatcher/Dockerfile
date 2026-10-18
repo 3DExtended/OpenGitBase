@@ -14,7 +14,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-server curl ca-certificates jq \
+    && apt-get install -y --no-install-recommends openssh-server curl ca-certificates jq tini \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/run/sshd \
     && ssh-keygen -A \
@@ -33,4 +33,8 @@ COPY --from=build /app/publish .
 
 EXPOSE 22 8082
 
+# tini is PID 1 and entrypoint.sh its child: the script supervises dotnet and the optional sshd
+# (the container exits when either dies), and tini reaps the processes orphaned to PID 1 and
+# passes docker stop's SIGTERM on to the script.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/entrypoint.sh"]

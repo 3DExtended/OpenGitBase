@@ -51,6 +51,7 @@ Opt out: `[ExcludeFromCoverageTests]` on types that genuinely need no test class
 | Vue component/page | Gallery fixture + Playwright snapshot |
 | CLI `--json` contract | JSON golden in `Goldens/` (see [cli-goldens](skills/cli-goldens/SKILL.md)) |
 | API + compose path | Relevant E2E script or tier test |
+| Storage / Dispatcher entrypoint, Dockerfile or compose service | `scripts/test-entrypoint-supervision.sh` |
 
 ## TDD
 
@@ -67,3 +68,4 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |
+| `scripts/test-entrypoint-supervision.sh` | Docker restarts the storage and dispatcher containers when any process their entrypoint supervises dies (storage-http-server.py, nginx, sshd, the heartbeat loop, dotnet; dispatcher with and without `GIT_SSH_ENABLED`), and `docker stop` reaches every process and exits 143 inside the grace period (builds both images; needs Docker) |
