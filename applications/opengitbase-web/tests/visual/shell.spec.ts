@@ -152,6 +152,28 @@ test.describe('Settings screens', () => {
       fullPage: true,
     })
   })
+
+  test('security', async ({ page }) => {
+    await authenticate(page)
+    await page.route('**/api/account/security', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          twoFactorAvailable: true,
+          twoFactorEnabled: false,
+          totpConfigured: false,
+          hasPassword: true,
+        }),
+      }),
+    )
+    await page.goto('/settings/security?msw=1')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByTestId('two-factor-status-card')).toBeVisible()
+    await expect(page.locator('body')).toHaveScreenshot('security.png', {
+      fullPage: true,
+    })
+  })
 })
 
 test.describe('Discovery screens', () => {

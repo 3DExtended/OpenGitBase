@@ -83,6 +83,55 @@
     `LfsLargeObjectTests`, the 120 MiB object at 22 s.
   - `HaChaos.LfsColdRecoveryChaosTests` (`OPENGITBASE_E2E_COMPOSE_PROFILE=FullHa`) passed in 2 m 10 s. Afterwards
     all four nodes were healthy and storage-1's capacity was back to unlimited.
-- **Production (HITL): not started.** The deploy order and the `Lfs:Enabled` switch need a human decision. The
-  Cloudflare body limit needs one too.
+- **Production: live since 2026-10-18.**
+  - Decision: `Lfs:MaxObjectBytes` = 100 MiB (`104857600`), because of the Cloudflare body limit on proxied
+    hostnames; no DNS-only hostname.
+  - Deployed `e372f84` (this branch merged with `main`) in the documented order:
+    - `remote-rolling-update.sh` for API and web with LFS off; the migrations `AddLfsObjects` and
+      `AddLfsObjectCopies` were applied;
+    - `--full` for storage 2, 3, 4, 1 and the dispatchers (10 m 26 s, no restarts).
+  - Enabled with `Lfs__Enabled: "true"` and `Lfs__MaxObjectBytes: "104857600"` in the `x-api-env` block of the
+    Tower override (backup `opengitbase-secrets/docker-compose.override.yml.pre-lfs`), then `api-2` and `api-1`
+    recreated one at a time. The batch endpoint answered `501` before and `401` (credentials needed, as git over
+    HTTPS) after.
+  - Smoke test on `admin/lostest` through `api.opengitbase.com`:
+    - a 5,000,000-byte object pushed and cloned back byte-identical;
+    - one `LfsObject` row and three copies: plaintext on storage-1 (primary), encrypted on storage-2 and
+      storage-3 at 5,000,109 bytes each (29 + size + 5 × 16);
+    - `StorageBytesUsed` 5,026,498 = 5,000,000 LFS + 26,498 git.
+  - **Follow-up: the locking hint.** `git push` printed "Locking support detected on remote" on every push. The
+    `locks/verify` stub answered `200` with no locks, and user story 13 wants no locking hint at all.
+    - Probe with git-lfs 3.7.1 against a local LFS server: on `200` the hint comes on every push; on `404` or `501`
+      git-lfs writes `lfs.<url>.locksverify false` once and pushes without a hint.
+    - The dispatcher now answers `501` "Locking is not supported." (`LfsHandlerTests`
+      `LocksVerify_Answers501SoGitLfsTurnsLockVerificationOffQuietly`; it fails against the old stub).
+  - **Incident during the `--full` roll: open-git-base unpushable (`403`).**
+    - Chain:
+      1. The database stalled for about 95 s (11:31–11:33 UTC). No heartbeat arrived for 105 s, above
+         `MissedHeartbeatThresholdSeconds` (90).
+      2. When the database came back, storage-4 had reported again and the other three nodes were flagged unhealthy.
+      3. Failover cold-recovered open-git-base from its working primary (storage-1) onto storage-4, which held one
+         of its encrypted copies.
+      4. `import-bundle` cloned the bundle with a working tree, and storage-4 still ran the old image, which left its
+         role file at `EncryptedReplica`. git-http-backend answered `403`.
+    - Repair: storage-1 made the primary again and storage-4 an encrypted replica, with epoch 12; the clone on
+      storage-4 moved to `/var/lib/opengitbase/quarantine/`. The push of `a02ef53` then replicated, with watermark 87
+      on storage-1 and the artifact on storage-2 and storage-4.
+    - Fix 1, `import-bundle`:
+      - It now restores a bare repository: `clone --mirror` keeps every ref, including `refs/internal/*`; the
+        origin pointing at the temporary bundle is removed; `http.receivepack` is set.
+      - With a working tree the hooks in `<repo>.git/hooks` never ran, so pushes to a cold-recovered primary were
+        never replicated.
+      - Tests: `test_importing_a_bundle_restores_a_bare_repository_that_takes_pushes`, red against the old clone.
+        `LfsColdRecoveryChaosTests` now pushes after the recovery and waits for both encrypted replicas to hold the
+        artifact (not yet run; the local compose stack was removed).
+    - Fix 2, failover: before promoting or cold-recovering, `PromotePrimaryReplicaQueryHandler` asks the primary
+      directly (`StorageNodeLivenessProbe`: a GET without a token, where any HTTP answer counts, with a 3 s
+      timeout). A primary that answers stays the primary, and the skip is logged.
+      - Tests: `RunQueryAsync_WhenTheUnhealthyPrimaryStillAnswers_KeepsItAsThePrimary` and `…_StartsNoColdRecovery`,
+        both red without the guard, plus `StorageNodeLivenessProbeTests`.
+    - Found in production, still open:
+      - Three more repositories are working-tree clones from earlier cold recoveries: `a1157eab…` (lifeChange) on
+        storage-1, and `26d1a49d…` and `7805ee16…` on storage-3.
+      - Their pushes are not replicated. That fits lifeChange's encrypted artifacts staying at watermark 3.
 - Commit(s): see `progress-log.md`

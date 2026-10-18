@@ -41,6 +41,7 @@
     <ProjectReference Include="..\..\features\pipeline\OpenGitBase.Features.Pipeline.Contracts\OpenGitBase.Features.Pipeline.Contracts.csproj" />
     <ProjectReference Include="..\..\features\compute-node\OpenGitBase.Features.ComputeNode\OpenGitBase.Features.ComputeNode.csproj" />
     <ProjectReference Include="..\..\features\compute-node\OpenGitBase.Features.ComputeNode.Contracts\OpenGitBase.Features.ComputeNode.Contracts.csproj" />
+    <ProjectReference Include="..\..\features\account-security\OpenGitBase.Features.AccountSecurity\OpenGitBase.Features.AccountSecurity.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

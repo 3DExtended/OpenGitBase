@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { AccountMe } from '~/utils/api'
+import { isTwoFactorChallenge } from '~/utils/twoFactor'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AccountMe | null>(null)
@@ -32,9 +33,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /** Signs in, or returns the challenge in `data` when the account needs a second step. */
   async function login(username: string, password: string) {
     const api = useApi()
     const result = await api.auth.login({ username, password })
+    if (result.error || isTwoFactorChallenge(result.data)) {
+      return result
+    }
+    await fetchMe()
+    return result
+  }
+
+  async function completeTwoFactor(challengeToken: string, code: string) {
+    const api = useApi()
+    const result = await api.auth.completeTwoFactor({ challengeToken, code })
     if (result.error) {
       return result
     }
@@ -73,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     fetchMe,
     login,
+    completeTwoFactor,
     register,
     signOut,
     setEmailVerified,

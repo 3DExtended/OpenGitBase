@@ -188,6 +188,9 @@ public class Startup
                 ?? new PlatformMergeIdentityOptions()
         );
         services.AddSingleton(Configuration.GetSection("Lfs").Get<LfsOptions>() ?? new LfsOptions());
+        services.AddSingleton(
+            Configuration.GetSection("TwoFactor").Get<TwoFactorOptions>() ?? new TwoFactorOptions()
+        );
         services.AddSingleton<LfsActionTokenService>();
         services.AddScoped(sp => new RepositoryAccessCheckEvaluator(
             sp.GetRequiredService<IQueryProcessor>(),
@@ -398,11 +401,14 @@ public class Startup
         );
         services.AddScoped<OpenGitBase.Features.Pipeline.Services.GitPushOutboxDrainService>();
         services.AddScoped<IAuthCookieService, AuthCookieService>();
+        services.AddScoped<SessionIssuer>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
         services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
+        // The probe bounds each request itself (StorageNodeLivenessProbe.DefaultTimeout).
+        services.AddHttpClient<IStorageNodeLivenessProbe, StorageNodeLivenessProbe>();
         // LFS objects may be large; every caller bounds its own transfer (Lfs:ReplicaUploadTimeoutSeconds).
         services.AddHttpClient<IStorageLfsClient, StorageLfsClient>(client =>
             client.Timeout = Timeout.InfiniteTimeSpan);

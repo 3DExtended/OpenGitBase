@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { TwoFactorChallenge } from '~/utils/twoFactor'
+import { isTwoFactorChallenge, secondFactorErrorKey } from '~/utils/twoFactor'
+
 definePageMeta({
   layout: 'auth',
 })
@@ -11,6 +14,7 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
+const challenge = ref<TwoFactorChallenge | null>(null)
 
 const queryParams = computed(() =>
   parseCliAuthQueryParams(route.query.port, route.query.state),
@@ -40,17 +44,54 @@ async function onSubmit() {
       error.value = t('auth.signIn.invalidCredentials')
       return
     }
+    if (isTwoFactorChallenge(result.data)) {
+      challenge.value = result.data
+      return
+    }
 
-    const callbackUrl = buildCliAuthCallbackUrl(
-      queryParams.value.port,
-      queryParams.value.state,
-      result.data,
-    )
-    window.location.href = callbackUrl
+    returnTokenToCli(result.data)
   }
   finally {
     loading.value = false
   }
+}
+
+async function onSubmitCode(code: string) {
+  if (!queryParams.value || !challenge.value) {
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    const result = await useApi().auth.completeTwoFactor({ challengeToken: challenge.value.challengeToken, code })
+    if (result.error || !result.data) {
+      if (result.error === 'challenge_expired') {
+        backToPassword()
+      }
+      error.value = t(secondFactorErrorKey(result.error, result.status))
+      return
+    }
+
+    returnTokenToCli(result.data)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function returnTokenToCli(token: string) {
+  if (!queryParams.value) {
+    return
+  }
+
+  window.location.href = buildCliAuthCallbackUrl(queryParams.value.port, queryParams.value.state, token)
+}
+
+function backToPassword() {
+  challenge.value = null
+  error.value = null
+  password.value = ''
 }
 </script>
 
@@ -75,6 +116,14 @@ async function onSubmit() {
       title="Missing CLI auth parameters"
       description="This page requires valid port and state query parameters from the ogb CLI."
       class="mb-4"
+    />
+
+    <AuthTwoFactorCodeForm
+      v-else-if="challenge"
+      :loading="loading"
+      :error="error"
+      @submit="onSubmitCode"
+      @back="backToPassword"
     />
 
     <form

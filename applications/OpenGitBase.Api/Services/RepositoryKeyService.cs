@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Repository.Entities;
 
 namespace OpenGitBase.Api.Services;
@@ -41,19 +42,30 @@ public sealed class RepositoryKeyService : IRepositoryKeyService
             return existing.KeyVersion;
         }
 
-        var keyMaterial = RandomNumberGenerator.GetBytes(32);
-        var entity = new RepositoryKeyEntity
-        {
-            Id = Guid.NewGuid(),
-            RepositoryId = repositoryId,
-            KeyCiphertext = _keyProtectionService.ProtectKeyMaterial(keyMaterial),
-            KeyVersion = 1,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
+        var keyId = Guid.NewGuid();
+        var keyCiphertext = _keyProtectionService.ProtectKeyMaterial(RandomNumberGenerator.GetBytes(32));
 
-        context.Set<RepositoryKeyEntity>().Add(entity);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return entity.KeyVersion;
+        // Every attempt inserts the same id, so a replayed COMMIT that already landed stores the key once.
+        return await context
+            .InsertOnceAsync(
+                async ct =>
+                {
+                    var entity = new RepositoryKeyEntity
+                    {
+                        Id = keyId,
+                        RepositoryId = repositoryId,
+                        KeyCiphertext = keyCiphertext,
+                        KeyVersion = 1,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    };
+                    context.Set<RepositoryKeyEntity>().Add(entity);
+                    await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return entity.KeyVersion;
+                },
+                ct => context.Set<RepositoryKeyEntity>().AnyAsync(key => key.Id == keyId, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     public async Task<EphemeralRepositoryKey?> TryGetEphemeralKeyForPrimaryAsync(

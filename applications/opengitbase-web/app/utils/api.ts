@@ -6,6 +6,9 @@ import type {
   PublicStatusOutageWindowDto,
   PublicStatusSnapshot,
 } from './publicStatus'
+import type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
+
+export type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
 
 export interface ApiResult<T> {
   data: T | null
@@ -211,6 +214,7 @@ export interface AccountMe {
   username: string
   emailVerified: boolean
   isAdmin: boolean
+  twoFactorEnabled: boolean
   debug?: AccountDebugFeatures
 }
 
@@ -1646,8 +1650,12 @@ export function createApi(baseUrl: string) {
 
   return {
     auth: {
+      /** A session token, or a {@link TwoFactorChallenge} when the account has 2FA on. */
       login: (body: { username: string, password: string }) =>
-        request<string>('/signin/login', { method: 'POST', body: JSON.stringify(body) }),
+        request<string | TwoFactorChallenge>('/signin/login', { method: 'POST', body: JSON.stringify(body) }),
+
+      completeTwoFactor: (body: { challengeToken: string, code: string }) =>
+        request<string>('/signin/two-factor', { method: 'POST', body: JSON.stringify(body) }),
 
       register: (body: { username: string, email: string, password: string }) =>
         request<string>('/register/register', { method: 'POST', body: JSON.stringify(body) }),
@@ -1674,6 +1682,7 @@ export function createApi(baseUrl: string) {
           username: string
           emailVerified: boolean
           isAdmin: boolean
+          twoFactorEnabled?: boolean
           debug?: { emailVerification: boolean }
         }>('/account/me')
         if (!result.data) {
@@ -1686,12 +1695,32 @@ export function createApi(baseUrl: string) {
             username: result.data.username,
             emailVerified: result.data.emailVerified,
             isAdmin: result.data.isAdmin,
+            twoFactorEnabled: result.data.twoFactorEnabled ?? false,
             debug: result.data.debug?.emailVerification
               ? { emailVerification: true }
               : undefined,
           },
         }
       },
+
+      security: () =>
+        request<AccountSecurity>('/account/security'),
+
+      /** Confirms the caller again for 10 minutes before a security change. */
+      reauthenticate: (body: { password: string, code?: string }) =>
+        request<null>('/account/reauthenticate', { method: 'POST', body: JSON.stringify(body) }),
+
+      startTotpSetup: () =>
+        request<TotpSetup>('/account/two-factor/totp/setup', { method: 'POST' }),
+
+      confirmTotpSetup: (body: { code: string }) =>
+        request<{ twoFactorEnabled: boolean }>('/account/two-factor/totp/confirm', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+
+      disableTwoFactor: () =>
+        request<{ twoFactorEnabled: boolean }>('/account/two-factor/disable', { method: 'POST' }),
 
       changePassword: (body: { currentPassword: string, newPassword: string }) =>
         request<string>('/account/change-password', { method: 'POST', body: JSON.stringify(body) }),

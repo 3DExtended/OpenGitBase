@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Contracts;
@@ -13,16 +14,22 @@ public sealed class PromotePrimaryReplicaQueryHandler
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IColdRecoveryService _coldRecoveryService;
     private readonly ILfsRepairQueue _lfsRepairs;
+    private readonly IStorageNodeLivenessProbe _livenessProbe;
+    private readonly ILogger<PromotePrimaryReplicaQueryHandler> _logger;
 
     public PromotePrimaryReplicaQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IColdRecoveryService coldRecoveryService,
-        ILfsRepairQueue lfsRepairs
+        ILfsRepairQueue lfsRepairs,
+        IStorageNodeLivenessProbe livenessProbe,
+        ILogger<PromotePrimaryReplicaQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _coldRecoveryService = coldRecoveryService;
         _lfsRepairs = lfsRepairs;
+        _livenessProbe = livenessProbe;
+        _logger = logger;
     }
 
     public async Task<Option<PromotePrimaryReplicaResult>> RunQueryAsync(
@@ -61,6 +68,22 @@ public sealed class PromotePrimaryReplicaQueryHandler
 
         if (primaryHealthy)
         {
+            return Option.From(new PromotePrimaryReplicaResult { Promoted = false });
+        }
+
+        // Unhealthy only means the heartbeats stopped arriving, and they also stop when the API or the database
+        // cannot take them: on 2026-10-18 a database stall left every node without a recent heartbeat, and failover
+        // moved a working primary onto its encrypted replica. A primary that still answers stays the primary.
+        if (primaryNode is not null
+            && await _livenessProbe
+                .AnswersAsync(primaryNode.InternalHost, primaryNode.InternalHttpPort, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            _logger.LogWarning(
+                "Storage node {NodeId} sends no heartbeats but answers; repository {RepositoryId} stays on it.",
+                primaryNode.NodeId,
+                entity.Id
+            );
             return Option.From(new PromotePrimaryReplicaResult { Promoted = false });
         }
 

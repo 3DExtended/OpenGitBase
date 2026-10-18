@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { TwoFactorChallenge } from '~/utils/twoFactor'
+import { isTwoFactorChallenge, secondFactorErrorKey } from '~/utils/twoFactor'
+
 definePageMeta({
   middleware: 'guest',
   layout: 'auth',
@@ -12,8 +15,16 @@ const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
+const challenge = ref<TwoFactorChallenge | null>(null)
 
 useHead({ title: t('auth.signIn.title') })
+
+async function continueToApp() {
+  const redirect = resolveSafeRedirectPath(
+    typeof route.query.redirect === 'string' ? route.query.redirect : undefined,
+  )
+  await navigateTo(redirect)
+}
 
 async function onSubmit() {
   loading.value = true
@@ -24,14 +35,43 @@ async function onSubmit() {
       error.value = t('auth.signIn.invalidCredentials')
       return
     }
-    const redirect = resolveSafeRedirectPath(
-      typeof route.query.redirect === 'string' ? route.query.redirect : undefined,
-    )
-    await navigateTo(redirect)
+    if (isTwoFactorChallenge(result.data)) {
+      challenge.value = result.data
+      return
+    }
+    await continueToApp()
   }
   finally {
     loading.value = false
   }
+}
+
+async function onSubmitCode(code: string) {
+  if (!challenge.value) {
+    return
+  }
+  loading.value = true
+  error.value = null
+  try {
+    const result = await auth.completeTwoFactor(challenge.value.challengeToken, code)
+    if (result.error) {
+      if (result.error === 'challenge_expired') {
+        backToPassword()
+      }
+      error.value = t(secondFactorErrorKey(result.error, result.status))
+      return
+    }
+    await continueToApp()
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function backToPassword() {
+  challenge.value = null
+  error.value = null
+  password.value = ''
 }
 </script>
 
@@ -39,14 +79,23 @@ async function onSubmit() {
   <UCard class="mx-auto w-full max-w-md">
     <template #header>
       <h1 class="text-xl font-semibold">
-        {{ t('auth.signIn.title') }}
+        {{ challenge ? t('auth.twoFactor.title') : t('auth.signIn.title') }}
       </h1>
       <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
-        {{ t('auth.signIn.subtitle') }}
+        {{ challenge ? t('auth.twoFactor.subtitle') : t('auth.signIn.subtitle') }}
       </p>
     </template>
 
+    <AuthTwoFactorCodeForm
+      v-if="challenge"
+      :loading="loading"
+      :error="error"
+      @submit="onSubmitCode"
+      @back="backToPassword"
+    />
+
     <form
+      v-else
       class="space-y-4"
       @submit.prevent="onSubmit"
     >
@@ -89,7 +138,10 @@ async function onSubmit() {
       </UButton>
     </form>
 
-    <template #footer>
+    <template
+      v-if="!challenge"
+      #footer
+    >
       <div class="flex flex-col gap-2 text-sm">
         <NuxtLink
           to="/forgot-password"

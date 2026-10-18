@@ -40,4 +40,13 @@ public class UserCredentialsEntity : IIdentifiableEntity<Guid>
 
     /// <summary>Sign-in tokens issued before this instant are rejected (set on password reset/change).</summary>
     public DateTimeOffset? SessionsValidAfter { get; set; }
+
+    /// <summary>When two-factor sign-in was turned on; null while it is off.</summary>
+    public DateTimeOffset? TwoFactorEnabledAt { get; set; }
+
+    /// <summary>Consecutive wrong second-factor attempts since the last success or lockout.</summary>
+    public int SecondFactorFailedAttempts { get; set; }
+
+    /// <summary>The second sign-in step is refused until this instant.</summary>
+    public DateTimeOffset? SecondFactorLockedUntil { get; set; }
 }

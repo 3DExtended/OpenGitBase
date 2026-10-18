@@ -62,6 +62,7 @@ public class LfsPushCloneTests : E2eTestBase
             Assert.Contains("/info/lfs/objects/batch", push.StdErr, StringComparison.Ordinal);
             Assert.Contains("> PUT ", push.StdErr, StringComparison.Ordinal);
             Assert.DoesNotContain("locking API", push.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Locking support detected", push.StdErr, StringComparison.OrdinalIgnoreCase);
 
             Transcript.Describe("Clone into a new directory: the file comes back byte-identical");
             var cloneDir = Path.Combine(workDir, "clone");
@@ -75,6 +76,7 @@ public class LfsPushCloneTests : E2eTestBase
             await gitOps.CheckoutBranchAsync(workDir, "feature", create: true).ConfigureAwait(false);
             var branchPush = await LfsGit.PushAsync(gitOps, workDir, "feature").ConfigureAwait(false);
             Assert.True(branchPush.Succeeded, branchPush.StdErr);
+            Assert.DoesNotContain("Locking support detected", branchPush.StdErr, StringComparison.OrdinalIgnoreCase);
             var lfsPushAll = await gitOps
                 .RunAsync(workDir, ["-c", "credential.helper=", "lfs", "push", "--all", "origin"], LfsGit.HttpTrace)
                 .ConfigureAwait(false);

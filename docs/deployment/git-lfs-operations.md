@@ -95,6 +95,9 @@ enabling LFS in production, do one of the following:
 - or serve git and LFS on a DNS-only (not proxied) hostname and set `Git:PublicBaseUrl` (and `Lfs:PublicBaseUrl` if
   needed) to it.
 
+**Production setting.** Since 2026-10-18 production runs with `Lfs__Enabled: "true"` and
+`Lfs__MaxObjectBytes: "104857600"` (100 MiB) in the `x-api-env` block of the Tower override.
+
 A verify of an object near the limit must also finish within Cloudflare's 125 s. At 100 MiB this is well inside the
 limit on the internal network.
 
@@ -135,6 +138,12 @@ In reverse, disabling first:
 
 Recorded objects stay on disk and in the database, and are served again once LFS is re-enabled. Because of the push
 gate, a ref never points at an object the server does not hold.
+
+## File locking
+
+Locking is not offered. `POST .../info/lfs/locks/verify` answers `501` "Locking is not supported.", and git-lfs then
+sets `lfs.<url>.locksverify false` in the clone once and pushes without a locking hint. `git lfs lock` reports
+locking as unsupported.
 
 ## SSH remotes
 

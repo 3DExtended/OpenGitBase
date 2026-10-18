@@ -2,7 +2,7 @@
 
 **Purpose:** Baseline for planning encryption improvements and distributed-system evolution.  
 **Audience:** Agents and engineers entering the codebase cold.  
-**Last updated:** 2026-10-15
+**Last updated:** 2026-10-18
 
 For local setup and ports, see [README.md](../README.md). For feature-level design specs, see [prd/](prd/).
 
@@ -100,6 +100,7 @@ flowchart TB
 | OAuth (Google, Apple) | Done | [SignInController.cs](../applications/OpenGitBase.Api/Controllers/Authorization/SignInController.cs) |
 | JWT in httpOnly cookies + Bearer | Done | [Startup.cs](../applications/OpenGitBase.Api/Startup.cs), [AuthCookieService.cs](../applications/OpenGitBase.Api/Services/AuthCookieService.cs) |
 | Admin role (`role=admin` claim) | Done | Admin controllers |
+| Two-factor sign-in (authenticator app, TOTP) | mfa-01 done; off by default and in production (`TwoFactor:Enabled`) until recovery codes (mfa-02) and admin reset (mfa-06) ship | [features/account-security/](../features/account-security/), [AccountSecurityController.cs](../applications/OpenGitBase.Api/Controllers/AccountSecurityController.cs), `POST /signin/two-factor`, `settings/security.vue`; PRD [account-security-…](prd/account-security-optional-two-factor-authentication-and-passkeys.md) (#244) |
 | Personal access tokens (HTTPS git) | Done | [features/git-access-token/](../features/git-access-token/) |
 | SSH public keys (git over SSH) | Done | [features/public-git-ssh-key/](../features/public-git-ssh-key/) |
 | Repository-level authz (private repos) | Done | [RepositoryContentAuthorizationService.cs](../applications/OpenGitBase.Api/Services/RepositoryContentAuthorizationService.cs) |
@@ -131,12 +132,12 @@ flowchart TB
 | Write quorum 2/3 on push | Done | `post-receive` → API `quorum-replicate` (RF4: API builds the encrypted artifact itself, #413) |
 | Peer sync over mTLS :8443 | Done | Separate from dispatcher SSH trust domain |
 | Watermark-based durability | Done | Monotonic `PrimaryWatermark` + per-replica `AppliedWatermark` |
-| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs) |
+| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs); acts only when the unhealthy primary also does not answer a direct probe (heartbeats also stop when the API or the database cannot take them) |
 | Background: RF1→RF3 backfill, rebalance, anti-entropy | Done | [HaStorageBackgroundService.cs](../applications/OpenGitBase.Api/Services/HaStorageBackgroundService.cs) |
 | Admin replication dashboard | Done | Web + API |
 | Git HTTPS via HAProxy | Done | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) |
 | Optional SSH git (`--profile ssh`) | Done | Port 2211 via HAProxy |
-| Git LFS over HTTPS | Done, off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
+| Git LFS over HTTPS | Done; on in production since 2026-10-18 (100 MiB per object), off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
 
 ### 3.4 Testing and ops
 
@@ -260,6 +261,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 | User emails | AES-256-GCM + HMAC lookup hash | [EmailProtectionService.cs](../common/OpenGitBase.Common/Services/EmailProtectionService.cs) → `UserCredentialsEntity.EmailCiphertext` |
 | Storage node API tokens | Same AES-GCM (`EncryptSecret`) | `StorageNodeEntity.ApiTokenProtected` |
 | Fleet dispatcher SSH private key | Same AES-GCM (`EncryptSecret`, stored byte-for-byte, never email-normalized) | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
+| TOTP authenticator secrets | Same AES-GCM (`EncryptSecret`), re-protected by `EncryptionKeyRotation` | `UserTotpAuthenticatorEntity.SecretProtected`, `PendingSecretProtected` |
 | Git LFS objects on encrypted replicas | Segmented AES-256-GCM (1 MiB segments) with the Repository Key, encrypted and decrypted only in the API | [LfsObjectCipher.cs](../applications/OpenGitBase.Api/Services/LfsObjectCipher.cs), `/var/lib/opengitbase/lfs/` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
@@ -308,6 +310,7 @@ From [code-review-remediation/](issues/code-review-remediation/README.md):
 | Module | DB | Public API | Notes |
 |--------|-----|------------|-------|
 | Users | yes | auth routes | Email encrypted |
+| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/signin/two-factor` | TOTP, challenges, lockout, re-authentication |
 | Repository | yes | yes | HA provisioning |
 | RepositoryMember | yes | yes | |
 | Organization | yes | yes | Invites |

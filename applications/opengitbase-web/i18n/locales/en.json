@@ -161,6 +161,25 @@
       "newPassword": "New password",
       "resetCode": "Reset code"
     },
+    "twoFactor": {
+      "title": "Two-step verification",
+      "subtitle": "Enter the code from your authenticator app.",
+      "instructions": "Open Microsoft Authenticator, Google Authenticator or another authenticator app and enter the 6-digit code it shows for this account.",
+      "codeLabel": "Authentication code",
+      "submit": "Verify",
+      "back": "Back to sign in",
+      "errors": {
+        "invalidCode": "That code is not valid. Make sure the time on your phone is set automatically, then try the current code.",
+        "challengeExpired": "This sign-in took too long. Please sign in again.",
+        "setupExpired": "This setup is no longer open. Start the setup again.",
+        "lockedOut": "Too many wrong codes. Try again in 15 minutes.",
+        "invalidCredentials": "That password is not correct.",
+        "codeRequired": "Enter the code from your authenticator app.",
+        "reauthenticationRequired": "Please confirm it is you first.",
+        "reauthenticationUnavailable": "For your security, sign out and sign in again, then make this change within 10 minutes.",
+        "generic": "Something went wrong. Please try again."
+      }
+    },
     "signIn": {
       "title": "Sign in",
       "subtitle": "Welcome back. Enter your credentials to continue.",
@@ -226,6 +245,42 @@
   "settings": {
     "title": "Account settings",
     "subtitle": "Manage your profile, security, and SSH keys.",
+    "security": {
+      "title": "Security",
+      "link": "Security",
+      "subtitle": "Protect your account with a second sign-in step.",
+      "unavailable": "Two-factor authentication is not available on this instance yet.",
+      "enabledNotice": "Two-factor authentication is on. Your other devices were signed out.",
+      "disabledNotice": "Two-factor authentication is off. Your other devices were signed out.",
+      "twoFactor": {
+        "title": "Two-factor authentication",
+        "on": "On",
+        "off": "Off",
+        "onDescription": "Signing in needs your password and a code from your authenticator app.",
+        "offDescription": "Add a second step to signing in: a 6-digit code from Microsoft Authenticator, Google Authenticator or a similar app.",
+        "authenticatorApp": "Authenticator app",
+        "enable": "Set up authenticator app",
+        "replace": "Set up a new phone",
+        "disable": "Turn off",
+        "disableConfirmTitle": "Turn off two-factor authentication?",
+        "disableConfirmDescription": "Signing in will only need your password again, and your other devices will be signed out.",
+        "disableConfirmButton": "Turn off"
+      },
+      "setup": {
+        "title": "Set up authenticator app",
+        "stepInstall": "Install Microsoft Authenticator, Google Authenticator or another authenticator app on your phone.",
+        "stepScan": "Scan the QR code with the app, or enter the setup key by hand.",
+        "stepConfirm": "Enter the 6-digit code the app shows.",
+        "qrLabel": "QR code for your authenticator app",
+        "manualHint": "Cannot scan? Enter this setup key:",
+        "confirm": "Turn on"
+      },
+      "reauth": {
+        "title": "Confirm it is you",
+        "description": "For your security, confirm your identity before changing how you sign in.",
+        "submit": "Confirm"
+      }
+    },
     "profile": {
       "title": "Profile",
       "emailVerified": "Email status",

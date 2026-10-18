@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { AccountSecurity, TotpSetup } from '~/utils/twoFactor'
+
 definePageMeta({
   layout: false,
   middleware: 'visual-dev-only',
@@ -9,6 +11,19 @@ const { t } = useI18n()
 const colorMode = useColorMode()
 import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
 import type { AdminLfsFleetSummaryDto, AdminRepositoryLfsStatusDto } from '~/utils/api'
+
+// mfa-01: a fixed secret keeps the setup QR code identical in every snapshot.
+const totpSetupFixture: TotpSetup = {
+  otpauthUri: 'otpauth://totp/OpenGitBase:demo-user?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=OpenGitBase',
+  secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+}
+const securityOffFixture: AccountSecurity = {
+  twoFactorAvailable: true,
+  twoFactorEnabled: false,
+  totpConfigured: false,
+  hasPassword: true,
+}
+const securityOnFixture: AccountSecurity = { ...securityOffFixture, twoFactorEnabled: true, totpConfigured: true }
 
 // A fixed inline image, so the LFS preview snapshot does not depend on the network.
 const lfsImageFixtureUrl = `data:image/svg+xml,${encodeURIComponent(
@@ -366,6 +381,71 @@ const selfHostOptions = [
         >
           {{ t('auth.signIn.submit') }}
         </UButton>
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          initial-code="123 456"
+          :error="t('auth.twoFactor.errors.invalidCode')"
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-security-status"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Security settings
+      </h2>
+      <SettingsTwoFactorStatusCard :status="securityOffFixture" />
+      <SettingsTwoFactorStatusCard :status="securityOnFixture" />
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-totp-setup"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Authenticator setup
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.setup.title') }}
+          </h3>
+        </template>
+        <SettingsTotpSetupPanel
+          :setup="totpSetupFixture"
+          initial-code="123456"
+        />
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          needs-code
+        />
       </UCard>
     </section>
 
