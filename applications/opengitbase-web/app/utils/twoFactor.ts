@@ -14,6 +14,8 @@ export interface AccountSecurity {
   hasPassword: boolean
   /** Unused recovery codes. */
   recoveryCodesRemaining: number
+  /** Whether passkeys can be used on this instance (`WebAuthn:RelyingPartyId`). */
+  passkeysAvailable: boolean
 }
 
 /** How the second step is answered: the authenticator code or one recovery code. */
@@ -72,6 +74,10 @@ const errorKeys: Record<string, string> = {
   two_factor_not_enabled: 'auth.twoFactor.errors.notEnabled',
   reauthentication_required: 'auth.twoFactor.errors.reauthenticationRequired',
   reauthentication_unavailable: 'auth.twoFactor.errors.reauthenticationUnavailable',
+  passkey_rejected: 'settings.security.passkeys.errors.rejected',
+  passkey_already_registered: 'settings.security.passkeys.errors.alreadyRegistered',
+  no_passkeys: 'settings.security.passkeys.errors.noPasskeys',
+  invalid_name: 'settings.security.passkeys.errors.invalidName',
 }
 
 /** The translation key for a failed second-factor or re-authentication request. */

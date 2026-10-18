@@ -6,12 +6,15 @@ const props = defineProps<{
   needsCode: boolean
   /** Unused recovery codes exist, so one can stand in for the authenticator code. */
   recoveryAvailable?: boolean
+  /** The account has a passkey and the browser can use it; it replaces password and code. */
+  passkeyAvailable?: boolean
   loading?: boolean
   error?: string | null
 }>()
 
 const emit = defineEmits<{
   submit: [credentials: { password: string, code?: string, recoveryCode?: string }]
+  passkey: []
   cancel: []
 }>()
 
@@ -19,6 +22,8 @@ const { t } = useI18n()
 const password = ref('')
 const code = ref('')
 const useRecovery = ref(false)
+/** Accounts without a password and without 2FA can only confirm with a passkey. */
+const passkeyOnly = computed(() => !props.needsPassword && !props.needsCode)
 
 function toggleMethod() {
   useRecovery.value = !useRecovery.value
@@ -44,6 +49,24 @@ function onSubmit() {
     <p class="text-sm text-[var(--ogb-text-muted)]">
       {{ t('settings.security.reauth.description') }}
     </p>
+
+    <template v-if="passkeyAvailable">
+      <UButton
+        block
+        variant="soft"
+        icon="i-lucide-fingerprint"
+        :loading="loading && passkeyOnly"
+        :disabled="loading"
+        data-testid="reauth-use-passkey"
+        @click="emit('passkey')"
+      >
+        {{ t('settings.security.reauth.usePasskey') }}
+      </UButton>
+      <USeparator
+        v-if="!passkeyOnly"
+        :label="t('settings.security.reauth.or')"
+      />
+    </template>
 
     <UFormField
       v-if="needsPassword"
@@ -118,6 +141,7 @@ function onSubmit() {
         {{ t('common.cancel') }}
       </UButton>
       <UButton
+        v-if="!passkeyOnly"
         type="submit"
         :loading="loading"
       >

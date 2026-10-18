@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AccountSecurity, TotpSetup } from '~/utils/twoFactor'
+import type { Passkey } from '~/utils/webauthn'
 
 definePageMeta({
   layout: false,
@@ -23,6 +24,7 @@ const securityOffFixture: AccountSecurity = {
   totpConfigured: false,
   hasPassword: true,
   recoveryCodesRemaining: 0,
+  passkeysAvailable: true,
 }
 const securityOnFixture: AccountSecurity = {
   ...securityOffFixture,
@@ -32,6 +34,23 @@ const securityOnFixture: AccountSecurity = {
 }
 // mfa-02: two codes left shows the warning.
 const securityLowFixture: AccountSecurity = { ...securityOnFixture, recoveryCodesRemaining: 2 }
+// mfa-03: one synced passkey in use and one never used; dates relative to the frozen visual clock.
+const passkeysFixture: Passkey[] = [
+  {
+    id: 'passkey-macbook',
+    name: 'MacBook',
+    createdAt: '2026-06-01T12:00:00Z',
+    lastUsedAt: '2026-08-29T12:00:00Z',
+    isBackedUp: true,
+  },
+  {
+    id: 'passkey-yubikey',
+    name: 'YubiKey 5C',
+    createdAt: '2026-08-25T12:00:00Z',
+    lastUsedAt: null,
+    isBackedUp: false,
+  },
+]
 const recoveryCodesFixture = [
   'abcde-fghij',
   'klmno-pqrst',
@@ -462,6 +481,34 @@ const selfHostOptions = [
       <SettingsTwoFactorStatusCard :status="securityOffFixture" />
       <SettingsTwoFactorStatusCard :status="securityOnFixture" />
       <SettingsTwoFactorStatusCard :status="securityLowFixture" />
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-passkeys"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Passkeys
+      </h2>
+      <SettingsPasskeysCard :passkeys="passkeysFixture" />
+      <SettingsPasskeysCard
+        :passkeys="passkeysFixture"
+        initial-editing-id="passkey-yubikey"
+        adding
+      />
+      <SettingsPasskeysCard :passkeys="[]" />
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          :needs-code="false"
+          passkey-available
+        />
+      </UCard>
     </section>
 
     <section

@@ -7,6 +7,7 @@ import type {
   PublicStatusSnapshot,
 } from './publicStatus'
 import type { AccountSecurity, SecondFactorAnswer, TotpSetup, TwoFactorChallenge } from './twoFactor'
+import type { Passkey, PasskeyCredentialJSON } from './webauthn'
 
 export type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
 
@@ -1707,8 +1708,29 @@ export function createApi(baseUrl: string) {
         request<AccountSecurity>('/account/security'),
 
       /** Confirms the caller again for 10 minutes before a security change. */
-      reauthenticate: (body: { password: string, code?: string, recoveryCode?: string }) =>
+      reauthenticate: (
+        body: { password: string, code?: string, recoveryCode?: string } | { passkeyAssertion: PasskeyCredentialJSON },
+      ) =>
         request<null>('/account/reauthenticate', { method: 'POST', body: JSON.stringify(body) }),
+
+      /** Request options for re-authenticating with one of the caller's passkeys. */
+      passkeyReauthenticationOptions: () =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/account/reauthenticate/passkey-options', { method: 'POST' }),
+
+      passkeys: () =>
+        request<Passkey[]>('/account/passkeys'),
+
+      passkeyRegistrationOptions: () =>
+        request<PublicKeyCredentialCreationOptionsJSON>('/account/passkeys/registration-options', { method: 'POST' }),
+
+      registerPasskey: (body: { name: string, attestationResponse: PasskeyCredentialJSON }) =>
+        request<Passkey>('/account/passkeys', { method: 'POST', body: JSON.stringify(body) }),
+
+      renamePasskey: (id: string, body: { name: string }) =>
+        request<Passkey>(`/account/passkeys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+      deletePasskey: (id: string) =>
+        request<null>(`/account/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
       startTotpSetup: () =>
         request<TotpSetup>('/account/two-factor/totp/setup', { method: 'POST' }),

@@ -27,6 +27,24 @@ export const mockRecoveryCodes = [
   '23456-7abcd',
 ]
 
+// mfa-03: passkeys the mock accepts without checking the attestation.
+const mockPasskeys: Array<{ id: string, name: string, createdAt: string, lastUsedAt: string | null, isBackedUp: boolean }> = [
+  {
+    id: '66666666-6666-6666-6666-666666666666',
+    name: 'MacBook',
+    createdAt: '2026-06-01T12:00:00Z',
+    lastUsedAt: '2026-08-29T12:00:00Z',
+    isBackedUp: true,
+  },
+]
+
+function mockChallenge(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
 const mockRepos = [
   {
     id: '11111111-1111-1111-1111-111111111111',
@@ -367,7 +385,63 @@ export const handlers = [
       totpConfigured: mockUser.twoFactorEnabled,
       hasPassword: true,
       recoveryCodesRemaining: mockUser.twoFactorEnabled ? mockRecoveryCodes.length : 0,
+      passkeysAvailable: true,
     })
+  }),
+
+  http.post('/api/account/reauthenticate/passkey-options', () => {
+    if (mockPasskeys.length === 0) {
+      return HttpResponse.json({ error: 'no_passkeys' }, { status: 400 })
+    }
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, userVerification: 'required' })
+  }),
+
+  http.get('/api/account/passkeys', () => {
+    return HttpResponse.json(mockPasskeys)
+  }),
+
+  http.post('/api/account/passkeys/registration-options', () => {
+    return HttpResponse.json({
+      rp: { id: location.hostname, name: 'OpenGitBase' },
+      user: { id: 'IiIiIiIiIiIiIiIiIiIiIg', name: mockUser.username, displayName: mockUser.username },
+      challenge: mockChallenge(),
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      timeout: 60000,
+      attestation: 'none',
+      authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+      excludeCredentials: [],
+    })
+  }),
+
+  http.post('/api/account/passkeys', async ({ request }) => {
+    const body = await request.json() as { name: string }
+    const passkey = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+      isBackedUp: false,
+    }
+    mockPasskeys.push(passkey)
+    return HttpResponse.json(passkey, { status: 201 })
+  }),
+
+  http.patch('/api/account/passkeys/:id', async ({ params, request }) => {
+    const passkey = mockPasskeys.find(candidate => candidate.id === params.id)
+    if (!passkey) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    passkey.name = (await request.json() as { name: string }).name
+    return HttpResponse.json(passkey)
+  }),
+
+  http.delete('/api/account/passkeys/:id', ({ params }) => {
+    const index = mockPasskeys.findIndex(candidate => candidate.id === params.id)
+    if (index < 0) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    mockPasskeys.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post('/api/account/reauthenticate', () => {
