@@ -49,7 +49,7 @@ public class ReauthenticateWithPasskeyQueryHandler
             return Option<ReauthenticationResult>.None;
         }
 
-        var outcome = await PasskeyCeremonies.VerifyAssertionAsync(
+        var assertion = await PasskeyCeremonies.VerifyAssertionAsync(
             context,
             _webAuthnOptions,
             AuthenticationChallengePurpose.PasskeyReauthentication,
@@ -59,12 +59,12 @@ public class ReauthenticateWithPasskeyQueryHandler
             _logger,
             cancellationToken
         );
-        if (outcome == PasskeyAssertionOutcome.ChallengeExpired)
+        if (assertion.Outcome == PasskeyAssertionOutcome.ChallengeExpired)
         {
             return new ReauthenticationResult(ReauthenticationStatus.ChallengeExpired);
         }
 
-        if (outcome == PasskeyAssertionOutcome.Rejected)
+        if (assertion.Outcome == PasskeyAssertionOutcome.Rejected)
         {
             return new ReauthenticationResult(ReauthenticationStatus.PasskeyRejected);
         }

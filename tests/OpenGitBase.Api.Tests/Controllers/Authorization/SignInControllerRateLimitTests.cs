@@ -11,6 +11,8 @@ public class SignInControllerRateLimitTests
     [InlineData(nameof(SignInController.LoginAsync))]
     [InlineData(nameof(SignInController.RequestPasswordResetAsync))]
     [InlineData(nameof(SignInController.UserPasswordResetAsync))]
+    [InlineData(nameof(SignInController.StartPasskeySignInAsync))]
+    [InlineData(nameof(SignInController.SignInWithPasskeyAsync))]
     public void CredentialEndpoints_UseTheSensitiveRateLimitPolicy(string actionName)
     {
         var action = typeof(SignInController).GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance);

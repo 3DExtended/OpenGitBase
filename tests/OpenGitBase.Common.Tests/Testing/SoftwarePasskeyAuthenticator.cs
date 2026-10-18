@@ -42,7 +42,11 @@ public sealed class SoftwarePasskeyAuthenticator : IDisposable
     /// <summary>Reports the credential as synced, as iCloud Keychain or Google Password Manager do.</summary>
     public bool Synced { get; set; }
 
-    public uint SignCount { get; private set; }
+    /// <summary>The signature counter of the next assertion minus one; settable to replay an older counter.</summary>
+    public uint SignCount { get; set; }
+
+    /// <summary>False reports a counter of 0 every time, as synced passkeys do.</summary>
+    public bool CountsSignatures { get; set; } = true;
 
     public static string ToBase64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -97,7 +101,11 @@ public sealed class SoftwarePasskeyAuthenticator : IDisposable
         var options = JsonNode.Parse(requestOptionsJson)!;
         var relyingPartyId = RelyingPartyIdOverride ?? options["rpId"]!.GetValue<string>();
         var clientData = ClientData("webauthn.get", options["challenge"]!.GetValue<string>());
-        SignCount++;
+        if (CountsSignatures)
+        {
+            SignCount++;
+        }
+
         var authenticatorData = AuthenticatorData(relyingPartyId, 0, []);
         var signature = _key.SignData(
             [.. authenticatorData, .. SHA256.HashData(clientData)],
