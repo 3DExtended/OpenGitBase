@@ -25,6 +25,13 @@ public static class InsertOnceExtensions
             .ExecuteAsync(async () =>
             {
                 context.ChangeTracker.Clear();
+
+                // Replaying an insert whose commit landed could reject it as a duplicate of itself.
+                if (commitAttempted && await isInserted(cancellationToken).ConfigureAwait(false))
+                {
+                    return committedResult;
+                }
+
                 await using var transaction = await context
                     .Database.BeginTransactionAsync(cancellationToken)
                     .ConfigureAwait(false);

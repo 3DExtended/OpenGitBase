@@ -1,7 +1,9 @@
-﻿using OpenGitBase.Common.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Features.MergeRequest;
 using OpenGitBase.Features.MergeRequest.Contracts;
+using OpenGitBase.Features.MergeRequest.Entities;
 using OpenGitBase.Features.MergeRequest.QueryHandlers;
 using OpenGitBase.Features.MergeRequest.Tests.Testing;
 
@@ -52,6 +54,26 @@ public class CreateMergeRequestQueryHandlerTests
         Assert.True(result.IsSome);
         Assert.Equal(MergeRequestStatus.Draft, result.Get().Status);
         Assert.True(result.Get().IsDraft);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_CreatesTheMergeRequestOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        // The COMMIT lands but its acknowledgement does not; the retry must not report the new merge request as failed.
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new MergeRequestHandlerTestScope(lostCommit.Configure);
+        await scope.EnsureCreatedAsync();
+        lostCommit.LoseNextCommitInserting("merge_requests");
+
+        var handler = scope.GetHandler<CreateMergeRequestQueryHandler>();
+        var result = await handler.RunQueryAsync(MergeRequestTestData.CreateQuery(), CancellationToken.None);
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        Assert.True(result.IsSome);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        var stored = Assert.Single(await verifyContext.Set<MergeRequestEntity>().AsNoTracking().ToListAsync());
+        Assert.Equal(result.Get().Id.Value, stored.Id);
+        Assert.Equal(1, result.Get().Number);
     }
 
     [Fact]

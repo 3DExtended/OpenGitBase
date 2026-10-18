@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.MergeRequest.Entities;
 using OpenGitBase.Features.Repository.Contracts;
@@ -46,50 +47,7 @@ public class CreateMergeRequestQueryHandler : IQueryHandler<CreateMergeRequestQu
             return Option<MergeRequestDto>.None;
         }
 
-        await using var context = await _contextFactory
-            .CreateDbContextAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (
-            await MergeRequestProjection
-                .HasActivePairAsync(
-                    context,
-                    query.RepositoryId,
-                    query.SourceRef.Trim(),
-                    query.TargetRef.Trim(),
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
-        )
-        {
-            return Option<MergeRequestDto>.None;
-        }
-
-        var utcNow = _systemClock.UtcNow;
-        var number = await MergeRequestProjection
-            .AllocateNumberAsync(context, query.RepositoryId, cancellationToken)
-            .ConfigureAwait(false);
-
-        var status = query.IsDraft ? MergeRequestStatus.Draft : MergeRequestStatus.Open;
-        var entity = new MergeRequestEntity
-        {
-            Id = Guid.NewGuid(),
-            RepositoryId = query.RepositoryId,
-            Number = number,
-            Title = query.Title.Trim(),
-            Body = string.IsNullOrWhiteSpace(query.Body) ? null : query.Body.Trim(),
-            Status = (int)status,
-            IsDraft = query.IsDraft,
-            SourceRef = query.SourceRef.Trim(),
-            TargetRef = query.TargetRef.Trim(),
-            SourceHeadSha = query.SourceHeadSha.Trim(),
-            TargetBaseSha = query.TargetBaseSha.Trim(),
-            CreatorUserId = query.CreatorUserId.Value,
-            CreatedAt = utcNow,
-            UpdatedAt = utcNow,
-        };
-
-        context.Set<MergeRequestEntity>().Add(entity);
+        MergeRequestTargetPolicy? targetPolicy = null;
         if (!query.IsDraft)
         {
             var defaultBranch = await _queryProcessor
@@ -98,21 +56,35 @@ public class CreateMergeRequestQueryHandler : IQueryHandler<CreateMergeRequestQu
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-            var targetPolicy = await _gateCoordinator
+            targetPolicy = await _gateCoordinator
                 .LoadTargetPolicyAsync(
                     _queryProcessor,
                     query.RepositoryId,
-                    entity.TargetRef,
+                    query.TargetRef.Trim(),
                     defaultBranch.IsSome ? defaultBranch.Get().DefaultBranchName : null,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-            await _gateCoordinator
-                .EvaluateAndTransitionAsync(context, entity, targetPolicy, cancellationToken)
-                .ConfigureAwait(false);
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var mergeRequestId = Guid.NewGuid();
+        await using var context = await _contextFactory
+            .CreateDbContextAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // Every attempt inserts the same id, so a replayed COMMIT that already landed creates the merge request once.
+        var entity = await context
+            .InsertOnceAsync(
+                ct => InsertMergeRequestAsync(context, query, mergeRequestId, targetPolicy, ct),
+                ct => context.Set<MergeRequestEntity>().AnyAsync(mr => mr.Id == mergeRequestId, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return Option<MergeRequestDto>.None;
+        }
 
         if (!string.IsNullOrWhiteSpace(entity.Body))
         {
@@ -154,6 +126,69 @@ public class CreateMergeRequestQueryHandler : IQueryHandler<CreateMergeRequestQu
                 policy.RequiredApprovalCount
             )
         );
+    }
+
+    /// <summary>
+    /// Allocates the merge request's number and inserts it, moving it through its gates unless it is a draft.
+    /// Returns null when an active merge request already pairs the same refs.
+    /// </summary>
+    private async Task<MergeRequestEntity?> InsertMergeRequestAsync(
+        OpenGitBaseDbContext context,
+        CreateMergeRequestQuery query,
+        Guid mergeRequestId,
+        MergeRequestTargetPolicy? targetPolicy,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            await MergeRequestProjection
+                .HasActivePairAsync(
+                    context,
+                    query.RepositoryId,
+                    query.SourceRef.Trim(),
+                    query.TargetRef.Trim(),
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            return null;
+        }
+
+        var utcNow = _systemClock.UtcNow;
+        var number = await MergeRequestProjection
+            .AllocateNumberAsync(context, query.RepositoryId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var status = query.IsDraft ? MergeRequestStatus.Draft : MergeRequestStatus.Open;
+        var entity = new MergeRequestEntity
+        {
+            Id = mergeRequestId,
+            RepositoryId = query.RepositoryId,
+            Number = number,
+            Title = query.Title.Trim(),
+            Body = string.IsNullOrWhiteSpace(query.Body) ? null : query.Body.Trim(),
+            Status = (int)status,
+            IsDraft = query.IsDraft,
+            SourceRef = query.SourceRef.Trim(),
+            TargetRef = query.TargetRef.Trim(),
+            SourceHeadSha = query.SourceHeadSha.Trim(),
+            TargetBaseSha = query.TargetBaseSha.Trim(),
+            CreatorUserId = query.CreatorUserId.Value,
+            CreatedAt = utcNow,
+            UpdatedAt = utcNow,
+        };
+
+        context.Set<MergeRequestEntity>().Add(entity);
+        if (targetPolicy is not null)
+        {
+            await _gateCoordinator
+                .EvaluateAndTransitionAsync(context, entity, targetPolicy, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return entity;
     }
 }
 
