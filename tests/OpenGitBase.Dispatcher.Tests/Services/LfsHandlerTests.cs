@@ -330,19 +330,23 @@ public class LfsHandlerTests
         Assert.Empty(harness.ApiRequests);
     }
 
+    /// <summary>
+    /// git-lfs 3.7 prints "Locking support detected on remote" on every push when this answers 200. On 501 it writes
+    /// <c>lfs.&lt;url&gt;.locksverify false</c> once and stays quiet (checked against git-lfs 3.7.1).
+    /// </summary>
     [Fact]
-    public async Task LocksVerify_AnswersWithNoLocks()
+    public async Task LocksVerify_Answers501SoGitLfsTurnsLockVerificationOffQuietly()
     {
         var harness = new Harness();
         var context = CreateContext("POST", "/alice/demo.git/info/lfs/locks/verify", """{"ref":{"name":"refs/heads/main"}}""");
 
         await harness.Handler.HandleAsync(context);
 
-        Assert.Equal(200, context.Response.StatusCode);
+        Assert.Equal(501, context.Response.StatusCode);
         Assert.Equal(LfsContentType, context.Response.ContentType);
         using var json = JsonDocument.Parse(ResponseText(context));
-        Assert.Equal(0, json.RootElement.GetProperty("ours").GetArrayLength());
-        Assert.Equal(0, json.RootElement.GetProperty("theirs").GetArrayLength());
+        Assert.Equal("Locking is not supported.", json.RootElement.GetProperty("message").GetString());
+        Assert.Empty(harness.ApiRequests);
     }
 
     [Fact]

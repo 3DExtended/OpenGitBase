@@ -99,6 +99,10 @@
     - one `LfsObject` row and three copies: plaintext on storage-1 (primary), encrypted on storage-2 and
       storage-3 at 5,000,109 bytes each (29 + size + 5 × 16);
     - `StorageBytesUsed` 5,026,498 = 5,000,000 LFS + 26,498 git.
-  - **Open:** `git push` prints "Locking support detected on remote", because the `locks/verify` stub answers
-    `200`. User story 13 wants no locking hint at all.
+  - **Follow-up: the locking hint.** `git push` printed "Locking support detected on remote" on every push. The
+    `locks/verify` stub answered `200` with no locks, and user story 13 wants no locking hint at all.
+    - Probe with git-lfs 3.7.1 against a local LFS server: on `200` the hint comes on every push; on `404` or `501`
+      git-lfs writes `lfs.<url>.locksverify false` once and pushes without a hint.
+    - The dispatcher now answers `501` "Locking is not supported." (`LfsHandlerTests`
+      `LocksVerify_Answers501SoGitLfsTurnsLockVerificationOffQuietly`; it fails against the old stub).
 - Commit(s): see `progress-log.md`

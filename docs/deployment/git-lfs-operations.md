@@ -139,6 +139,12 @@ In reverse, disabling first:
 Recorded objects stay on disk and in the database, and are served again once LFS is re-enabled. Because of the push
 gate, a ref never points at an object the server does not hold.
 
+## File locking
+
+Locking is not offered. `POST .../info/lfs/locks/verify` answers `501` "Locking is not supported.", and git-lfs then
+sets `lfs.<url>.locksverify false` in the clone once and pushes without a locking hint. `git lfs lock` reports
+locking as unsupported.
+
 ## SSH remotes
 
 LFS over SSH (`git-lfs-authenticate`, `git-lfs-transfer`) is not supported. Users with an SSH remote point LFS at the
