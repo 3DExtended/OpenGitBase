@@ -1305,17 +1305,29 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             bundle_path = bundle_file.name
 
         try:
+            # A bare repository like the one repository creation makes; --mirror keeps every ref, not only branches
+            # and tags (refs/internal/*).
             subprocess.run(
-                ["git", "clone", bundle_path, physical_path],
+                ["git", "clone", "--mirror", bundle_path, physical_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            git_config_env = {**os.environ, "GIT_DIR": physical_path}
+            # The clone recorded the temporary bundle file as its origin; the restored primary has no upstream.
+            subprocess.run(
+                ["git", "config", "--remove-section", "remote.origin"],
+                env=git_config_env,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
             subprocess.run(
-                ["git", "-C", physical_path, "config", "receive.denyCurrentBranch", "ignore"],
+                ["git", "config", "http.receivepack", "true"],
+                env=git_config_env,
                 check=True,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
             _write_initial_watermark(physical_path)
             _install_replication_hook(physical_path)
