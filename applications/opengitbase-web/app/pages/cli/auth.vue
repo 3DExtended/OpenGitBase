@@ -28,6 +28,15 @@ const hostLabel = computed(() => {
   return runtimeConfig.public.instanceName as string
 })
 
+const {
+  available: passkeyAvailable,
+  busy: passkeyBusy,
+  errorKey: passkeyError,
+  signIn: signInWithPasskey,
+  pause: pausePasskeyAutofill,
+  resume: resumePasskeyAutofill,
+} = usePasskeySignIn(token => returnTokenToCli(token), () => queryParams.value !== null)
+
 useHead({ title: 'CLI sign in' })
 
 async function onSubmit() {
@@ -37,11 +46,13 @@ async function onSubmit() {
 
   loading.value = true
   error.value = null
+  pausePasskeyAutofill()
   try {
     const api = useApi()
     const result = await api.auth.login({ username: username.value, password: password.value })
     if (result.error || !result.data) {
       error.value = t('auth.signIn.invalidCredentials')
+      void resumePasskeyAutofill()
       return
     }
     if (isTwoFactorChallenge(result.data)) {
@@ -92,6 +103,7 @@ function backToPassword() {
   challenge.value = null
   error.value = null
   password.value = ''
+  void resumePasskeyAutofill()
 }
 </script>
 
@@ -140,7 +152,7 @@ function backToPassword() {
       >
         <UInput
           v-model="username"
-          autocomplete="username"
+          autocomplete="username webauthn"
           required
         />
       </UFormField>
@@ -171,6 +183,13 @@ function backToPassword() {
       >
         {{ t('auth.signIn.submit') }}
       </UButton>
+
+      <AuthPasskeySignInButton
+        v-if="passkeyAvailable"
+        :loading="passkeyBusy"
+        :error="passkeyError"
+        @click="signInWithPasskey"
+      />
     </form>
   </UCard>
 </template>

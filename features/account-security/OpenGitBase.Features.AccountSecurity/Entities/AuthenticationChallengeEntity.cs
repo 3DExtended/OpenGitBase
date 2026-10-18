@@ -13,9 +13,10 @@ public class AuthenticationChallengeEntity
 
     public AuthenticationChallengePurpose Purpose { get; set; }
 
-    public Guid UserId { get; set; }
+    /// <summary>The user the step belongs to; null for a passkey sign-in, where nobody is known yet.</summary>
+    public Guid? UserId { get; set; }
 
-    public UserEntity User { get; set; } = null!;
+    public UserEntity? User { get; set; }
 
     public string TokenHash { get; set; } = string.Empty;
 

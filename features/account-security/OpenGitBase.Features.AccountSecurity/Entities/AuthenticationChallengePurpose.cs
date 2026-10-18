@@ -13,4 +13,7 @@ public enum AuthenticationChallengePurpose
 
     /// <summary>Request options for re-authenticating with a passkey were handed out.</summary>
     PasskeyReauthentication = 4,
+
+    /// <summary>Request options for signing in with any passkey were handed out; nobody is known yet.</summary>
+    PasskeySignIn = 5,
 }

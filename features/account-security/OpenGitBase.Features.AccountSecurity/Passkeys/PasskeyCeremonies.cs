@@ -33,7 +33,7 @@ internal static class PasskeyCeremonies
     public static Task StoreChallengeAsync(
         OpenGitBaseDbContext context,
         AuthenticationChallengePurpose purpose,
-        Guid userId,
+        Guid? userId,
         byte[] challenge,
         string optionsJson,
         DateTimeOffset now,
@@ -52,12 +52,13 @@ internal static class PasskeyCeremonies
 
     /// <summary>
     /// Consumes the user's open challenge that <paramref name="clientDataJson"/> answers and returns the
-    /// options it was issued with; null when none matches (never issued, already used or expired).
+    /// options it was issued with; null when none matches (never issued, already used or expired). A
+    /// null <paramref name="userId"/> takes an anonymous challenge, as issued for a passkey sign-in.
     /// </summary>
     public static async Task<string?> TakeChallengeAsync(
         OpenGitBaseDbContext context,
         AuthenticationChallengePurpose purpose,
-        Guid userId,
+        Guid? userId,
         byte[] clientDataJson,
         DateTimeOffset now,
         CancellationToken cancellationToken
@@ -80,14 +81,16 @@ internal static class PasskeyCeremonies
 
     /// <summary>
     /// Verifies the browser's assertion for an open challenge of <paramref name="userId"/>: the signature
-    /// must come from one of that user's passkeys, with user verification. A verified assertion records
-    /// the new signature counter, backup state and last use.
+    /// must come from one of that user's passkeys, with user verification. Without a user (sign-in), any
+    /// registered passkey may answer an anonymous challenge, and the result names its owner. A verified
+    /// assertion records the new signature counter, backup state and last use. A counter that does not
+    /// grow is rejected unless it stays 0, as synced passkeys report.
     /// </summary>
-    public static async Task<PasskeyAssertionOutcome> VerifyAssertionAsync(
+    public static async Task<PasskeyAssertion> VerifyAssertionAsync(
         OpenGitBaseDbContext context,
         WebAuthnOptions webAuthnOptions,
         AuthenticationChallengePurpose purpose,
-        Guid userId,
+        Guid? userId,
         string assertionJson,
         DateTimeOffset now,
         ILogger logger,
@@ -97,7 +100,7 @@ internal static class PasskeyCeremonies
         var response = Parse<AuthenticatorAssertionRawResponse>(assertionJson);
         if (response?.Response is null)
         {
-            return PasskeyAssertionOutcome.Rejected;
+            return PasskeyAssertion.Rejected;
         }
 
         var optionsJson = await TakeChallengeAsync(
@@ -110,19 +113,28 @@ internal static class PasskeyCeremonies
         );
         if (optionsJson is null)
         {
-            return PasskeyAssertionOutcome.ChallengeExpired;
+            return new PasskeyAssertion(PasskeyAssertionOutcome.ChallengeExpired);
         }
 
-        var passkey = await context
-            .Set<UserPasskeyEntity>()
-            .FirstOrDefaultAsync(
-                passkey => passkey.CredentialId == response.RawId && passkey.UserId == userId,
-                cancellationToken
-            );
+        var candidates = context.Set<UserPasskeyEntity>().Where(passkey => passkey.CredentialId == response.RawId);
+        if (userId is not null)
+        {
+            candidates = candidates.Where(passkey => passkey.UserId == userId);
+        }
+
+        var passkey = await candidates.FirstOrDefaultAsync(cancellationToken);
         if (passkey is null)
         {
-            logger.LogInformation("Passkey assertion for user {UserId} rejected: not one of their passkeys", userId);
-            return PasskeyAssertionOutcome.Rejected;
+            if (userId is null)
+            {
+                logger.LogInformation("Passkey sign-in rejected: unknown credential");
+            }
+            else
+            {
+                logger.LogInformation("Passkey assertion for user {UserId} rejected: not one of their passkeys", userId);
+            }
+
+            return PasskeyAssertion.Rejected;
         }
 
         try
@@ -136,7 +148,9 @@ internal static class PasskeyCeremonies
                         StoredPublicKey = passkey.PublicKey,
                         StoredSignatureCounter = (uint)passkey.SignCount,
                         IsUserHandleOwnerOfCredentialIdCallback = (candidate, _) =>
-                            Task.FromResult(candidate.UserHandle is { Length: 16 } && new Guid(candidate.UserHandle) == userId),
+                            Task.FromResult(
+                                candidate.UserHandle is { Length: 16 } && new Guid(candidate.UserHandle) == passkey.UserId
+                            ),
                     },
                     cancellationToken
                 );
@@ -144,16 +158,16 @@ internal static class PasskeyCeremonies
             passkey.IsBackedUp = verified.IsBackedUp;
             passkey.LastUsedAt = now;
             await context.SaveChangesAsync(cancellationToken);
-            return PasskeyAssertionOutcome.Verified;
+            return new PasskeyAssertion(PasskeyAssertionOutcome.Verified, passkey.UserId);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogInformation(
                 "Passkey assertion for user {UserId} rejected: {Reason}",
-                userId,
+                passkey.UserId,
                 exception.Message
             );
-            return PasskeyAssertionOutcome.Rejected;
+            return PasskeyAssertion.Rejected;
         }
     }
 

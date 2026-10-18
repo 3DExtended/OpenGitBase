@@ -1658,6 +1658,14 @@ export function createApi(baseUrl: string) {
       completeTwoFactor: (body: { challengeToken: string } & SecondFactorAnswer) =>
         request<string>('/signin/two-factor', { method: 'POST', body: JSON.stringify(body) }),
 
+      /** Request options for any passkey of this site; `404` while passkeys are off. */
+      passkeySignInOptions: () =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/signin/passkey/options', { method: 'POST' }),
+
+      /** A session token; a user-verified passkey needs no second step. */
+      signInWithPasskey: (body: { assertion: PasskeyCredentialJSON }) =>
+        request<string>('/signin/passkey', { method: 'POST', body: JSON.stringify(body) }),
+
       register: (body: { username: string, email: string, password: string }) =>
         request<string>('/register/register', { method: 'POST', body: JSON.stringify(body) }),
 

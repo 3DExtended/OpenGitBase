@@ -378,6 +378,15 @@ export const handlers = [
     return HttpResponse.json('mock-token')
   }),
 
+  http.post('/api/signin/passkey/options', () => {
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, allowCredentials: [], userVerification: 'required' })
+  }),
+
+  // The stand-in cannot verify a signature; any passkey of this site signs in.
+  http.post('/api/signin/passkey', async () => {
+    return HttpResponse.json('mock-token')
+  }),
+
   http.get('/api/account/security', () => {
     return HttpResponse.json({
       twoFactorAvailable: true,

@@ -14,6 +14,7 @@ public class AuthenticationChallengeEntityConfiguration : IEntityTypeConfigurati
             .HasOne(entity => entity.User)
             .WithMany()
             .HasForeignKey(entity => entity.UserId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Cascade);
         builder.Property(entity => entity.Purpose).HasConversion<string>().HasMaxLength(32);
         builder.Property(entity => entity.TokenHash).HasMaxLength(64).IsRequired();

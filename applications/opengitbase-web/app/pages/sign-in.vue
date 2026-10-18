@@ -17,6 +17,18 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const challenge = ref<TwoFactorChallenge | null>(null)
 
+const {
+  available: passkeyAvailable,
+  busy: passkeyBusy,
+  errorKey: passkeyError,
+  signIn: signInWithPasskey,
+  pause: pausePasskeyAutofill,
+  resume: resumePasskeyAutofill,
+} = usePasskeySignIn(async () => {
+  await auth.fetchMe()
+  await continueToApp()
+})
+
 useHead({ title: t('auth.signIn.title') })
 
 async function continueToApp() {
@@ -29,10 +41,12 @@ async function continueToApp() {
 async function onSubmit() {
   loading.value = true
   error.value = null
+  pausePasskeyAutofill()
   try {
     const result = await auth.login(username.value, password.value)
     if (result.error) {
       error.value = t('auth.signIn.invalidCredentials')
+      void resumePasskeyAutofill()
       return
     }
     if (isTwoFactorChallenge(result.data)) {
@@ -72,6 +86,7 @@ function backToPassword() {
   challenge.value = null
   error.value = null
   password.value = ''
+  void resumePasskeyAutofill()
 }
 </script>
 
@@ -107,7 +122,7 @@ function backToPassword() {
       >
         <UInput
           v-model="username"
-          autocomplete="username"
+          autocomplete="username webauthn"
           required
         />
       </UFormField>
@@ -138,6 +153,13 @@ function backToPassword() {
       >
         {{ t('auth.signIn.submit') }}
       </UButton>
+
+      <AuthPasskeySignInButton
+        v-if="passkeyAvailable"
+        :loading="passkeyBusy"
+        :error="passkeyError"
+        @click="signInWithPasskey"
+      />
     </form>
 
     <template

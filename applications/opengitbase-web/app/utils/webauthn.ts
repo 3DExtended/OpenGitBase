@@ -137,9 +137,16 @@ export async function createPasskey(options: PublicKeyCredentialCreationOptionsJ
   return credentialToJSON(credential as PublicKeyCredential)
 }
 
-/** Asks the browser to sign the challenge with one of the allowed passkeys. */
-export async function getPasskeyAssertion(options: PublicKeyCredentialRequestOptionsJSON): Promise<PasskeyCredentialJSON> {
-  const credential = await navigator.credentials.get({ publicKey: requestOptionsFromJSON(options) })
+/**
+ * Asks the browser to sign the challenge with one of the allowed passkeys, or with any passkey for
+ * this site when none is listed. `mediation: 'conditional'` offers them in the username field
+ * instead of a prompt.
+ */
+export async function getPasskeyAssertion(
+  options: PublicKeyCredentialRequestOptionsJSON,
+  request: Pick<CredentialRequestOptions, 'mediation' | 'signal'> = {},
+): Promise<PasskeyCredentialJSON> {
+  const credential = await navigator.credentials.get({ ...request, publicKey: requestOptionsFromJSON(options) })
   if (!credential) {
     throw new DOMException('No passkey was used.', 'NotAllowedError')
   }

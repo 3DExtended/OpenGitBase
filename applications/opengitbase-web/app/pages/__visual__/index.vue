@@ -386,6 +386,26 @@ const selfHostOptions = [
         >
           {{ t('auth.signIn.submit') }}
         </UButton>
+        <AuthPasskeySignInButton
+          class="mt-4"
+          :loading="false"
+          :error="null"
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-passkey-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Passkey sign-in, rejected
+      </h2>
+      <UCard>
+        <AuthPasskeySignInButton
+          :loading="false"
+          error="auth.signIn.passkey.rejected"
+        />
       </UCard>
     </section>
 

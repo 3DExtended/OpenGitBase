@@ -192,7 +192,14 @@
       "submit": "Sign in",
       "invalidCredentials": "Invalid username or password.",
       "forgotPassword": "Forgot your password?",
-      "noAccount": "Don't have an account?"
+      "noAccount": "Don't have an account?",
+      "or": "or",
+      "passkey": {
+        "button": "Sign in with a passkey",
+        "rejected": "That passkey could not sign you in. Try again or use your password.",
+        "failed": "The passkey prompt did not work. Try again or use your password.",
+        "tooManyAttempts": "Too many attempts. Wait a minute and try again."
+      }
     },
     "signUp": {
       "title": "Create account",
