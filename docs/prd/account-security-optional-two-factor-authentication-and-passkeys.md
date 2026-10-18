@@ -192,6 +192,18 @@ The confirmation is recorded as a short-lived `ReAuthentication` challenge bound
 
 There is no admin user management UI yet, so v1 exposes the API only; the operations docs describe how to call it.
 
+### Rollout switch
+
+`TwoFactor:Enabled` gates **turning 2FA on**, following the `Lfs:Enabled` pattern.
+
+- Default `false`; local compose and tests set `true`.
+- While it is off:
+  - TOTP setup/confirm and passkey-only enable return `404`;
+  - the settings page hides the 2FA section.
+- Disabling 2FA, regenerating recovery codes and the second sign-in step stay available. An account that already has 2FA on is never weakened by switching it off.
+- Production switches it on only once recovery codes, notifications and admin reset have shipped. Until then no account can lock itself out without a recovery path.
+- Passkeys as a sign-in method have their own gate (`WebAuthn:RelyingPartyId`).
+
 ### Web UI
 
 - `sign-in.vue`:
