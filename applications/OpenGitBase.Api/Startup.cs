@@ -191,6 +191,9 @@ public class Startup
         services.AddSingleton(
             Configuration.GetSection("TwoFactor").Get<TwoFactorOptions>() ?? new TwoFactorOptions()
         );
+        services.AddSingleton(
+            Configuration.GetSection("WebAuthn").Get<WebAuthnOptions>() ?? new WebAuthnOptions()
+        );
         services.AddSingleton<LfsActionTokenService>();
         services.AddScoped(sp => new RepositoryAccessCheckEvaluator(
             sp.GetRequiredService<IQueryProcessor>(),

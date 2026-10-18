@@ -34,6 +34,9 @@ namespace OpenGitBase.Common.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Payload")
+                        .HasColumnType("text");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -55,6 +58,62 @@ namespace OpenGitBase.Common.Migrations
                         .IsUnique();
 
                     b.ToTable("AuthenticationChallenges", (string)null);
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserPasskeyEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Aaguid")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("CredentialId")
+                        .IsRequired()
+                        .HasMaxLength(1023)
+                        .HasColumnType("bytea");
+
+                    b.Property<bool>("IsBackedUp")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsBackupEligible")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<byte[]>("PublicKey")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<long>("SignCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Transports")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserPasskeys", (string)null);
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserRecoveryCodeEntity", b =>
@@ -2017,6 +2076,17 @@ namespace OpenGitBase.Common.Migrations
                 });
 
             modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.AuthenticationChallengeEntity", b =>
+                {
+                    b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OpenGitBase.Features.AccountSecurity.Entities.UserPasskeyEntity", b =>
                 {
                     b.HasOne("OpenGitBase.Features.Users.Entities.UserEntity", "User")
                         .WithMany()

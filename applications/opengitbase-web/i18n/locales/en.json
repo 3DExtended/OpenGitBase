@@ -297,10 +297,43 @@
         "stored": "I have stored these codes",
         "done": "Done"
       },
+      "passkeys": {
+        "title": "Passkeys",
+        "description": "A passkey confirms it is you with your device's fingerprint, face or screen lock. It stays on this device or is synced by your password manager.",
+        "empty": "No passkeys yet.",
+        "add": "Add a passkey",
+        "nameLabel": "Passkey name",
+        "namePlaceholder": "For example MacBook or iPhone",
+        "create": "Create passkey",
+        "created": "Added",
+        "lastUsed": "last used",
+        "neverUsed": "not used yet",
+        "synced": "Synced",
+        "syncedHint": "Synced by your password manager or cloud account",
+        "rename": "Rename passkey",
+        "save": "Save",
+        "remove": "Remove passkey",
+        "removeConfirmTitle": "Remove this passkey?",
+        "removeConfirmDescription": "\"{name}\" stops working for this account. Remove it from your device or password manager as well.",
+        "removeConfirmButton": "Remove passkey",
+        "addedNotice": "Passkey added.",
+        "removedNotice": "Passkey removed.",
+        "errors": {
+          "cancelled": "The passkey prompt was closed or timed out. Try again when you are ready.",
+          "alreadyRegistered": "This device already has a passkey for your account.",
+          "rejected": "That passkey could not be verified. Try again or use another one.",
+          "expired": "The passkey prompt took too long. Please try again.",
+          "noPasskeys": "This account has no passkeys yet.",
+          "invalidName": "Give the passkey a name of up to 64 characters.",
+          "generic": "The passkey could not be used. Please try again."
+        }
+      },
       "reauth": {
         "title": "Confirm it is you",
         "description": "For your security, confirm your identity before changing how you sign in.",
-        "submit": "Confirm"
+        "submit": "Confirm",
+        "usePasskey": "Use a passkey",
+        "or": "or"
       }
     },
     "profile": {

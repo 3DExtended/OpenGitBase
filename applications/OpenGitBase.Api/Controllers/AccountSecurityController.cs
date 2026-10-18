@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -23,18 +24,21 @@ public class AccountSecurityController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly IUserContext _userContext;
     private readonly TwoFactorOptions _twoFactorOptions;
+    private readonly WebAuthnOptions _webAuthnOptions;
     private readonly SessionIssuer _sessionIssuer;
 
     public AccountSecurityController(
         IQueryProcessor queryProcessor,
         IUserContext userContext,
         TwoFactorOptions twoFactorOptions,
+        WebAuthnOptions webAuthnOptions,
         SessionIssuer sessionIssuer
     )
     {
         _queryProcessor = queryProcessor;
         _userContext = userContext;
         _twoFactorOptions = twoFactorOptions;
+        _webAuthnOptions = webAuthnOptions;
         _sessionIssuer = sessionIssuer;
     }
 
@@ -60,12 +64,14 @@ public class AccountSecurityController : ControllerBase
                 TotpConfigured = status.TotpConfigured,
                 HasPassword = status.HasPassword,
                 RecoveryCodesRemaining = status.RecoveryCodesRemaining,
+                PasskeysAvailable = _webAuthnOptions.Enabled,
             }
         );
     }
 
     /// <summary>
-    /// Confirms the caller again for 10 minutes: the password, plus a code or a recovery code while 2FA is on.
+    /// Confirms the caller again for 10 minutes: the password, plus a code or a recovery code while 2FA is on,
+    /// or an assertion of one of the caller's passkeys.
     /// </summary>
     [HttpPost("reauthenticate")]
     [EnableRateLimiting("sensitive")]
@@ -78,6 +84,11 @@ public class AccountSecurityController : ControllerBase
         if (requestDto == null || string.IsNullOrEmpty(sessionId))
         {
             return BadRequest();
+        }
+
+        if (requestDto.PasskeyAssertion is { } assertion)
+        {
+            return await ReauthenticateWithPasskeyAsync(sessionId, assertion, cancellationToken).ConfigureAwait(false);
         }
 
         var result = await _queryProcessor
@@ -117,6 +128,27 @@ public class AccountSecurityController : ControllerBase
             ),
             _ => BadRequest(Error(SecondFactorErrorResponse.ReauthenticationUnavailable)),
         };
+    }
+
+    /// <summary>Request options for re-authenticating with one of the caller's passkeys.</summary>
+    [HttpPost("reauthenticate/passkey-options")]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult> StartPasskeyReauthenticationAsync(CancellationToken cancellationToken)
+    {
+        if (!_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(new StartPasskeyReauthenticationQuery { UserId = CurrentUserId }, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.IsNone)
+        {
+            return BadRequest(Error(SecondFactorErrorResponse.NoPasskeys));
+        }
+
+        return Content(result.Get().OptionsJson, "application/json");
     }
 
     /// <summary>Starts (or restarts) authenticator setup; the current authenticator keeps working until confirmed.</summary>
@@ -251,25 +283,41 @@ public class AccountSecurityController : ControllerBase
     private ObjectResult ReauthenticationRequired() =>
         StatusCode(StatusCodes.Status403Forbidden, Error(SecondFactorErrorResponse.ReauthenticationRequired));
 
-    private async Task<bool> HasRecentReauthenticationAsync(CancellationToken cancellationToken)
+    private Task<bool> HasRecentReauthenticationAsync(CancellationToken cancellationToken) =>
+        RecentReauthentication.HasAsync(_queryProcessor, User, CurrentUserId, cancellationToken);
+
+    private async Task<ActionResult> ReauthenticateWithPasskeyAsync(
+        string sessionId,
+        JsonElement assertion,
+        CancellationToken cancellationToken
+    )
     {
-        var sessionId = SessionClaims.ReadSessionId(User);
-        if (string.IsNullOrEmpty(sessionId) || !SessionClaims.TryReadIssuedAt(User, out var issuedAt))
+        if (!_webAuthnOptions.Enabled)
         {
-            return false;
+            return NotFound();
         }
 
         var result = await _queryProcessor
             .RunQueryAsync(
-                new HasRecentReauthenticationQuery
+                new ReauthenticateWithPasskeyQuery
                 {
                     UserId = CurrentUserId,
                     SessionId = sessionId,
-                    SessionIssuedAt = issuedAt,
+                    AssertionResponseJson = assertion.GetRawText(),
                 },
                 cancellationToken
             )
             .ConfigureAwait(false);
-        return result.IsSome && result.Get();
+        if (result.IsNone)
+        {
+            return NotFound();
+        }
+
+        return result.Get().Status switch
+        {
+            ReauthenticationStatus.Succeeded => NoContent(),
+            ReauthenticationStatus.ChallengeExpired => Unauthorized(Error(SecondFactorErrorResponse.ChallengeExpired)),
+            _ => Unauthorized(Error(SecondFactorErrorResponse.PasskeyRejected)),
+        };
     }
 }

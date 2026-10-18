@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Features.AccountSecurity.Entities;
 using OpenGitBase.Features.AccountSecurity.Totp;
 using OpenGitBase.Features.Users.Entities;
@@ -22,7 +24,14 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
 {
     public const string Password = "Password123!";
 
-    protected TwoFactorControllerTestBase(WebApplicationFactory<ApiEntryPoint> factory, bool twoFactorEnabled = true)
+    /// <summary>The origin the software authenticator reports; the test host's relying party accepts it.</summary>
+    public const string WebAuthnOrigin = "http://localhost:8089";
+
+    protected TwoFactorControllerTestBase(
+        WebApplicationFactory<ApiEntryPoint> factory,
+        bool twoFactorEnabled = true,
+        bool passkeysEnabled = true
+    )
         : base(factory)
     {
         TwoFactorFactory = Factory.WithWebHostBuilder(builder =>
@@ -32,6 +41,12 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
                 services.AddSingleton<ISystemClock>(Clock);
                 services.RemoveAll<TwoFactorOptions>();
                 services.AddSingleton(new TwoFactorOptions { Enabled = twoFactorEnabled });
+                services.RemoveAll<WebAuthnOptions>();
+                services.AddSingleton(
+                    passkeysEnabled
+                        ? new WebAuthnOptions { RelyingPartyId = "localhost", Origins = [WebAuthnOrigin] }
+                        : new WebAuthnOptions()
+                );
             })
         );
     }
@@ -113,6 +128,47 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
     }
 
     protected static string WrongCode(string code) => code == "000000" ? "111111" : "000000";
+
+    protected static SoftwarePasskeyAuthenticator NewPasskey() => new(WebAuthnOrigin);
+
+    /// <summary>Registers <paramref name="passkey"/> as the browser does; the browser must have re-authenticated.</summary>
+    protected static async Task<HttpResponseMessage> RegisterPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey,
+        string name = "Laptop"
+    )
+    {
+        var options = await browser.PostAsync("/account/passkeys/registration-options", null);
+        options.EnsureSuccessStatusCode();
+        return await PostAttestationAsync(browser, passkey.CreateCredential(await options.Content.ReadAsStringAsync()), name);
+    }
+
+    protected static Task<HttpResponseMessage> PostAttestationAsync(
+        HttpClient browser,
+        string attestationJson,
+        string name = "Laptop"
+    ) =>
+        browser.PostAsJsonAsync(
+            "/account/passkeys",
+            new RegisterPasskeyDto { Name = name, AttestationResponse = JsonDocument.Parse(attestationJson).RootElement }
+        );
+
+    /// <summary>Confirms the browser's session with <paramref name="passkey"/> instead of the password.</summary>
+    protected static async Task<HttpResponseMessage> ReauthenticateWithPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey
+    )
+    {
+        var options = await browser.PostAsync("/account/reauthenticate/passkey-options", null);
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
 
     /// <summary>A browser: a client with its own cookie jar.</summary>
     protected HttpClient NewBrowser() => TwoFactorFactory.CreateClient();

@@ -23,7 +23,8 @@ internal static class AuthenticationChallenges
         string binding,
         TimeSpan lifetime,
         DateTimeOffset now,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? payload = null
     )
     {
         var tokenHash = Hash(binding);
@@ -45,6 +46,7 @@ internal static class AuthenticationChallenges
                     Purpose = purpose,
                     UserId = userId,
                     TokenHash = tokenHash,
+                    Payload = payload,
                     ExpiresAt = now + lifetime,
                     CreatedAt = now,
                 }
@@ -54,6 +56,7 @@ internal static class AuthenticationChallenges
         {
             renewed.ExpiresAt = now + lifetime;
             renewed.CreatedAt = now;
+            renewed.Payload = payload;
         }
 
         await context.SaveChangesAsync(cancellationToken);

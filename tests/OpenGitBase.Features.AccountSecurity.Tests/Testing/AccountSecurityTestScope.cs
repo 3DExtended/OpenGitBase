@@ -24,6 +24,9 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
 {
     public const string Password = "Password123!";
 
+    /// <summary>The origin the software authenticator reports; the scope's relying party accepts it.</summary>
+    public const string WebAuthnOrigin = "http://localhost:8089";
+
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _serviceProvider;
 
@@ -44,6 +47,9 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
         services.AddSingleton<IEmailProtectionService, EmailProtectionService>();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddSingleton<ISystemClock>(Clock);
+        services.AddSingleton(
+            new WebAuthnOptions { RelyingPartyId = "localhost", Origins = [WebAuthnOrigin] }
+        );
 
         var mapsterConfig = new TypeAdapterConfig();
         services.AddSingleton(mapsterConfig);
@@ -64,6 +70,8 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
     }
 
     public static string WrongCode(string correctCode) => correctCode == "000000" ? "111111" : "000000";
+
+    public static SoftwarePasskeyAuthenticator NewPasskey() => new(WebAuthnOrigin);
 
     public Task<OpenGitBaseDbContext> CreateDbContextAsync() =>
         _serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>().CreateDbContextAsync();
@@ -136,6 +144,34 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
                 CancellationToken.None
             );
         return confirmation.Get().RecoveryCodes!;
+    }
+
+    /// <summary>Registers <paramref name="passkey"/> the way the browser does: options, then the attestation.</summary>
+    public async Task<PasskeyRegistrationResult> RegisterPasskeyAsync(
+        UserId userId,
+        SoftwarePasskeyAuthenticator passkey,
+        string name = "Laptop"
+    )
+    {
+        var options = await GetHandler<StartPasskeyRegistrationQueryHandler>()
+            .RunQueryAsync(new StartPasskeyRegistrationQuery { UserId = userId }, CancellationToken.None);
+        var result = await GetHandler<CompletePasskeyRegistrationQueryHandler>()
+            .RunQueryAsync(
+                new CompletePasskeyRegistrationQuery
+                {
+                    UserId = userId,
+                    Name = name,
+                    AttestationResponseJson = passkey.CreateCredential(options.Get().OptionsJson),
+                },
+                CancellationToken.None
+            );
+        return result.Get();
+    }
+
+    public async Task<List<UserPasskeyEntity>> GetPasskeysAsync(UserId userId)
+    {
+        await using var context = await CreateDbContextAsync();
+        return await context.Set<UserPasskeyEntity>().AsNoTracking().Where(p => p.UserId == userId.Value).ToListAsync();
     }
 
     public string CurrentCode(string secret) =>

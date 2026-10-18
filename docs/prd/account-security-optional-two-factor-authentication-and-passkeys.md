@@ -102,7 +102,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 - **New backend feature `account-security`** (vertical slice under `features/`, scaffolded with `agentGenCli new backend-feature`). It owns TOTP authenticators, recovery codes, passkeys, authentication challenges and the second-factor attempt counter. The Users feature keeps owning credentials and the password login.
 - The feature follows the codebase's CQRS shape: query handlers plus small internal static helpers, no service interfaces (as built in mfa-01).
 - **`TotpAlgorithm`**: generate secret, build `otpauth://` URI, verify code against a given time with ±1 step window, report the matched time step. Fixed parameters: SHA1, 6 digits, 30 seconds. These are not configurable — Google Authenticator ignores `algorithm`/`digits`/`period`, and Microsoft Authenticator only works reliably with SHA1. In-house RFC 6238 implementation (no Otp.NET dependency), checked against the RFC 6238 Appendix B vectors. Takes time from the existing `ISystemClock`. **`TotpCodes`** adds single use via `LastUsedTimeStep`.
-- **`IPasskeyService`** wraps Fido2NetLib (`Fido2` 4.3.x, MIT, net10.0): create registration options, verify attestation, create assertion options, verify assertion. ASP.NET Core Identity's built-in .NET 10 passkey support is not usable because OpenGitBase has a custom user store without `UserManager`.
+- **`PasskeyCeremonies`** (internal static helpers, as built in mfa-03) wraps Fido2NetLib (`Fido2` 4.3.x, MIT, net10.0): create registration options, verify attestation, create assertion options, verify assertion. ASP.NET Core Identity's built-in .NET 10 passkey support is not usable because OpenGitBase has a custom user store without `UserManager`.
 - **`AuthenticationChallenges`**: single-use challenges shared by both API replicas (see below).
 - **`BeginTwoFactorSignInQuery`** (the second-factor gate): decides after a successful primary sign-in (password, Google, Apple) whether to issue a session or a pending-2FA challenge. Every primary sign-in path calls it, so no path can bypass 2FA.
 - **`SecondFactorAttempts`**: the per-account failure counter and lockout.
@@ -112,8 +112,8 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 - `UserTotpAuthenticators`: `UserId` (PK/FK), `SecretProtected`, `ConfirmedAt` (null = never confirmed), `PendingSecretProtected`, `LastUsedTimeStep`, `CreatedAt`. One per user. A new setup writes the pending secret and replaces an earlier pending one; it only replaces the confirmed secret when it is confirmed, so the old authenticator keeps working until then.
 - `UserRecoveryCodes`: `Id`, `UserId`, `CodeHash`, `UsedAt`, `CreatedAt`. 10 codes per set; regenerating deletes the old set.
-- `UserPasskeys`: `Id`, `UserId`, `CredentialId` (bytes, unique), `PublicKey` (COSE bytes), `SignCount`, `Aaguid`, `Transports`, `IsBackupEligible`, `IsBackedUp`, `Name`, `CreatedAt`, `LastUsedAt`.
-- `AuthenticationChallenges`: `Id`, `Purpose` (`TwoFactorSignIn`, `PasskeyRegistration`, `PasskeySignIn`, `PasskeySecondFactor`, `ReAuthentication`), `UserId` (nullable for usernameless passkey sign-in), `TokenHash` or `Challenge`, `ExpiresAt`, `CreatedAt`. No per-challenge attempt counter (see *Attempt limits*).
+- `UserPasskeys`: `Id`, `UserId`, `CredentialId` (bytes, unique), `PublicKey` (COSE bytes), `SignCount` (`bigint`, since Npgsql maps `uint` to `xid`), `Aaguid`, `Transports`, `IsBackupEligible`, `IsBackedUp`, `Name`, `CreatedAt`, `LastUsedAt`.
+- `AuthenticationChallenges`: `Id`, `Purpose` (`TwoFactorSignIn`, `PasskeyRegistration`, `PasskeyReauthentication`, `PasskeySignIn`, `PasskeySecondFactor`, `ReAuthentication`), `UserId` (nullable for usernameless passkey sign-in), `TokenHash` (SHA-256 of the challenge token, or of the WebAuthn challenge so the answer's `clientDataJSON` finds the row), `Payload` (the options JSON of a WebAuthn ceremony, which Fido2NetLib verifies the answer against), `ExpiresAt`, `CreatedAt`. No per-challenge attempt counter (see *Attempt limits*).
 - `UserCredentials` gains `TwoFactorEnabledAt`, `SecondFactorFailedAttempts`, `SecondFactorLockedUntil`.
 
 ### Secrets at rest
@@ -137,7 +137,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 ### Passkey endpoints and configuration
 
-- Registration (signed in, re-authenticated): `POST /account/passkeys/registration-options` → `POST /account/passkeys`. Management: `GET /account/passkeys`, `PATCH /account/passkeys/{id}` (rename), `DELETE /account/passkeys/{id}`.
+- Registration (signed in, re-authenticated): `POST /account/passkeys/registration-options` → `POST /account/passkeys` with `{ name, attestationResponse }`. Errors: `400 { error: "invalid_name" | "passkey_rejected" | "challenge_expired" }`, `409 { error: "passkey_already_registered" }`. Management: `GET /account/passkeys`, `PATCH /account/passkeys/{id}` (rename, session only), `DELETE /account/passkeys/{id}` (re-authenticated); another user's passkey is `404`.
 - Sign-in: `POST /signin/passkey/options` → `POST /signin/passkey`. Uses discoverable credentials (usernameless), so the endpoint never reveals whether a username exists. User verification is `required`; a successful passkey sign-in satisfies 2FA.
 - As a second factor, user verification is `preferred` (a security-key touch is enough after the password).
 - Attestation conveyance `none`; no FIDO Metadata Service.
@@ -146,7 +146,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
   - `RelyingPartyId`: `opengitbase.com` in production. It covers `www.` and `api.` subdomains.
   - `RelyingPartyName`: `OpenGitBase`.
   - `Origins`: the exact allowed origins.
-  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. Local compose sets `localhost`, which WebAuthn allows over plain HTTP.
+  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. `docker-compose.e2e.yml` and `docker-compose.override.example.yml` set `localhost`, which WebAuthn allows over plain HTTP; `docker-compose.yml` leaves it empty, so production stays off until mfa-06.
 - The relying-party ID is permanent for an installation: changing the domain invalidates every registered passkey. This goes in the operations docs.
 - WebAuthn does not work when the site is opened by IP address.
 
@@ -158,7 +158,7 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 
 ### Account endpoints
 
-- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, `recoveryCodesRemaining` (unused codes), and later the passkeys. `/account/me` gains `twoFactorEnabled`.
+- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, `recoveryCodesRemaining` (unused codes) and `passkeysAvailable` (`WebAuthn:RelyingPartyId` is set); the passkeys themselves come from `GET /account/passkeys`. `/account/me` gains `twoFactorEnabled`.
 - TOTP:
   - `POST /account/two-factor/totp/setup` returns `{ otpauthUri, secret }` and stores the pending secret.
   - `POST /account/two-factor/totp/confirm` with `{ code }`. The first confirmation sets `TwoFactorEnabledAt` and returns 10 recovery codes once.
@@ -175,8 +175,8 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 Turning 2FA on or off, adding or removing a passkey, setting up or removing TOTP, and regenerating recovery codes require a recent confirmation. Any of these counts:
 
 - the current password (and, with 2FA on, a second factor; a recovery code counts, so a lost phone can still be replaced) via `POST /account/reauthenticate`;
-- a passkey assertion within the last 10 minutes;
-- for accounts without a password and without passkeys (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim).
+- a passkey assertion: `POST /account/reauthenticate/passkey-options` (`400 no_passkeys` without one), then `POST /account/reauthenticate` with `{ passkeyAssertion }`. User verification is required, so no code is asked for; a used or expired challenge is `401 challenge_expired`, anything else `401 passkey_rejected`;
+- for accounts without a password (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim). Adding a passkey keeps this rule; such an account can also confirm with the passkey.
 
 A sensitive endpoint without a recent confirmation answers `403 { error: "reauthentication_required" }`; the web app then asks for it and repeats the action. The confirmation is recorded as a 10-minute `ReAuthentication` challenge bound to the user and the session's `jti`. This prevents someone holding a stolen session from enabling 2FA on the victim's account and locking them out.
 

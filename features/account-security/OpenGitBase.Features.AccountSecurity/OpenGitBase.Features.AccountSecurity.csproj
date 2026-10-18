@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Fido2" Version="4.3.1" />
     <PackageReference Include="Mapster" Version="7.4.0" />
   </ItemGroup>
 

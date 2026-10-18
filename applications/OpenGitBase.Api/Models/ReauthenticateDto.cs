@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace OpenGitBase.Api.Models;
 
 public class ReauthenticateDto
@@ -10,4 +12,10 @@ public class ReauthenticateDto
 
     /// <summary>A recovery code instead of the authenticator code.</summary>
     public string? RecoveryCode { get; set; }
+
+    /// <summary>
+    /// An assertion for <c>POST /account/reauthenticate/passkey-options</c>, as <c>PublicKeyCredential.toJSON()</c>
+    /// returns it. Replaces password and code.
+    /// </summary>
+    public JsonElement? PasskeyAssertion { get; set; }
 }
