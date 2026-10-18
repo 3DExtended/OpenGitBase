@@ -12,6 +12,10 @@ public class SecondFactorErrorResponse
     public const string ReauthenticationRequired = "reauthentication_required";
     public const string NoPendingSetup = "no_pending_setup";
     public const string TwoFactorNotEnabled = "two_factor_not_enabled";
+    public const string PasskeyRejected = "passkey_rejected";
+    public const string PasskeyAlreadyRegistered = "passkey_already_registered";
+    public const string NoPasskeys = "no_passkeys";
+    public const string InvalidName = "invalid_name";
 
     public string Error { get; set; } = string.Empty;
 
