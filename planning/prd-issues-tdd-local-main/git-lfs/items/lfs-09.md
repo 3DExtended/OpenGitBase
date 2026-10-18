@@ -83,6 +83,22 @@
     `LfsLargeObjectTests`, the 120 MiB object at 22 s.
   - `HaChaos.LfsColdRecoveryChaosTests` (`OPENGITBASE_E2E_COMPOSE_PROFILE=FullHa`) passed in 2 m 10 s. Afterwards
     all four nodes were healthy and storage-1's capacity was back to unlimited.
-- **Production (HITL): not started.** The deploy order and the `Lfs:Enabled` switch need a human decision. The
-  Cloudflare body limit needs one too.
+- **Production: live since 2026-10-18.**
+  - Decision: `Lfs:MaxObjectBytes` = 100 MiB (`104857600`), because of the Cloudflare body limit on proxied
+    hostnames; no DNS-only hostname.
+  - Deployed `e372f84` (this branch merged with `main`) in the documented order:
+    - `remote-rolling-update.sh` for API and web with LFS off; the migrations `AddLfsObjects` and
+      `AddLfsObjectCopies` were applied;
+    - `--full` for storage 2, 3, 4, 1 and the dispatchers (10 m 26 s, no restarts).
+  - Enabled with `Lfs__Enabled: "true"` and `Lfs__MaxObjectBytes: "104857600"` in the `x-api-env` block of the
+    Tower override (backup `opengitbase-secrets/docker-compose.override.yml.pre-lfs`), then `api-2` and `api-1`
+    recreated one at a time. The batch endpoint answered `501` before and `401` (credentials needed, as git over
+    HTTPS) after.
+  - Smoke test on `admin/lostest` through `api.opengitbase.com`:
+    - a 5,000,000-byte object pushed and cloned back byte-identical;
+    - one `LfsObject` row and three copies: plaintext on storage-1 (primary), encrypted on storage-2 and
+      storage-3 at 5,000,109 bytes each (29 + size + 5 × 16);
+    - `StorageBytesUsed` 5,026,498 = 5,000,000 LFS + 26,498 git.
+  - **Open:** `git push` prints "Locking support detected on remote", because the `locks/verify` stub answers
+    `200`. User story 13 wants no locking hint at all.
 - Commit(s): see `progress-log.md`
