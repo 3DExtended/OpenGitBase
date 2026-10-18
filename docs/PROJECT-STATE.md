@@ -100,7 +100,7 @@ flowchart TB
 | OAuth (Google, Apple) | Done | [SignInController.cs](../applications/OpenGitBase.Api/Controllers/Authorization/SignInController.cs) |
 | JWT in httpOnly cookies + Bearer | Done | [Startup.cs](../applications/OpenGitBase.Api/Startup.cs), [AuthCookieService.cs](../applications/OpenGitBase.Api/Services/AuthCookieService.cs) |
 | Admin role (`role=admin` claim) | Done | Admin controllers |
-| Two-factor sign-in (authenticator app, TOTP) | mfa-01 done, deployed 2026-10-18; off by default and in production (`TwoFactor:Enabled`) until recovery codes (mfa-02) and admin reset (mfa-06) ship | [features/account-security/](../features/account-security/), [AccountSecurityController.cs](../applications/OpenGitBase.Api/Controllers/AccountSecurityController.cs), `POST /signin/two-factor`, `settings/security.vue`; PRD [account-security-…](prd/account-security-optional-two-factor-authentication-and-passkeys.md) (#244) |
+| Two-factor sign-in (authenticator app, TOTP, recovery codes) | mfa-01 done, deployed 2026-10-18; mfa-02 (recovery codes) done; off by default and in production (`TwoFactor:Enabled`) until notifications and admin reset (mfa-06) ship | [features/account-security/](../features/account-security/), [AccountSecurityController.cs](../applications/OpenGitBase.Api/Controllers/AccountSecurityController.cs), `POST /signin/two-factor`, `settings/security.vue`; PRD [account-security-…](prd/account-security-optional-two-factor-authentication-and-passkeys.md) (#244) |
 | Personal access tokens (HTTPS git) | Done | [features/git-access-token/](../features/git-access-token/) |
 | SSH public keys (git over SSH) | Done | [features/public-git-ssh-key/](../features/public-git-ssh-key/) |
 | Repository-level authz (private repos) | Done | [RepositoryContentAuthorizationService.cs](../applications/OpenGitBase.Api/Services/RepositoryContentAuthorizationService.cs) |
@@ -262,6 +262,7 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 | Storage node API tokens | Same AES-GCM (`EncryptSecret`) | `StorageNodeEntity.ApiTokenProtected` |
 | Fleet dispatcher SSH private key | Same AES-GCM (`EncryptSecret`, stored byte-for-byte, never email-normalized) | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
 | TOTP authenticator secrets | Same AES-GCM (`EncryptSecret`), re-protected by `EncryptionKeyRotation` | `UserTotpAuthenticatorEntity.SecretProtected`, `PendingSecretProtected` |
+| 2FA recovery codes | ASP.NET `PasswordHasher` only; no SHA256 lookup hash (50-bit codes), checked against the user's unused hashes | `UserRecoveryCodeEntity.CodeHash` |
 | Git LFS objects on encrypted replicas | Segmented AES-256-GCM (1 MiB segments) with the Repository Key, encrypted and decrypted only in the API | [LfsObjectCipher.cs](../applications/OpenGitBase.Api/Services/LfsObjectCipher.cs), `/var/lib/opengitbase/lfs/` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
@@ -310,7 +311,7 @@ From [code-review-remediation/](issues/code-review-remediation/README.md):
 | Module | DB | Public API | Notes |
 |--------|-----|------------|-------|
 | Users | yes | auth routes | Email encrypted |
-| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/signin/two-factor` | TOTP, challenges, lockout, re-authentication |
+| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/signin/two-factor` | TOTP, recovery codes, challenges, lockout, re-authentication |
 | Repository | yes | yes | HA provisioning |
 | RepositoryMember | yes | yes | |
 | Organization | yes | yes | Invites |
