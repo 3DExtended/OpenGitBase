@@ -148,6 +148,7 @@ public class RegisterComputeNodeQueryHandlerTests
         await using var context = await scope.CreateDbContextAsync();
         var node = Assert.Single(await context.Set<ComputeNodeEntity>().ToListAsync());
         Assert.Equal(node.Id, registered.Node.Id.Value);
+        Assert.NotNull(node.IdentityTokenHash);
         Assert.True(passwordHasher.VerifyPassword(node.IdentityTokenHash, registered.NodeIdentityToken));
         var enrollment = await context.Set<ComputeNodeEnrollmentEntity>().SingleAsync(x => x.Id == enrollmentId);
         Assert.NotNull(enrollment.ConsumedAt);
