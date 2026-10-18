@@ -47,6 +47,8 @@ public class DisableTwoFactorQueryHandler : IQueryHandler<DisableTwoFactorQuery,
             context.Set<UserTotpAuthenticatorEntity>().Remove(authenticator);
         }
 
+        await RecoveryCodes.RemoveSetAsync(context, query.UserId.Value, cancellationToken);
+
         var wasEnabled = credentials.TwoFactorEnabledAt is not null;
         credentials.TwoFactorEnabledAt = null;
         SecondFactorAttempts.RecordSuccess(credentials);

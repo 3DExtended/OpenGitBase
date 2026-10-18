@@ -5,6 +5,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Challenges;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.AccountSecurity.QueryHandlers;
@@ -50,6 +51,11 @@ public class BeginTwoFactorSignInQueryHandler : IQueryHandler<BeginTwoFactorSign
         )
         {
             methods.Add("totp");
+        }
+
+        if (await RecoveryCodes.CountUnusedAsync(context, query.UserId.Value, cancellationToken) > 0)
+        {
+            methods.Add("recovery");
         }
 
         var token = AuthenticationChallenges.NewToken();

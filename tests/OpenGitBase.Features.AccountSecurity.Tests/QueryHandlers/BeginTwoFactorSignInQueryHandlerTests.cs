@@ -51,6 +51,40 @@ public class BeginTwoFactorSignInQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_UnusedRecoveryCodes_OfferRecoveryAsAMethod()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        var result = await scope
+            .GetHandler<BeginTwoFactorSignInQueryHandler>()
+            .RunQueryAsync(new BeginTwoFactorSignInQuery { UserId = userId }, CancellationToken.None);
+
+        Assert.Equal(["totp", "recovery"], QueryHandlerResultAssert.AssertSome(result).Methods);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_AllRecoveryCodesSpent_NoLongerOffersRecovery()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+        await using (var context = await scope.CreateDbContextAsync())
+        {
+            await context
+                .Set<UserRecoveryCodeEntity>()
+                .ExecuteUpdateAsync(setters => setters.SetProperty(code => code.UsedAt, scope.Clock.UtcNow));
+        }
+
+        var result = await scope
+            .GetHandler<BeginTwoFactorSignInQueryHandler>()
+            .RunQueryAsync(new BeginTwoFactorSignInQuery { UserId = userId }, CancellationToken.None);
+
+        Assert.Equal(["totp"], QueryHandlerResultAssert.AssertSome(result).Methods);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_RemovesTheUsersExpiredChallenges()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();

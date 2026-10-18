@@ -11,6 +11,7 @@ public class SecondFactorErrorResponse
     public const string ReauthenticationUnavailable = "reauthentication_unavailable";
     public const string ReauthenticationRequired = "reauthentication_required";
     public const string NoPendingSetup = "no_pending_setup";
+    public const string TwoFactorNotEnabled = "two_factor_not_enabled";
 
     public string Error { get; set; } = string.Empty;
 

@@ -123,6 +123,66 @@ public class CompleteTwoFactorSignInQueryHandlerTests
         Assert.Equal(TwoFactorSignInStatus.Succeeded, afterLock.Status);
     }
 
+    [Fact]
+    public async Task RunQueryAsync_RecoveryCode_SignsInOnceAndIsSpent()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var codes = await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        var first = await CompleteWithRecoveryCodeAsync(scope, await BeginAsync(scope, userId), codes[3]);
+        var reuse = await CompleteWithRecoveryCodeAsync(scope, await BeginAsync(scope, userId), codes[3]);
+
+        Assert.Equal(TwoFactorSignInStatus.Succeeded, first.Status);
+        Assert.Equal(userId, first.UserId);
+        Assert.Equal(TwoFactorSignInStatus.InvalidCode, reuse.Status);
+        var rows = await scope.GetRecoveryCodesAsync(userId);
+        Assert.Single(rows, row => row.UsedAt == scope.Clock.UtcNow);
+        Assert.Equal(9, rows.Count(row => row.UsedAt is null));
+    }
+
+    [Theory]
+    [InlineData("upper case")]
+    [InlineData("without dash")]
+    [InlineData("with spaces")]
+    public async Task RunQueryAsync_RecoveryCode_IsAcceptedInAnyCaseWithOrWithoutDashOrSpaces(string form)
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var code = (await scope.EnableTotpWithRecoveryCodesAsync(userId))[0];
+        var typed = form switch
+        {
+            "upper case" => code.ToUpperInvariant(),
+            "without dash" => code.Replace("-", string.Empty, StringComparison.Ordinal),
+            _ => " " + code.Replace("-", " ", StringComparison.Ordinal) + " ",
+        };
+
+        var result = await CompleteWithRecoveryCodeAsync(scope, await BeginAsync(scope, userId), typed);
+
+        Assert.Equal(TwoFactorSignInStatus.Succeeded, result.Status);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WrongRecoveryCodes_CountTowardTheLockout()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var codes = await scope.EnableTotpWithRecoveryCodesAsync(userId);
+        var token = await BeginAsync(scope, userId);
+
+        var results = new List<TwoFactorSignInResult>();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            results.Add(await CompleteWithRecoveryCodeAsync(scope, token, "aaaaa-aaaaa"));
+        }
+
+        Assert.All(results.Take(4), result => Assert.Equal(TwoFactorSignInStatus.InvalidCode, result.Status));
+        Assert.Equal(TwoFactorSignInStatus.LockedOut, results[4].Status);
+        var afterLockout = await CompleteWithRecoveryCodeAsync(scope, await BeginAsync(scope, userId), codes[0]);
+        Assert.Equal(TwoFactorSignInStatus.LockedOut, afterLockout.Status);
+        Assert.All(await scope.GetRecoveryCodesAsync(userId), row => Assert.Null(row.UsedAt));
+    }
+
     private static async Task<string> BeginAsync(AccountSecurityTestScope scope, UserId userId)
     {
         var start = QueryHandlerResultAssert.AssertSome(
@@ -138,6 +198,21 @@ public class CompleteTwoFactorSignInQueryHandlerTests
         Option<TwoFactorSignInResult> result = await scope
             .GetHandler<CompleteTwoFactorSignInQueryHandler>()
             .RunQueryAsync(new CompleteTwoFactorSignInQuery { ChallengeToken = token, Code = code }, CancellationToken.None);
+        return QueryHandlerResultAssert.AssertSome(result);
+    }
+
+    private static async Task<TwoFactorSignInResult> CompleteWithRecoveryCodeAsync(
+        AccountSecurityTestScope scope,
+        string token,
+        string recoveryCode
+    )
+    {
+        Option<TwoFactorSignInResult> result = await scope
+            .GetHandler<CompleteTwoFactorSignInQueryHandler>()
+            .RunQueryAsync(
+                new CompleteTwoFactorSignInQuery { ChallengeToken = token, RecoveryCode = recoveryCode },
+                CancellationToken.None
+            );
         return QueryHandlerResultAssert.AssertSome(result);
     }
 }

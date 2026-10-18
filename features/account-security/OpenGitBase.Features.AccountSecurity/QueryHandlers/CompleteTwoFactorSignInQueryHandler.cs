@@ -18,18 +18,21 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
 
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IEmailProtectionService _protection;
+    private readonly IPasswordHasherService _hasher;
     private readonly ISystemClock _clock;
     private readonly ILogger<CompleteTwoFactorSignInQueryHandler> _logger;
 
     public CompleteTwoFactorSignInQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IEmailProtectionService protection,
+        IPasswordHasherService hasher,
         ISystemClock clock,
         ILogger<CompleteTwoFactorSignInQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _protection = protection;
+        _hasher = hasher;
         _clock = clock;
         _logger = logger;
     }
@@ -66,7 +69,11 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
             return new TwoFactorSignInResult(TwoFactorSignInStatus.LockedOut, LockedUntil: credentials.SecondFactorLockedUntil);
         }
 
-        if (await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code, now, cancellationToken))
+        var usesRecoveryCode = !string.IsNullOrWhiteSpace(query.RecoveryCode);
+        var accepted = usesRecoveryCode
+            ? await RecoveryCodes.TryUseAsync(context, _hasher, credentials.UserId, query.RecoveryCode!, now, cancellationToken)
+            : await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code, now, cancellationToken);
+        if (accepted)
         {
             if (!await AuthenticationChallenges.TryConsumeAsync(context, challenge.Id, cancellationToken))
             {
@@ -75,6 +82,11 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
 
             SecondFactorAttempts.RecordSuccess(credentials);
             await context.SaveChangesAsync(cancellationToken);
+            if (usesRecoveryCode)
+            {
+                await RecoveryCodes.LogUseAsync(_logger, context, credentials.UserId, "sign-in", cancellationToken);
+            }
+
             return new TwoFactorSignInResult(TwoFactorSignInStatus.Succeeded, UserId.From(credentials.UserId));
         }
 

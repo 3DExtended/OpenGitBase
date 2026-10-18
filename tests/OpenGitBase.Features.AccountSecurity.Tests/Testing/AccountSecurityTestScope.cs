@@ -7,8 +7,11 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Cqrs;
 using OpenGitBase.Cqrs.DependencyInjection;
+using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.QueryHandlers;
 using OpenGitBase.Features.AccountSecurity.Totp;
 using OpenGitBase.Features.Users;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -119,6 +122,22 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
         return secret;
     }
 
+    /// <summary>
+    /// Turns 2FA on the way a user does (setup, then confirmation) and returns the recovery codes.
+    /// The confirmation spends the current time step, so the next TOTP code needs the clock moved on.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> EnableTotpWithRecoveryCodesAsync(UserId userId)
+    {
+        var setup = await GetHandler<StartTotpSetupQueryHandler>()
+            .RunQueryAsync(new StartTotpSetupQuery { UserId = userId, Issuer = "OpenGitBase" }, CancellationToken.None);
+        var confirmation = await GetHandler<ConfirmTotpSetupQueryHandler>()
+            .RunQueryAsync(
+                new ConfirmTotpSetupQuery { UserId = userId, Code = CurrentCode(setup.Get().Secret) },
+                CancellationToken.None
+            );
+        return confirmation.Get().RecoveryCodes!;
+    }
+
     public string CurrentCode(string secret) =>
         TotpAlgorithm.ComputeCode(TotpAlgorithm.DecodeSecret(secret), Clock.UtcNow.ToUnixTimeSeconds() / 30);
 
@@ -135,6 +154,12 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
             .Set<UserTotpAuthenticatorEntity>()
             .AsNoTracking()
             .SingleOrDefaultAsync(a => a.UserId == userId.Value);
+    }
+
+    public async Task<List<UserRecoveryCodeEntity>> GetRecoveryCodesAsync(UserId userId)
+    {
+        await using var context = await CreateDbContextAsync();
+        return await context.Set<UserRecoveryCodeEntity>().AsNoTracking().Where(r => r.UserId == userId.Value).ToListAsync();
     }
 
     public async ValueTask DisposeAsync()

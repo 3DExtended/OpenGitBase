@@ -97,6 +97,50 @@ public class SignInControllerTwoFactorTests : TwoFactorControllerTestBase
     }
 
     [Fact]
+    public async Task TwoFactor_RecoveryCode_SignsInOnlyOnce()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "recovering");
+        var (_, codes) = await EnableTotpWithRecoveryCodesAsync("recovering");
+        using var first = NewBrowser();
+        var firstChallenge = await LoginForChallengeAsync(first, "recovering");
+
+        var signedIn = await CompleteTwoFactorWithRecoveryCodeAsync(
+            first,
+            firstChallenge.ChallengeToken,
+            codes[0].ToUpperInvariant().Replace("-", " ")
+        );
+
+        signedIn.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await first.GetAsync("/signin/testlogin")).StatusCode);
+        using var second = NewBrowser();
+        var secondChallenge = await LoginForChallengeAsync(second, "recovering");
+        var reused = await CompleteTwoFactorWithRecoveryCodeAsync(second, secondChallenge.ChallengeToken, codes[0]);
+        await AssertErrorAsync(reused, HttpStatusCode.Unauthorized, SecondFactorErrorResponse.InvalidCode);
+    }
+
+    [Theory]
+    [InlineData("123456", "aaaaa-aaaaa")]
+    [InlineData("", "")]
+    [InlineData(" ", null)]
+    public async Task TwoFactor_NotExactlyOneOfCodeAndRecoveryCode_IsBadRequest(string code, string? recoveryCode)
+    {
+        using var browser = NewBrowser();
+
+        var response = await browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto
+            {
+                ChallengeToken = "challenge",
+                Code = code,
+                RecoveryCode = recoveryCode,
+            }
+        );
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task TwoFactor_ChallengeOlderThanFiveMinutes_IsRejected()
     {
         using var setup = NewBrowser();
