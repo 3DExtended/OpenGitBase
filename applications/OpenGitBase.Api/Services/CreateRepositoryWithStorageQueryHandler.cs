@@ -142,8 +142,7 @@ public sealed class CreateRepositoryWithStorageQueryHandler
                 .CreateDbContextAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            // Every attempt inserts the same id, so a replayed COMMIT that already landed neither fails the create
-            // nor sends it into the rollback below, which would delete the storage of a repository that exists.
+            // Every attempt inserts the same id, so a replayed COMMIT that already landed does not fail the create.
             await context
                 .InsertOnceAsync(
                     async ct =>
@@ -176,12 +175,20 @@ public sealed class CreateRepositoryWithStorageQueryHandler
         }
         catch (Exception)
         {
-            await RollBackProvisionedAsync(
-                provisionedNodes,
-                nodeTokens,
-                physicalPath,
-                CancellationToken.None
-            ).ConfigureAwait(false);
+            // The create still fails with its own error, but a repository whose row committed keeps its storage:
+            // deleting it would leave a row whose bare repositories are gone, which the reconciler goes on reporting
+            // healthy. A key that failed after the commit can be generated again for that repository, since
+            // GenerateAndStoreKeyAsync stores one only where none exists.
+            if (!await IsRepositoryCommittedAsync(repositoryId).ConfigureAwait(false))
+            {
+                await RollBackProvisionedAsync(
+                    provisionedNodes,
+                    nodeTokens,
+                    physicalPath,
+                    CancellationToken.None
+                ).ConfigureAwait(false);
+            }
+
             throw;
         }
     }
@@ -291,6 +298,29 @@ public sealed class CreateRepositoryWithStorageQueryHandler
                 ? query.ModelToCreate.MaxBytesOverride.Value
                 : InitialRepositoryBytesEstimate
         );
+    }
+
+    /// <summary>
+    /// Asks a fresh context, so rows the failed attempt left tracked cannot answer for the database. A row it cannot
+    /// rule out counts as committed: storage without a row is an orphan the fleet drift report finds, while storage
+    /// deleted under a committed row is lost.
+    /// </summary>
+    private async Task<bool> IsRepositoryCommittedAsync(Guid repositoryId)
+    {
+        try
+        {
+            await using var context = await _contextFactory
+                .CreateDbContextAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            return await context
+                .Set<RepositoryEntity>()
+                .AnyAsync(entity => entity.Id == repositoryId, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
     }
 
     private async Task RollBackProvisionedAsync(
