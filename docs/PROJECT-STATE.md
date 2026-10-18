@@ -131,7 +131,7 @@ flowchart TB
 | Write quorum 2/3 on push | Done | `post-receive` → API `quorum-replicate` (RF4: API builds the encrypted artifact itself, #413) |
 | Peer sync over mTLS :8443 | Done | Separate from dispatcher SSH trust domain |
 | Watermark-based durability | Done | Monotonic `PrimaryWatermark` + per-replica `AppliedWatermark` |
-| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs) |
+| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs); acts only when the unhealthy primary also does not answer a direct probe (heartbeats also stop when the API or the database cannot take them) |
 | Background: RF1→RF3 backfill, rebalance, anti-entropy | Done | [HaStorageBackgroundService.cs](../applications/OpenGitBase.Api/Services/HaStorageBackgroundService.cs) |
 | Admin replication dashboard | Done | Web + API |
 | Git HTTPS via HAProxy | Done | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) |

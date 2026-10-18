@@ -105,4 +105,33 @@
       git-lfs writes `lfs.<url>.locksverify false` once and pushes without a hint.
     - The dispatcher now answers `501` "Locking is not supported." (`LfsHandlerTests`
       `LocksVerify_Answers501SoGitLfsTurnsLockVerificationOffQuietly`; it fails against the old stub).
+  - **Incident during the `--full` roll: open-git-base unpushable (`403`).**
+    - Chain:
+      1. The database stalled for about 95 s (11:31–11:33 UTC). No heartbeat arrived for 105 s, above
+         `MissedHeartbeatThresholdSeconds` (90).
+      2. When the database came back, storage-4 had reported again and the other three nodes were flagged unhealthy.
+      3. Failover cold-recovered open-git-base from its working primary (storage-1) onto storage-4, which held one
+         of its encrypted copies.
+      4. `import-bundle` cloned the bundle with a working tree, and storage-4 still ran the old image, which left its
+         role file at `EncryptedReplica`. git-http-backend answered `403`.
+    - Repair: storage-1 made the primary again and storage-4 an encrypted replica, with epoch 12; the clone on
+      storage-4 moved to `/var/lib/opengitbase/quarantine/`. The push of `a02ef53` then replicated, with watermark 87
+      on storage-1 and the artifact on storage-2 and storage-4.
+    - Fix 1, `import-bundle`:
+      - It now restores a bare repository: `clone --mirror` keeps every ref, including `refs/internal/*`; the
+        origin pointing at the temporary bundle is removed; `http.receivepack` is set.
+      - With a working tree the hooks in `<repo>.git/hooks` never ran, so pushes to a cold-recovered primary were
+        never replicated.
+      - Tests: `test_importing_a_bundle_restores_a_bare_repository_that_takes_pushes`, red against the old clone.
+        `LfsColdRecoveryChaosTests` now pushes after the recovery and waits for both encrypted replicas to hold the
+        artifact (not yet run; the local compose stack was removed).
+    - Fix 2, failover: before promoting or cold-recovering, `PromotePrimaryReplicaQueryHandler` asks the primary
+      directly (`StorageNodeLivenessProbe`: a GET without a token, where any HTTP answer counts, with a 3 s
+      timeout). A primary that answers stays the primary, and the skip is logged.
+      - Tests: `RunQueryAsync_WhenTheUnhealthyPrimaryStillAnswers_KeepsItAsThePrimary` and `…_StartsNoColdRecovery`,
+        both red without the guard, plus `StorageNodeLivenessProbeTests`.
+    - Found in production, still open:
+      - Three more repositories are working-tree clones from earlier cold recoveries: `a1157eab…` (lifeChange) on
+        storage-1, and `26d1a49d…` and `7805ee16…` on storage-3.
+      - Their pushes are not replicated. That fits lifeChange's encrypted artifacts staying at watermark 3.
 - Commit(s): see `progress-log.md`
