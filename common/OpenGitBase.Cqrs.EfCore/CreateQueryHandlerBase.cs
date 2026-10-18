@@ -48,9 +48,19 @@ public abstract class CreateQueryHandlerBase<
                 return Option.None;
             }
 
+            // Mapped once and added again on a replay, so every attempt inserts the same key.
             var entity = _mapper.Map<TEntity>(preparedModel.Get());
-            await context.Set<TEntity>().AddAsync(entity, cancellationToken).ConfigureAwait(false);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context
+                .InsertOnceAsync(
+                    async ct =>
+                    {
+                        await context.Set<TEntity>().AddAsync(entity, ct).ConfigureAwait(false);
+                        return await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    },
+                    ct => context.Set<TEntity>().AnyAsync(e => e.Id!.Equals(entity.Id), ct),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
 
             var id = Identifier<TIdentifierValue, TIdentifier>.From(entity.Id);
             await AfterCreationAsync(query, id, cancellationToken).ConfigureAwait(false);
