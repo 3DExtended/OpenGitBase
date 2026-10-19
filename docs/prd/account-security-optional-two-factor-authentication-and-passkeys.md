@@ -148,8 +148,8 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
   - `RelyingPartyId`: `opengitbase.com` in production. It covers `www.` and `api.` subdomains.
   - `RelyingPartyName`: `OpenGitBase`.
   - `Origins`: the exact allowed origins.
-  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. `docker-compose.e2e.yml` and `docker-compose.override.example.yml` set `localhost`, which WebAuthn allows over plain HTTP; `docker-compose.yml` leaves it empty, so production stays off until mfa-06.
-- The relying-party ID is permanent for an installation: changing the domain invalidates every registered passkey. This goes in the operations docs.
+  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. `docker-compose.e2e.yml` and `docker-compose.override.example.yml` set `localhost`, which WebAuthn allows over plain HTTP; `docker-compose.yml` leaves it empty, so production stays off until the mfa-06 rollout.
+- The relying-party ID is permanent for an installation: changing the domain invalidates every registered passkey (see the operations doc).
 - WebAuthn does not work when the site is opened by IP address.
 
 ### Challenges across replicas
@@ -171,7 +171,7 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
   - Errors: `400 no_passkeys`, `409 two_factor_already_enabled`, and `404` while a switch is off.
 - `POST /account/two-factor/disable` takes no body. Like every sensitive change it needs a recent re-authentication of the session, which already asks for the password and a second factor. It removes the TOTP authenticator and recovery codes and clears `TwoFactorEnabledAt`. Passkeys stay as sign-in methods.
 - `POST /account/two-factor/recovery-codes` regenerates the set and returns it once (`400 two_factor_not_enabled` without 2FA).
-- Deleting the last second factor while 2FA is on returns `409 { error: "last_second_factor" }`. Since the authenticator app cannot be removed on its own, this means the last passkey of an account without one.
+- While 2FA is on, deleting the last passkey of an account without an authenticator app returns `409 { error: "last_second_factor" }`.
 - Turning 2FA on or off sets `SessionsValidAfter` and re-issues the caller's token, reusing the change-password pattern.
 - otpauth label: `{issuer}:{username}` with `issuer={issuer}`. The issuer comes from configuration (`TwoFactor:Issuer`, default `OpenGitBase`) so self-hosted instances show their own name.
 
@@ -190,15 +190,19 @@ A sensitive endpoint without a recent confirmation answers `403 { error: "reauth
 
 ### Notifications and logging
 
-- Emails via the existing SendGrid service: 2FA turned on/off, passkey added, recovery code used, second-factor lockout, admin reset.
-- The same events are logged as structured `ILogger` events with user id and remote IP. A persistent audit-log table is out of scope.
+- Emails via the existing SendGrid service: 2FA turned on/off, passkey added, recovery code used to sign in, second-factor lockout, admin reset.
+  - Each states the time, the remote IP (left out for the admin reset) and a link to the security settings (`TwoFactor:SecuritySettingsUrl`).
+  - A failed send is logged (`security.notification.failed`) and never fails the action.
+- Every security event is one `ILogger` entry named `security.<area>.<event>`, with user id and client IP; the list is in the operations doc. A persistent audit-log table is out of scope.
 
 ### Administration
 
 `POST /admin/users/{username}/two-factor/reset` (`role=admin`):
 - deletes the TOTP authenticator, recovery codes and all passkeys;
-- clears `TwoFactorEnabledAt`;
-- revokes all sessions and emails the user.
+- clears `TwoFactorEnabledAt` and the lockout;
+- revokes all sessions, emails the user and logs the admin's id.
+
+An unknown username is `404`. The endpoint works with `TwoFactor:Enabled` on or off.
 
 There is no admin user management UI yet, so v1 exposes the API only; the operations docs describe how to call it.
 
@@ -212,6 +216,7 @@ There is no admin user management UI yet, so v1 exposes the API only; the operat
   - the settings page hides the 2FA section.
 - Disabling 2FA, regenerating recovery codes and the second sign-in step stay available. An account that already has 2FA on is never weakened by switching it off.
 - Production switches it on only once recovery codes, notifications and admin reset have shipped. Until then no account can lock itself out without a recovery path.
+- Rollout (mfa-06): passkeys and the admin reset are smoke-tested before the switch, because TOTP setup answers `404` until then; 2FA right after it.
 - Passkeys as a sign-in method have their own gate (`WebAuthn:RelyingPartyId`).
 
 ### Web UI
@@ -291,21 +296,16 @@ Tests cover external behavior at the lowest layer that proves it, per the engine
 
 - **Which phone apps work:** Google Authenticator and Microsoft Authenticator act as TOTP apps for OpenGitBase. Neither stores passkeys for OpenGitBase: Microsoft Authenticator holds passkeys only for Microsoft Entra ID accounts. Passkeys live in the platform credential managers (iCloud Keychain, Google Password Manager, Windows Hello), in password managers (1Password, Bitwarden), or on hardware keys.
 - **Clock sync:** TOTP depends on accurate server time; API hosts must run NTP.
-- **Suggested slice order:**
-  1. Two-step sign-in infrastructure + TOTP
+- **Slice order** (#245 to #250):
+  1. Two-step sign-in infrastructure + TOTP, with re-authentication, which TOTP setup needs
   2. Recovery codes
   3. Passkey registration and management
   4. Passkey sign-in (button + conditional UI)
   5. Passkey as second factor and passkey-only 2FA
   6. Notifications, lockout email and admin reset
-
-  Re-authentication lands with slice 1 because TOTP setup already needs it.
 - **Existing gaps noticed while mapping the auth surface:**
-  - Google/Apple sign-in endpoints are anonymous and not rate-limited.
-  - Provider registration state lives in per-replica `IMemoryCache`.
-  - Sign-out does not revoke the token server-side.
-
-  The first is fixed here; the other two are left for separate work.
+  - Google/Apple sign-in endpoints were anonymous and not rate-limited; fixed here.
+  - Left for separate work: provider registration state lives in per-replica `IMemoryCache`, and sign-out does not revoke the token server-side.
 - References:
   - [Google Authenticator Key URI Format](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
   - [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238)
