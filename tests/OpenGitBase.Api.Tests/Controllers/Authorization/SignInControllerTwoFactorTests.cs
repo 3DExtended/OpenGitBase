@@ -175,6 +175,28 @@ public class SignInControllerTwoFactorTests : TwoFactorControllerTestBase
     }
 
     [Fact]
+    public async Task TwoFactor_FiveWrongCodes_EmailTheLockoutOnce()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "warned");
+        var secret = await EnableTotpAsync("warned");
+        using var browser = NewBrowser();
+        var wrong = WrongCode(NextCode(secret));
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            var challenge = await LoginForChallengeAsync(browser, "warned");
+            await CompleteTwoFactorAsync(browser, challenge.ChallengeToken, wrong);
+        }
+
+        var lockout = Assert.Single(
+            Emails.GetByRecipient("warned@example.com"),
+            message => message.Subject == "Sign-in blocked after failed second steps"
+        );
+        Assert.Contains("password was entered correctly", lockout.HtmlBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TwoFactor_FiveWrongCodes_LockTheSecondStepFor15Minutes()
     {
         using var setup = NewBrowser();

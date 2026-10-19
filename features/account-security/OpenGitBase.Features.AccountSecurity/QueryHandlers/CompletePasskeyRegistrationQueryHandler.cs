@@ -8,6 +8,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.Passkeys;
 
 namespace OpenGitBase.Features.AccountSecurity.QueryHandlers;
@@ -18,18 +19,24 @@ public class CompletePasskeyRegistrationQueryHandler
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly WebAuthnOptions _webAuthnOptions;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<CompletePasskeyRegistrationQueryHandler> _logger;
 
     public CompletePasskeyRegistrationQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         WebAuthnOptions webAuthnOptions,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<CompletePasskeyRegistrationQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _webAuthnOptions = webAuthnOptions;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -83,10 +90,12 @@ public class CompletePasskeyRegistrationQueryHandler
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _logger.LogInformation(
-                "Passkey registration for user {UserId} rejected: {Reason}",
+            SecurityEventLog.Write(
+                _logger,
+                SecurityEvent.PasskeyRegistrationRejected,
                 query.UserId.Value,
-                exception.Message
+                _remoteIp.RemoteIpAddress,
+                $"reason={exception.Message}"
             );
             return new PasskeyRegistrationResult(
                 duplicate ? PasskeyRegistrationStatus.AlreadyRegistered : PasskeyRegistrationStatus.Rejected
@@ -118,7 +127,9 @@ public class CompletePasskeyRegistrationQueryHandler
             return new PasskeyRegistrationResult(PasskeyRegistrationStatus.AlreadyRegistered);
         }
 
-        _logger.LogInformation("Passkey {PasskeyId} added for user {UserId}", passkey.Id, query.UserId.Value);
+        var remoteIp = _remoteIp.RemoteIpAddress;
+        SecurityEventLog.Write(_logger, SecurityEvent.PasskeyAdded, passkey.UserId, remoteIp, $"passkey={passkey.Id}");
+        await _queryProcessor.NotifyAsync(passkey.UserId, SecurityNotification.PasskeyAdded, now, remoteIp, cancellationToken);
         return new PasskeyRegistrationResult(PasskeyRegistrationStatus.Registered, PasskeyCeremonies.Summarize(passkey));
     }
 }

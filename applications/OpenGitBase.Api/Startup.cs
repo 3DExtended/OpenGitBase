@@ -125,6 +125,7 @@ public class Startup
             );
         });
         services.AddHttpContextAccessor();
+        services.AddSingleton<IRemoteIpAddressAccessor, HttpRemoteIpAddressAccessor>();
         services.AddMemoryCache();
         var redisUrl = Configuration["REDIS_URL"];
         if (!string.IsNullOrWhiteSpace(redisUrl))

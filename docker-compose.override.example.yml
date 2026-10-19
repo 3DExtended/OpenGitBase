@@ -39,6 +39,8 @@ x-api-env: &api-env
     WebAuthn__RelyingPartyId: "localhost"
     WebAuthn__Origins__0: "http://localhost:8089"
     WebAuthn__Origins__1: "http://localhost:3000"
+    # Security emails link here (default: https://opengitbase.com/settings/security).
+    TwoFactor__SecuritySettingsUrl: "http://localhost:8089/settings/security"
 
     # SendGrid — set ApiKey and IsDisabled to "false" to send mail
     SendGrid__ApiKey: "SG.replace-me"

@@ -8,6 +8,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Features.AccountSecurity.Challenges;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 
 namespace OpenGitBase.Features.AccountSecurity.Passkeys;
 
@@ -96,6 +97,7 @@ internal static class PasskeyCeremonies
         string assertionJson,
         DateTimeOffset now,
         ILogger logger,
+        string? remoteIp,
         CancellationToken cancellationToken,
         bool requireUserVerification = true
     )
@@ -128,14 +130,13 @@ internal static class PasskeyCeremonies
         var passkey = await candidates.FirstOrDefaultAsync(cancellationToken);
         if (passkey is null)
         {
-            if (userId is null)
-            {
-                logger.LogInformation("Passkey sign-in rejected: unknown credential");
-            }
-            else
-            {
-                logger.LogInformation("Passkey assertion for user {UserId} rejected: not one of their passkeys", userId);
-            }
+            SecurityEventLog.Write(
+                logger,
+                SecurityEvent.PasskeyRejected,
+                userId,
+                remoteIp,
+                userId is null ? "reason=unknown_credential" : "reason=not_their_passkey"
+            );
 
             return PasskeyAssertion.Rejected;
         }
@@ -160,7 +161,7 @@ internal static class PasskeyCeremonies
             if (requireUserVerification && !IsUserVerified(response.Response.AuthenticatorData))
             {
                 // The options may only prefer verification; on its own, a passkey must have verified the user.
-                logger.LogInformation("Passkey assertion for user {UserId} rejected: user not verified", passkey.UserId);
+                SecurityEventLog.Write(logger, SecurityEvent.PasskeyRejected, passkey.UserId, remoteIp, "reason=user_not_verified");
                 return PasskeyAssertion.Rejected;
             }
 
@@ -172,10 +173,12 @@ internal static class PasskeyCeremonies
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogInformation(
-                "Passkey assertion for user {UserId} rejected: {Reason}",
+            SecurityEventLog.Write(
+                logger,
+                SecurityEvent.PasskeyRejected,
                 passkey.UserId,
-                exception.Message
+                remoteIp,
+                $"reason={exception.Message}"
             );
             return PasskeyAssertion.Rejected;
         }

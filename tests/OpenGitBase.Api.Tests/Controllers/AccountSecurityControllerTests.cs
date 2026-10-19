@@ -93,6 +93,29 @@ public class AccountSecurityControllerTests : TwoFactorControllerTestBase
     }
 
     [Fact]
+    public async Task EnableFlow_EmailsTheAccountOnce()
+    {
+        using var browser = NewBrowser();
+        await RegisterAsync(browser, "notified");
+        (await ReauthenticateAsync(browser)).EnsureSuccessStatusCode();
+        var setup = await (await browser.PostAsync("/account/two-factor/totp/setup", null))
+            .Content.ReadFromJsonAsync<TotpSetupResponse>();
+
+        var confirm = await browser.PostAsJsonAsync(
+            "/account/two-factor/totp/confirm",
+            new ConfirmTotpSetupDto { Code = NextCode(setup!.Secret) }
+        );
+
+        confirm.EnsureSuccessStatusCode();
+        var email = Assert.Single(
+            Emails.GetByRecipient("notified@example.com"),
+            message => message.Subject.StartsWith("Two-factor", StringComparison.Ordinal)
+        );
+        Assert.Equal("Two-factor authentication turned on", email.Subject);
+        Assert.Contains("https://opengitbase.com/settings/security", email.HtmlBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Confirm_WrongCode_KeepsTwoFactorOff()
     {
         using var browser = NewBrowser();

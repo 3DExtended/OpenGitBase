@@ -4,6 +4,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users.Entities;
 
@@ -14,18 +15,21 @@ public class RegenerateRecoveryCodesQueryHandler : IQueryHandler<RegenerateRecov
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _hasher;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
     private readonly ILogger<RegenerateRecoveryCodesQueryHandler> _logger;
 
     public RegenerateRecoveryCodesQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IPasswordHasherService hasher,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
         ILogger<RegenerateRecoveryCodesQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _hasher = hasher;
         _clock = clock;
+        _remoteIp = remoteIp;
         _logger = logger;
     }
 
@@ -54,7 +58,7 @@ public class RegenerateRecoveryCodesQueryHandler : IQueryHandler<RegenerateRecov
             cancellationToken
         );
         await context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Recovery codes regenerated for user {UserId}", query.UserId.Value);
+        SecurityEventLog.Write(_logger, SecurityEvent.RecoveryCodesRegenerated, query.UserId.Value, _remoteIp.RemoteIpAddress);
         return new RecoveryCodeSet(codes);
     }
 }

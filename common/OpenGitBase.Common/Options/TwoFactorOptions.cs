@@ -11,4 +11,7 @@ public sealed class TwoFactorOptions
 
     /// <summary>The name authenticator apps show next to the account.</summary>
     public string Issuer { get; set; } = "OpenGitBase";
+
+    /// <summary>The security settings page that security emails link to.</summary>
+    public string SecuritySettingsUrl { get; set; } = "https://opengitbase.com/settings/security";
 }

@@ -3,8 +3,10 @@ using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -27,6 +29,9 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
     /// <summary>The origin the software authenticator reports; the scope's relying party accepts it.</summary>
     public const string WebAuthnOrigin = "http://localhost:8089";
 
+    /// <summary>The page security emails link to in this scope.</summary>
+    public const string SecuritySettingsUrl = "https://opengitbase.test/settings/security";
+
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _serviceProvider;
 
@@ -40,7 +45,10 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
             new FeatureAssemblyProvider([handlerAssembly, typeof(UsersMapsterConfig).Assembly])
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection);
-        services.AddLogging();
+        services.AddLogging(builder => builder.AddProvider(Logs));
+        services.AddSingleton<IQueryHandler<EmailSendQuery, Unit>>(Emails);
+        services.AddSingleton<IRemoteIpAddressAccessor>(RemoteIp);
+        services.AddSingleton(new TwoFactorOptions { Enabled = true, SecuritySettingsUrl = SecuritySettingsUrl });
         services.AddSingleton(
             new EncryptionOptions { DataKey = Convert.ToBase64String(new byte[32]), Pepper = "test-pepper" }
         );
@@ -60,6 +68,13 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
     }
 
     public TestClock Clock { get; } = new(DateTimeOffset.FromUnixTimeSeconds(1_800_000_000));
+
+    /// <summary>Every email the handlers send; set <see cref="RecordingEmailSender.Failure"/> to make sending fail.</summary>
+    public RecordingEmailSender Emails { get; } = new();
+
+    public RecordingLoggerProvider Logs { get; } = new();
+
+    public FixedRemoteIpAddress RemoteIp { get; } = new();
 
     public static async Task<AccountSecurityTestScope> CreateAsync()
     {
@@ -82,8 +97,11 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
     public TService GetService<TService>()
         where TService : notnull => _serviceProvider.GetRequiredService<TService>();
 
-    /// <summary>A user with a password, or a Google/Apple-only user when <paramref name="withPassword"/> is false.</summary>
-    public async Task<UserId> SeedUserAsync(string username = "alice", bool withPassword = true)
+    /// <summary>
+    /// A user with a password, or a Google/Apple-only user when <paramref name="withPassword"/> is false. The
+    /// address is <c>{username}@example.com</c> unless <paramref name="withEmail"/> is false.
+    /// </summary>
+    public async Task<UserId> SeedUserAsync(string username = "alice", bool withPassword = true, bool withEmail = true)
     {
         var userId = Guid.NewGuid();
         await using var context = await CreateDbContextAsync();
@@ -104,6 +122,9 @@ public sealed class AccountSecurityTestScope : IAsyncDisposable
                 PasswordHash = withPassword ? GetService<IPasswordHasherService>().HashPassword(Password) : null,
                 SignInProvider = !withPassword,
                 InternalId = withPassword ? null : "google-" + username,
+                EmailCiphertext = withEmail
+                    ? GetService<IEmailProtectionService>().EncryptEmail(username + "@example.com")
+                    : null,
             }
         );
         await context.SaveChangesAsync();

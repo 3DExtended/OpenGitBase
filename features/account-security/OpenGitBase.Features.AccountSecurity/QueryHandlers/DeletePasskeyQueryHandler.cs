@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.AccountSecurity.QueryHandlers;
@@ -11,14 +13,17 @@ namespace OpenGitBase.Features.AccountSecurity.QueryHandlers;
 public class DeletePasskeyQueryHandler : IQueryHandler<DeletePasskeyQuery, PasskeyDeletion>
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
     private readonly ILogger<DeletePasskeyQueryHandler> _logger;
 
     public DeletePasskeyQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IRemoteIpAddressAccessor remoteIp,
         ILogger<DeletePasskeyQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
+        _remoteIp = remoteIp;
         _logger = logger;
     }
 
@@ -43,7 +48,13 @@ public class DeletePasskeyQueryHandler : IQueryHandler<DeletePasskeyQuery, Passk
             return Option<PasskeyDeletion>.None;
         }
 
-        _logger.LogInformation("Passkey {PasskeyId} removed for user {UserId}", query.PasskeyId, userId);
+        SecurityEventLog.Write(
+            _logger,
+            SecurityEvent.PasskeyRemoved,
+            userId,
+            _remoteIp.RemoteIpAddress,
+            $"passkey={query.PasskeyId}"
+        );
         return new PasskeyDeletion(PasskeyDeletionStatus.Deleted);
     }
 

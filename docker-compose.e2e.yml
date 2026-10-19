@@ -15,6 +15,7 @@ services:
       # Passkeys stay off until mfa-06 too (empty RP ID). WebAuthn accepts plain HTTP on localhost only.
       WebAuthn__RelyingPartyId: "localhost"
       WebAuthn__Origins__0: "http://localhost:${OPENGITBASE_E2E_HTTP_PORT:-8089}"
+      TwoFactor__SecuritySettingsUrl: "http://localhost:${OPENGITBASE_E2E_HTTP_PORT:-8089}/settings/security"
     volumes:
       - opengitbase_e2e_shared:/shared
   api-2:
@@ -32,6 +33,7 @@ services:
       # Passkeys stay off until mfa-06 too (empty RP ID). WebAuthn accepts plain HTTP on localhost only.
       WebAuthn__RelyingPartyId: "localhost"
       WebAuthn__Origins__0: "http://localhost:${OPENGITBASE_E2E_HTTP_PORT:-8089}"
+      TwoFactor__SecuritySettingsUrl: "http://localhost:${OPENGITBASE_E2E_HTTP_PORT:-8089}/settings/security"
     volumes:
       - opengitbase_e2e_shared:/shared
 
