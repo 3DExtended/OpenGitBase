@@ -449,7 +449,7 @@ onMounted(() => {
                     :commit-link-from="`mr/${number}`"
                     :resolved-label="t('repo.discussions.subThreadResolved')"
                     :outdated-label="t('repo.mergeRequests.outdated')"
-                    :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count })"
+                    :reply-count-label="(count: number) => t('repo.discussions.replyCount', { count }, count)"
                     @reply="(body, anchor) => replyToComment(
                       comment.id,
                       body,
