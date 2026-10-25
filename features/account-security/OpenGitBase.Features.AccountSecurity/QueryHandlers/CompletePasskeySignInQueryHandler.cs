@@ -6,6 +6,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.Passkeys;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Entities;
@@ -19,18 +20,21 @@ public class CompletePasskeySignInQueryHandler : IQueryHandler<CompletePasskeySi
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly WebAuthnOptions _webAuthnOptions;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
     private readonly ILogger<CompletePasskeySignInQueryHandler> _logger;
 
     public CompletePasskeySignInQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         WebAuthnOptions webAuthnOptions,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
         ILogger<CompletePasskeySignInQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _webAuthnOptions = webAuthnOptions;
         _clock = clock;
+        _remoteIp = remoteIp;
         _logger = logger;
     }
 
@@ -40,6 +44,7 @@ public class CompletePasskeySignInQueryHandler : IQueryHandler<CompletePasskeySi
     )
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var remoteIp = _remoteIp.RemoteIpAddress;
         var assertion = await PasskeyCeremonies.VerifyAssertionAsync(
             context,
             _webAuthnOptions,
@@ -48,6 +53,7 @@ public class CompletePasskeySignInQueryHandler : IQueryHandler<CompletePasskeySi
             query.AssertionResponseJson,
             _clock.UtcNow,
             _logger,
+            remoteIp,
             cancellationToken
         );
         if (assertion.Outcome != PasskeyAssertionOutcome.Verified || assertion.UserId is not { } userId)
@@ -61,11 +67,11 @@ public class CompletePasskeySignInQueryHandler : IQueryHandler<CompletePasskeySi
                 .AnyAsync(c => c.UserId == userId && !c.Deleted, cancellationToken)
         )
         {
-            _logger.LogInformation("Passkey sign-in for user {UserId} rejected: account deleted", userId);
+            SecurityEventLog.Write(_logger, SecurityEvent.PasskeyRejected, userId, remoteIp, "reason=account_deleted");
             return Rejected;
         }
 
-        _logger.LogInformation("Passkey sign-in for user {UserId}", userId);
+        SecurityEventLog.Write(_logger, SecurityEvent.PasskeySignedIn, userId, remoteIp);
         return new PasskeySignInResult(PasskeySignInStatus.SignedIn, UserId.From(userId));
     }
 }

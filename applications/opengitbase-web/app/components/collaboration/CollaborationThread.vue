@@ -6,12 +6,13 @@ import CollaborationCodeAttachModal from '~/components/collaboration/Collaborati
 import CollaborationMarkdownEditor from '~/components/collaboration/CollaborationMarkdownEditor.vue'
 import CollaborationRenderedBody from '~/components/collaboration/CollaborationRenderedBody.vue'
 import { resolveTargetCommentId, subtreeContainsComment } from '~/utils/discussionCommentHash'
+import { formatReplyCount } from '~/utils/replyCount'
 
 const props = withDefaults(defineProps<CollaborationThreadProps>(), {
   members: () => [],
   resolvedLabel: 'Resolved',
   outdatedLabel: 'Outdated',
-  replyCountLabel: (count: number) => (count === 1 ? '1 reply' : `${count} replies`),
+  replyCountLabel: formatReplyCount,
 })
 
 const emit = defineEmits<{

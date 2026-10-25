@@ -5,6 +5,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users;
 using OpenGitBase.Features.Users.Entities;
@@ -15,16 +16,22 @@ public class DisableTwoFactorQueryHandler : IQueryHandler<DisableTwoFactorQuery,
 {
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<DisableTwoFactorQueryHandler> _logger;
 
     public DisableTwoFactorQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<DisableTwoFactorQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -52,11 +59,20 @@ public class DisableTwoFactorQueryHandler : IQueryHandler<DisableTwoFactorQuery,
         var wasEnabled = credentials.TwoFactorEnabledAt is not null;
         credentials.TwoFactorEnabledAt = null;
         SecondFactorAttempts.RecordSuccess(credentials);
-        UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, _clock.UtcNow);
+        var now = _clock.UtcNow;
+        UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, now);
         await context.SaveChangesAsync(cancellationToken);
         if (wasEnabled)
         {
-            _logger.LogInformation("Two-factor sign-in disabled for user {UserId}", query.UserId.Value);
+            var remoteIp = _remoteIp.RemoteIpAddress;
+            SecurityEventLog.Write(_logger, SecurityEvent.TwoFactorDisabled, credentials.UserId, remoteIp);
+            await _queryProcessor.NotifyAsync(
+                credentials.UserId,
+                SecurityNotification.TwoFactorDisabled,
+                now,
+                remoteIp,
+                cancellationToken
+            );
         }
 
         return Unit.Value;

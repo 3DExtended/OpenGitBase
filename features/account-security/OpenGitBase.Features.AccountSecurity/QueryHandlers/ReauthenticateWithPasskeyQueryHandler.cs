@@ -7,6 +7,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Challenges;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.Passkeys;
 using OpenGitBase.Features.Users.Entities;
 
@@ -19,6 +20,7 @@ public class ReauthenticateWithPasskeyQueryHandler
     private readonly WebAuthnOptions _webAuthnOptions;
     private readonly IPasswordHasherService _passwordHasher;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
     private readonly ILogger<ReauthenticateWithPasskeyQueryHandler> _logger;
 
     public ReauthenticateWithPasskeyQueryHandler(
@@ -26,6 +28,7 @@ public class ReauthenticateWithPasskeyQueryHandler
         WebAuthnOptions webAuthnOptions,
         IPasswordHasherService passwordHasher,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
         ILogger<ReauthenticateWithPasskeyQueryHandler> logger
     )
     {
@@ -33,6 +36,7 @@ public class ReauthenticateWithPasskeyQueryHandler
         _webAuthnOptions = webAuthnOptions;
         _passwordHasher = passwordHasher;
         _clock = clock;
+        _remoteIp = remoteIp;
         _logger = logger;
     }
 
@@ -69,6 +73,7 @@ public class ReauthenticateWithPasskeyQueryHandler
             query.AssertionResponseJson,
             now,
             _logger,
+            _remoteIp.RemoteIpAddress,
             cancellationToken,
             requireUserVerification: !withPassword
         );

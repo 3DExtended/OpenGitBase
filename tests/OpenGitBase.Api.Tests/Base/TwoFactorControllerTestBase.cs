@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Features.AccountSecurity.Entities;
@@ -41,6 +42,17 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
                 services.AddSingleton<ISystemClock>(Clock);
                 services.RemoveAll<TwoFactorOptions>();
                 services.AddSingleton(new TwoFactorOptions { Enabled = twoFactorEnabled });
+                services.RemoveAll<SendGridOptions>();
+                services.AddSingleton(
+                    new SendGridOptions
+                    {
+                        ApiKey = "test-key",
+                        FromEmailAddress = "test@example.com",
+                        FromSenderName = "Test",
+                    }
+                );
+                services.RemoveAll<ISendGridEmailSender>();
+                services.AddSingleton<ISendGridEmailSender>(new CapturingSendGridEmailSender(Emails));
                 services.RemoveAll<WebAuthnOptions>();
                 services.AddSingleton(
                     passkeysEnabled
@@ -52,6 +64,9 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
     }
 
     protected ShiftableClock Clock { get; } = new();
+
+    /// <summary>Every email the host sends, security notifications included.</summary>
+    protected CapturingEmailStore Emails { get; } = new();
 
     protected WebApplicationFactory<ApiEntryPoint> TwoFactorFactory { get; }
 

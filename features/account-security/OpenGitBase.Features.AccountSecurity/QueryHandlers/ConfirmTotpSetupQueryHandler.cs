@@ -5,6 +5,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.AccountSecurity.Totp;
 using OpenGitBase.Features.Users;
@@ -18,6 +19,8 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
     private readonly IEmailProtectionService _protection;
     private readonly IPasswordHasherService _hasher;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<ConfirmTotpSetupQueryHandler> _logger;
 
     public ConfirmTotpSetupQueryHandler(
@@ -25,6 +28,8 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
         IEmailProtectionService protection,
         IPasswordHasherService hasher,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<ConfirmTotpSetupQueryHandler> logger
     )
     {
@@ -32,6 +37,8 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
         _protection = protection;
         _hasher = hasher;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -82,7 +89,15 @@ public class ConfirmTotpSetupQueryHandler : IQueryHandler<ConfirmTotpSetupQuery,
         await context.SaveChangesAsync(cancellationToken);
         if (newlyEnabled)
         {
-            _logger.LogInformation("Two-factor sign-in enabled for user {UserId} with an authenticator app", query.UserId.Value);
+            var remoteIp = _remoteIp.RemoteIpAddress;
+            SecurityEventLog.Write(_logger, SecurityEvent.TwoFactorEnabled, credentials.UserId, remoteIp, "method=totp");
+            await _queryProcessor.NotifyAsync(
+                credentials.UserId,
+                SecurityNotification.TwoFactorEnabled,
+                now,
+                remoteIp,
+                cancellationToken
+            );
         }
 
         return new TotpConfirmation(TotpConfirmationStatus.Confirmed, newlyEnabled, recoveryCodes);

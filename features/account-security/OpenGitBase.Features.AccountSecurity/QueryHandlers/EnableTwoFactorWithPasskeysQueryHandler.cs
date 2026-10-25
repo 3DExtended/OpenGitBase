@@ -5,6 +5,7 @@ using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users;
 using OpenGitBase.Features.Users.Entities;
@@ -17,18 +18,24 @@ public class EnableTwoFactorWithPasskeysQueryHandler
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
     private readonly IPasswordHasherService _hasher;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<EnableTwoFactorWithPasskeysQueryHandler> _logger;
 
     public EnableTwoFactorWithPasskeysQueryHandler(
         IDbContextFactory<OpenGitBaseDbContext> contextFactory,
         IPasswordHasherService hasher,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<EnableTwoFactorWithPasskeysQueryHandler> logger
     )
     {
         _contextFactory = contextFactory;
         _hasher = hasher;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -61,7 +68,15 @@ public class EnableTwoFactorWithPasskeysQueryHandler
         UserSessionRevocation.RevokeSessionsIssuedBefore(credentials, now);
         var recoveryCodes = await RecoveryCodes.ReplaceSetAsync(context, _hasher, credentials.UserId, now, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Two-factor sign-in enabled for user {UserId} with passkeys", query.UserId.Value);
+        var remoteIp = _remoteIp.RemoteIpAddress;
+        SecurityEventLog.Write(_logger, SecurityEvent.TwoFactorEnabled, credentials.UserId, remoteIp, "method=passkeys");
+        await _queryProcessor.NotifyAsync(
+            credentials.UserId,
+            SecurityNotification.TwoFactorEnabled,
+            now,
+            remoteIp,
+            cancellationToken
+        );
         return new PasskeyTwoFactorActivation(PasskeyTwoFactorActivationStatus.Enabled, recoveryCodes);
     }
 }

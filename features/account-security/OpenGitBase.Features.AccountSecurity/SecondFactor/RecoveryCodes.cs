@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 
 namespace OpenGitBase.Features.AccountSecurity.SecondFactor;
 
@@ -94,16 +95,18 @@ internal static class RecoveryCodes
         ILogger logger,
         OpenGitBaseDbContext context,
         Guid userId,
+        string? remoteIp,
         string step,
         CancellationToken cancellationToken
     )
     {
         var remaining = await CountUnusedAsync(context, userId, cancellationToken);
-        logger.LogWarning(
-            "Recovery code used by user {UserId} during {Step}; {Remaining} unused codes left",
+        SecurityEventLog.Write(
+            logger,
+            SecurityEvent.RecoveryCodeUsed,
             userId,
-            step,
-            remaining
+            remoteIp,
+            $"step={step} remaining={remaining}"
         );
     }
 

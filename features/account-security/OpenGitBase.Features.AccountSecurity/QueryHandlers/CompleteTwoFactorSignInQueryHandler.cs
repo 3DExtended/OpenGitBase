@@ -7,6 +7,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Challenges;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.Passkeys;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users.Contracts.Models;
@@ -23,6 +24,8 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
     private readonly IPasswordHasherService _hasher;
     private readonly WebAuthnOptions _webAuthnOptions;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<CompleteTwoFactorSignInQueryHandler> _logger;
 
     public CompleteTwoFactorSignInQueryHandler(
@@ -31,6 +34,8 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
         IPasswordHasherService hasher,
         WebAuthnOptions webAuthnOptions,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<CompleteTwoFactorSignInQueryHandler> logger
     )
     {
@@ -39,6 +44,8 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
         _hasher = hasher;
         _webAuthnOptions = webAuthnOptions;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -74,6 +81,7 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
             return new TwoFactorSignInResult(TwoFactorSignInStatus.LockedOut, LockedUntil: credentials.SecondFactorLockedUntil);
         }
 
+        var remoteIp = _remoteIp.RemoteIpAddress;
         var usesPasskey = !string.IsNullOrEmpty(query.PasskeyAssertionJson);
         var usesRecoveryCode = !usesPasskey && !string.IsNullOrWhiteSpace(query.RecoveryCode);
         bool accepted;
@@ -87,6 +95,7 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
                 query.PasskeyAssertionJson!,
                 now,
                 _logger,
+                remoteIp,
                 cancellationToken,
                 requireUserVerification: false
             );
@@ -113,9 +122,23 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
 
             SecondFactorAttempts.RecordSuccess(credentials);
             await context.SaveChangesAsync(cancellationToken);
+            SecurityEventLog.Write(
+                _logger,
+                SecurityEvent.TwoFactorSignedIn,
+                credentials.UserId,
+                remoteIp,
+                $"method={Method(usesPasskey, usesRecoveryCode)}"
+            );
             if (usesRecoveryCode)
             {
-                await RecoveryCodes.LogUseAsync(_logger, context, credentials.UserId, "sign-in", cancellationToken);
+                await RecoveryCodes.LogUseAsync(_logger, context, credentials.UserId, remoteIp, "sign-in", cancellationToken);
+                await _queryProcessor.NotifyAsync(
+                    credentials.UserId,
+                    SecurityNotification.RecoveryCodeUsed,
+                    now,
+                    remoteIp,
+                    cancellationToken
+                );
             }
 
             return new TwoFactorSignInResult(TwoFactorSignInStatus.Succeeded, UserId.From(credentials.UserId));
@@ -125,11 +148,28 @@ public class CompleteTwoFactorSignInQueryHandler : IQueryHandler<CompleteTwoFact
         {
             await AuthenticationChallenges.TryConsumeAsync(context, challenge.Id, cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
-            SecondFactorAttempts.LogLockout(_logger, credentials, "sign-in");
+            SecondFactorAttempts.LogLockout(_logger, credentials, remoteIp, "sign-in");
+            await _queryProcessor.NotifyAsync(
+                credentials.UserId,
+                SecurityNotification.SecondFactorLockedOut,
+                now,
+                remoteIp,
+                cancellationToken
+            );
             return new TwoFactorSignInResult(TwoFactorSignInStatus.LockedOut, LockedUntil: credentials.SecondFactorLockedUntil);
         }
 
         await context.SaveChangesAsync(cancellationToken);
         return new TwoFactorSignInResult(usesPasskey ? TwoFactorSignInStatus.PasskeyRejected : TwoFactorSignInStatus.InvalidCode);
+    }
+
+    private static string Method(bool usesPasskey, bool usesRecoveryCode)
+    {
+        if (usesPasskey)
+        {
+            return "passkey";
+        }
+
+        return usesRecoveryCode ? "recovery" : "totp";
     }
 }
