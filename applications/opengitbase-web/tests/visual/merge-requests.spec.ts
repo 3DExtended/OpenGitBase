@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { blockServiceWorker, freezeClock } from './helpers'
+import { blockServiceWorker, expect, test } from './helpers'
 
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
@@ -195,7 +194,6 @@ test.describe('Merge request visuals', () => {
     await page.addInitScript(() => {
       document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })
-    await freezeClock(page)
     await page.goto('/__visual__/?msw=1')
     await page.waitForLoadState('networkidle')
     await disableAnimations(page)
@@ -207,7 +205,6 @@ test.describe('Merge request visuals', () => {
   test('merge request detail page', async ({ page }) => {
     await blockServiceWorker(page)
     await installLinkedDiscussionsSidebarRoutes(page)
-    await freezeClock(page)
     await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await waitForMergeRequestPage(page)
     await disableAnimations(page)

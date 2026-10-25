@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { blockServiceWorker, freezeClock } from './helpers'
+import { blockServiceWorker, expect, test } from './helpers'
 
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
@@ -167,7 +166,6 @@ test.describe('Commit change view', () => {
 
   test('commit page renders diff', async ({ page }) => {
     await installCommitRoutes(page)
-    await freezeClock(page)
     await page.goto('/demo-user/hello-world/commit/abc123de?from=mr/7', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
     await expect(page.getByText('src/policy.ts')).toBeVisible()

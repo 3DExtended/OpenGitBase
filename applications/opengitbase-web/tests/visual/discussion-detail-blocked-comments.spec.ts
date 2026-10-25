@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from './helpers'
 
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',

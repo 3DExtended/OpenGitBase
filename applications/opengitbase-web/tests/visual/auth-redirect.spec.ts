@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers'
 
 test.describe('Auth redirect safety', () => {
   test.beforeEach(async ({ page }) => {

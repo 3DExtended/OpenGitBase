@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers'
 
 test.describe('Admin CI console @visual', () => {
   test('admin ci page', async ({ page }) => {

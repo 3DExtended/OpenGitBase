@@ -1,7 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import type { CDPSession, Page, Route } from '@playwright/test'
-import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { blockServiceWorker, expect, test } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',

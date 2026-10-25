@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { blockServiceWorker, expect, test } from './helpers'
 
 type DiscussionLink = {
   discussionNumber: number

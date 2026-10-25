@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {

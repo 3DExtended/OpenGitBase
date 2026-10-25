@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.goto('/__visual__/?msw=1')
