@@ -66,4 +66,5 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/check-docs-mirror-freshness.sh` | Compare pull inventory vs git mirror |
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
+| `scripts/test-kafka-quorum-reset.sh` | `kafka-quorum-reset.sh --wipe` removes only its own compose project's Kafka volumes and stops before touching the stack when the project cannot be resolved (stub `docker`; needs `docker-compose`, no daemon) |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |

@@ -111,25 +111,23 @@ wait_for_brokers_healthy() {
   return 1
 }
 
+# The compose project as compose resolves it (COMPOSE_PROJECT_NAME, a top-level name: in the
+# compose files, else the checkout directory); Compose v2 prints it first in `config`. Not read
+# from containers: every checkout gives the brokers the same container_name, so a lookup by name
+# can return another stack's project.
 project_name() {
-  local container
-  container="$(compose ps -q kafka-1 2>/dev/null || true)"
-  if [ -n "${container}" ]; then
-    docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "${container}" 2>/dev/null && return
+  local config name
+  config="$(compose config)" || return 1
+  name="$(awk '/^name: / && name == "" { name = $2 } END { print name }' <<<"${config}")"
+  if [ -z "${name}" ]; then
+    echo "error: compose config printed no top-level name: (Compose v2 required)" >&2
+    return 1
   fi
-  # Match compose project label used on Tower (directory / compose -p).
-  local from_ps
-  from_ps="$(docker ps -a --filter name=opengitbase_kafka --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -1 || true)"
-  if [ -n "${from_ps}" ]; then
-    echo "${from_ps}"
-    return
-  fi
-  basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
+  echo "${name}"
 }
 
 remove_kafka_volumes() {
-  local project
-  project="$(project_name)"
+  local project="${PROJECT}"
   echo "==> Removing Kafka data volumes for project '${project}'"
   local key full
   for key in "${VOLUME_KEYS[@]}" "${LEGACY_VOLUME_KEYS[@]}"; do
@@ -194,6 +192,16 @@ republish_wakes() {
   fi
   return 0
 }
+
+# A wipe resolves the project whose volumes it removes before it stops anything, so a failure
+# leaves the running quorum alone.
+PROJECT=""
+if [ "${MODE}" = "wipe" ]; then
+  PROJECT="$(project_name)" || {
+    echo "error: could not resolve the compose project; nothing was stopped or removed" >&2
+    exit 1
+  }
+fi
 
 echo "==> Kafka quorum ${MODE} in ${REPO_ROOT}"
 
