@@ -133,12 +133,14 @@ flowchart TB
 | Write quorum 2/3 on push | Done | `post-receive` → API `quorum-replicate` (RF4: API builds the encrypted artifact itself, #413) |
 | Peer sync over mTLS :8443 | Done | Separate from dispatcher SSH trust domain |
 | Watermark-based durability | Done | Monotonic `PrimaryWatermark` + per-replica `AppliedWatermark` |
-| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs); acts only when the unhealthy primary also does not answer a direct probe (heartbeats also stop when the API or the database cannot take them) |
-| Background: RF1→RF3 backfill, rebalance, anti-entropy | Done | [HaStorageBackgroundService.cs](../applications/OpenGitBase.Api/Services/HaStorageBackgroundService.cs) |
+| Primary failover + epoch promotion | Done | [PromotePrimaryReplicaQueryHandler.cs](../applications/OpenGitBase.Api/Services/PromotePrimaryReplicaQueryHandler.cs); acts only when the unhealthy primary also does not answer a direct probe (heartbeats also stop when the API or the database cannot take them); promotes only a plaintext copy on a healthy node and leaves encrypted replicas' roles alone; a Degraded repository with encrypted replicas fails over the RF4 way (a plaintext copy at `PrimaryWatermark`, else cold recovery) |
+| Background: RF1→RF3 and RF3→RF4 backfill, rebalance, anti-entropy | Done | [HaStorageBackgroundService.cs](../applications/OpenGitBase.Api/Services/HaStorageBackgroundService.cs); the RF4 backfill keeps the current primary and skips a repository whose primary pointer and Primary row disagree, which `GET /admin/fleet/drift` reports as `PrimaryMismatch` |
 | Admin replication dashboard | Done | Web + API |
 | Git HTTPS via HAProxy | Done | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) |
 | Optional SSH git (`--profile ssh`) | Done | Port 2211 via HAProxy |
 | Git LFS over HTTPS | Done; on in production since 2026-10-18 (100 MiB per object), off by default (`Lfs:Enabled`) | Batch API + `basic` transfer on the dispatcher; four-copy layout (plaintext on primary/read replica, encrypted on both encrypted replicas); verify = primary + ≥1 encrypted copy; pre-receive pointer gate; reconciler steps "LFS copies" and "LFS orphans"; [git-lfs-operations.md](deployment/git-lfs-operations.md) |
+
+Known HA gaps: after replacing a dead replica, rebalance judges a Degraded repository by the RF3 rule even when it has encrypted replicas, and can set it `Rf3Healthy`; the RF4 backfill then plans its encrypted replicas again (keeping the primary). A repository that is already split, like "Notes" in October 2026 (pointer on an encrypted replica, Primary row elsewhere), has to be repaired by hand; the drift report finds it.
 
 ### 3.4 Testing and ops
 
