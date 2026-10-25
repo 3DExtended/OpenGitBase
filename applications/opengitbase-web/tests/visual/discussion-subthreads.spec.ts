@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { waitForPageReady } from './helpers'
+import { freezeClock, waitForPageReady } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
+  await freezeClock(page)
   await page.goto('/__visual__/?msw=1')
   await waitForPageReady(page)
   await page.addStyleTag({
