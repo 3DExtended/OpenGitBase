@@ -84,6 +84,50 @@ public class ConfirmTotpSetupQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_FirstConfirmation_ReturnsTenRecoveryCodesStoredOnlyAsHashes()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var setup = await StartSetupAsync(scope, userId);
+
+        var confirmation = QueryHandlerResultAssert.AssertSome(await Confirm(scope, userId, scope.CurrentCode(setup.Secret)));
+
+        var codes = confirmation.RecoveryCodes!;
+        Assert.Equal(10, codes.Count);
+        Assert.Equal(10, codes.Distinct().Count());
+        Assert.All(codes, code => Assert.Matches("^[a-z2-7]{5}-[a-z2-7]{5}$", code));
+
+        var rows = await scope.GetRecoveryCodesAsync(userId);
+        Assert.Equal(10, rows.Count);
+        Assert.All(rows, row => Assert.Null(row.UsedAt));
+        var hasher = scope.GetService<IPasswordHasherService>();
+        foreach (var code in codes)
+        {
+            var plain = code.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+            Assert.DoesNotContain(rows, row => row.CodeHash.Contains(plain, StringComparison.OrdinalIgnoreCase));
+            Assert.Single(rows, row => hasher.VerifyPassword(row.CodeHash, plain));
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ReplacingTheApp_KeepsTheRecoveryCodesAndReturnsNone()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var first = await StartSetupAsync(scope, userId);
+        await Confirm(scope, userId, scope.CurrentCode(first.Secret));
+        var rowsBefore = await scope.GetRecoveryCodesAsync(userId);
+        scope.Clock.Advance(TimeSpan.FromMinutes(1));
+        var second = await StartSetupAsync(scope, userId);
+
+        var confirmation = QueryHandlerResultAssert.AssertSome(await Confirm(scope, userId, scope.CurrentCode(second.Secret)));
+
+        Assert.Null(confirmation.RecoveryCodes);
+        var rowsAfter = await scope.GetRecoveryCodesAsync(userId);
+        Assert.Equal(rowsBefore.Select(row => row.Id).Order(), rowsAfter.Select(row => row.Id).Order());
+    }
+
+    [Fact]
     public async Task RunQueryAsync_TheConfirmationCodeCannotBeReusedToSignIn()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();

@@ -164,12 +164,31 @@ test.describe('Settings screens', () => {
           twoFactorEnabled: false,
           totpConfigured: false,
           hasPassword: true,
+          recoveryCodesRemaining: 0,
+          passkeysAvailable: true,
         }),
+      }),
+    )
+    // The same passkey as the MSW handlers, whichever of the two answers.
+    await page.route('**/api/account/passkeys', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: '66666666-6666-6666-6666-666666666666',
+            name: 'MacBook',
+            createdAt: '2026-06-01T12:00:00Z',
+            lastUsedAt: '2026-08-29T12:00:00Z',
+            isBackedUp: true,
+          },
+        ]),
       }),
     )
     await page.goto('/settings/security?msw=1')
     await page.waitForLoadState('networkidle')
     await expect(page.getByTestId('two-factor-status-card')).toBeVisible()
+    await expect(page.getByTestId('passkey-name')).toHaveText(['MacBook'])
     await expect(page.locator('body')).toHaveScreenshot('security.png', {
       fullPage: true,
     })

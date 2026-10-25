@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -7,7 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Common.Options;
+using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Features.AccountSecurity.Entities;
 using OpenGitBase.Features.AccountSecurity.Totp;
 using OpenGitBase.Features.Users.Entities;
@@ -22,7 +25,14 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
 {
     public const string Password = "Password123!";
 
-    protected TwoFactorControllerTestBase(WebApplicationFactory<ApiEntryPoint> factory, bool twoFactorEnabled = true)
+    /// <summary>The origin the software authenticator reports; the test host's relying party accepts it.</summary>
+    public const string WebAuthnOrigin = "http://localhost:8089";
+
+    protected TwoFactorControllerTestBase(
+        WebApplicationFactory<ApiEntryPoint> factory,
+        bool twoFactorEnabled = true,
+        bool passkeysEnabled = true
+    )
         : base(factory)
     {
         TwoFactorFactory = Factory.WithWebHostBuilder(builder =>
@@ -32,11 +42,31 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
                 services.AddSingleton<ISystemClock>(Clock);
                 services.RemoveAll<TwoFactorOptions>();
                 services.AddSingleton(new TwoFactorOptions { Enabled = twoFactorEnabled });
+                services.RemoveAll<SendGridOptions>();
+                services.AddSingleton(
+                    new SendGridOptions
+                    {
+                        ApiKey = "test-key",
+                        FromEmailAddress = "test@example.com",
+                        FromSenderName = "Test",
+                    }
+                );
+                services.RemoveAll<ISendGridEmailSender>();
+                services.AddSingleton<ISendGridEmailSender>(new CapturingSendGridEmailSender(Emails));
+                services.RemoveAll<WebAuthnOptions>();
+                services.AddSingleton(
+                    passkeysEnabled
+                        ? new WebAuthnOptions { RelyingPartyId = "localhost", Origins = [WebAuthnOrigin] }
+                        : new WebAuthnOptions()
+                );
             })
         );
     }
 
     protected ShiftableClock Clock { get; } = new();
+
+    /// <summary>Every email the host sends, security notifications included.</summary>
+    protected CapturingEmailStore Emails { get; } = new();
 
     protected WebApplicationFactory<ApiEntryPoint> TwoFactorFactory { get; }
 
@@ -76,14 +106,128 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
     ) =>
         browser.PostAsJsonAsync("/signin/two-factor", new TwoFactorSignInDto { ChallengeToken = challengeToken, Code = code });
 
+    protected static Task<HttpResponseMessage> CompleteTwoFactorWithRecoveryCodeAsync(
+        HttpClient browser,
+        string challengeToken,
+        string recoveryCode
+    ) =>
+        browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto { ChallengeToken = challengeToken, RecoveryCode = recoveryCode }
+        );
+
     protected static Task<HttpResponseMessage> ReauthenticateAsync(
         HttpClient browser,
         string password = Password,
-        string? code = null
+        string? code = null,
+        string? recoveryCode = null
     ) =>
-        browser.PostAsJsonAsync("/account/reauthenticate", new ReauthenticateDto { Password = password, Code = code });
+        browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                Password = password,
+                Code = code,
+                RecoveryCode = recoveryCode,
+            }
+        );
+
+    /// <summary>Asks for a new set of recovery codes; the browser must have re-authenticated.</summary>
+    protected static async Task<IReadOnlyList<string>> RegenerateRecoveryCodesAsync(HttpClient browser)
+    {
+        var response = await browser.PostAsync("/account/two-factor/recovery-codes", null);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<RecoveryCodesResponse>();
+        Assert.NotNull(body);
+        return body.RecoveryCodes;
+    }
 
     protected static string WrongCode(string code) => code == "000000" ? "111111" : "000000";
+
+    protected static SoftwarePasskeyAuthenticator NewPasskey() => new(WebAuthnOrigin);
+
+    /// <summary>Registers <paramref name="passkey"/> as the browser does; the browser must have re-authenticated.</summary>
+    protected static async Task<HttpResponseMessage> RegisterPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey,
+        string name = "Laptop"
+    )
+    {
+        var options = await browser.PostAsync("/account/passkeys/registration-options", null);
+        options.EnsureSuccessStatusCode();
+        return await PostAttestationAsync(browser, passkey.CreateCredential(await options.Content.ReadAsStringAsync()), name);
+    }
+
+    protected static Task<HttpResponseMessage> PostAttestationAsync(
+        HttpClient browser,
+        string attestationJson,
+        string name = "Laptop"
+    ) =>
+        browser.PostAsJsonAsync(
+            "/account/passkeys",
+            new RegisterPasskeyDto { Name = name, AttestationResponse = JsonDocument.Parse(attestationJson).RootElement }
+        );
+
+    /// <summary>Confirms the browser's session with <paramref name="passkey"/> instead of the password.</summary>
+    protected static async Task<HttpResponseMessage> ReauthenticateWithPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey
+    )
+    {
+        var options = await browser.PostAsync("/account/reauthenticate/passkey-options", null);
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
+
+    /// <summary>
+    /// Confirms the browser's session with the password plus <paramref name="passkey"/>, the way an account
+    /// with 2FA on uses a passkey in place of the authenticator code.
+    /// </summary>
+    protected static async Task<HttpResponseMessage> ReauthenticateWithPasswordAndPasskeyAsync(
+        HttpClient browser,
+        SoftwarePasskeyAuthenticator passkey,
+        string password = Password
+    )
+    {
+        var options = await browser.PostAsync("/account/reauthenticate/passkey-options", null);
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/account/reauthenticate",
+            new ReauthenticateDto
+            {
+                Password = password,
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
+
+    /// <summary>Asks for passkey options for the open second step, then answers it with <paramref name="passkey"/>.</summary>
+    protected static async Task<HttpResponseMessage> CompleteTwoFactorWithPasskeyAsync(
+        HttpClient browser,
+        string challengeToken,
+        SoftwarePasskeyAuthenticator passkey
+    )
+    {
+        var options = await browser.PostAsJsonAsync(
+            "/signin/two-factor/passkey-options",
+            new TwoFactorPasskeyOptionsDto { ChallengeToken = challengeToken }
+        );
+        options.EnsureSuccessStatusCode();
+        return await browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto
+            {
+                ChallengeToken = challengeToken,
+                PasskeyAssertion = JsonDocument.Parse(passkey.GetAssertion(await options.Content.ReadAsStringAsync())).RootElement,
+            }
+        );
+    }
 
     /// <summary>A browser: a client with its own cookie jar.</summary>
     protected HttpClient NewBrowser() => TwoFactorFactory.CreateClient();
@@ -124,6 +268,21 @@ public abstract class TwoFactorControllerTestBase : ControllerTestBase
         credentials.TwoFactorEnabledAt = Clock.UtcNow;
         await context.SaveChangesAsync();
         return secret;
+    }
+
+    /// <summary>
+    /// Turns 2FA on for an existing account and asks the API for its recovery codes, from a browser
+    /// that signs in and re-authenticates for that alone.
+    /// </summary>
+    protected async Task<(string Secret, IReadOnlyList<string> RecoveryCodes)> EnableTotpWithRecoveryCodesAsync(
+        string username
+    )
+    {
+        var secret = await EnableTotpAsync(username);
+        using var browser = NewBrowser();
+        await SignInWithCodeAsync(browser, username, secret);
+        (await ReauthenticateAsync(browser, code: NextCode(secret))).EnsureSuccessStatusCode();
+        return (secret, await RegenerateRecoveryCodesAsync(browser));
     }
 
     /// <summary>Moves to the next 30-second step and returns the authenticator code shown there.</summary>

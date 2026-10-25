@@ -30,9 +30,38 @@ test.describe('two-factor visuals', () => {
     await expect(page.getByTestId('visual-two-factor-sign-in')).toHaveScreenshot('visual-two-factor-sign-in.png')
   })
 
+  test('gallery two-step sign-in with a passkey', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-two-factor-passkey-sign-in')
+    await expect(section.getByTestId('two-factor-use-passkey')).toHaveCount(2)
+    await expect(section).toHaveScreenshot('visual-two-factor-passkey-sign-in.png')
+  })
+
+  test('gallery two-factor with passkeys', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-security-passkey-two-factor')
+    await expect(section.getByTestId('two-factor-enable-passkeys')).toHaveCount(1)
+    await expect(section).toHaveScreenshot('visual-security-passkey-two-factor.png')
+  })
+
   test('gallery security status', async ({ page }) => {
     await waitForApp(page)
     await expect(page.getByTestId('visual-security-status')).toHaveScreenshot('visual-security-status.png')
+  })
+
+  test('gallery two-step sign-in with a recovery code', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-two-factor-recovery-sign-in')
+    await expect(section.getByTestId('recovery-code-input')).toHaveValue('abcde-fghij')
+    await expect(section).toHaveScreenshot('visual-two-factor-recovery-sign-in.png')
+  })
+
+  test('gallery recovery codes panel', async ({ page }) => {
+    await waitForApp(page)
+    const section = page.getByTestId('visual-recovery-codes')
+    await expect(section.getByTestId('recovery-codes-list').locator('li')).toHaveCount(10)
+    await expect(section.getByTestId('recovery-codes-done')).toBeEnabled()
+    await expect(section).toHaveScreenshot('visual-recovery-codes.png')
   })
 
   test('gallery authenticator setup', async ({ page }) => {

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { AccountMe } from '~/utils/api'
+import type { SecondFactorAnswer } from '~/utils/twoFactor'
 import { isTwoFactorChallenge } from '~/utils/twoFactor'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -44,9 +45,9 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   }
 
-  async function completeTwoFactor(challengeToken: string, code: string) {
+  async function completeTwoFactor(challengeToken: string, answer: SecondFactorAnswer) {
     const api = useApi()
-    const result = await api.auth.completeTwoFactor({ challengeToken, code })
+    const result = await api.auth.completeTwoFactor({ challengeToken, ...answer })
     if (result.error) {
       return result
     }

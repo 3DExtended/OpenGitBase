@@ -26,6 +26,18 @@ public class DisableTwoFactorQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_DeletesAllRecoveryCodes()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        await DisableAsync(scope, userId);
+
+        Assert.Empty(await scope.GetRecoveryCodesAsync(userId));
+    }
+
+    [Fact]
     public async Task RunQueryAsync_AfterDisabling_SignInNeedsNoSecondStep()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();
@@ -48,6 +60,34 @@ public class DisableTwoFactorQueryHandlerTests
         var result = await DisableAsync(scope, UserId.From(Guid.NewGuid()));
 
         Assert.True(result.IsNone);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_PasskeyOnlyTwoFactor_TurnsOffAndThePasskeyStillSignsIn()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        using var passkey = AccountSecurityTestScope.NewPasskey();
+        await scope.RegisterPasskeyAsync(userId, passkey);
+        await scope.EnableTwoFactorWithPasskeysAsync(userId);
+
+        await DisableAsync(scope, userId);
+
+        Assert.Null((await scope.GetCredentialsAsync(userId)).TwoFactorEnabledAt);
+        Assert.Empty(await scope.GetRecoveryCodesAsync(userId));
+        Assert.Single(await scope.GetPasskeysAsync(userId));
+        var options = QueryHandlerResultAssert.AssertSome(
+            await scope.GetHandler<StartPasskeySignInQueryHandler>().RunQueryAsync(new StartPasskeySignInQuery(), CancellationToken.None)
+        );
+        var signIn = QueryHandlerResultAssert.AssertSome(
+            await scope
+                .GetHandler<CompletePasskeySignInQueryHandler>()
+                .RunQueryAsync(
+                    new CompletePasskeySignInQuery { AssertionResponseJson = passkey.GetAssertion(options.OptionsJson) },
+                    CancellationToken.None
+                )
+        );
+        Assert.Equal(PasskeySignInStatus.SignedIn, signIn.Status);
     }
 
     private static Task<OpenGitBase.Cqrs.Option<OpenGitBase.Cqrs.Unit>> DisableAsync(
