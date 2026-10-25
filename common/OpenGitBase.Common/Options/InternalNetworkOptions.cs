@@ -13,6 +13,7 @@ public class InternalNetworkOptions
         "/api/v1/fleet/bootstrap",
         "/api/v1/internal/fleet-components",
         "/api/v1/internal/repositories/push-validation",
+        "/api/v1/internal/lfs",
         "/api/v1/internal/pipelines",
         "/api/v1/access-checks",
         "/internal/e2e",

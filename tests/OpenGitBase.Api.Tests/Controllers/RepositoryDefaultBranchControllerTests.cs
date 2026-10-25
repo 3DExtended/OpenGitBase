@@ -93,7 +93,8 @@ public class RepositoryDefaultBranchControllerTests
             queryProcessor,
             new WebReadReplicaSelector(),
             storageContentClient,
-            cache
+            cache,
+            Substitute.For<ILfsContentReader>()
         );
 
         return new RepositoryDefaultBranchController(

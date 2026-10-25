@@ -1,4 +1,4 @@
-using System.Data.Common;
+﻿using System.Data.Common;
 using Mapster;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
@@ -393,6 +393,8 @@ public class AntiEntropyReconcilerPendingWritesTests
             services.AddSingleton<ReplicationArtifactPublisher>();
             services.AddSingleton<ReplicaCatchUpService>();
             services.AddSingleton<Rf1BackfillService>();
+            services.AddSingleton<ILfsRepairQueue>(new OpenGitBase.Api.Tests.Services.Lfs.RecordingLfsRepairQueue());
+            services.AddSingleton(Substitute.For<ILfsOrphanCleaner>());
             services.AddTransient<AntiEntropyReconcilerService>();
             services.AddSingleton<GetRepositoryReplicationContextQueryHandler>();
             services.AddSingleton<QuorumReplicateRepositoryQueryHandler>();

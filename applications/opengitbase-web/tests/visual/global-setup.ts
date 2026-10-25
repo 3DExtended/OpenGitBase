@@ -1,51 +1,93 @@
-import { chromium, type FullConfig } from '@playwright/test'
+import { chromium, type BrowserContext, type FullConfig, type Locator, type Page } from '@playwright/test'
 
-type RouterLike = {
-  getRoutes(): Array<{ components?: Record<string, unknown> | null }>
-}
+// `pnpm dev` passes the webServer readiness probe long before the client app is
+// compiled: Vite transforms each module on the first browser request for it, so
+// the first spec to run against a fresh server needs longer than the 5 s expect
+// timeout to render. Load the app here so every spec starts against a warm
+// server, whichever one runs first. The bound is generous because it is paid
+// once per run, not per assertion.
+const WARM_UP_TIMEOUT_MS = 5 * 60_000
 
-type AppContainer = HTMLElement & {
-  __vue_app__?: { config: { globalProperties: { $router?: RouterLike } } }
-}
-
-// A cold first visit compiles the app shell and that page's module graph, which
-// can take minutes under heavy machine load.
-const WARM_UP_TIMEOUT = 300_000
-
-// The dev server compiles modules on demand, so whichever test first opens a page
-// pays for compiling it and times out its readiness wait under heavy machine load.
-// Open the gallery once (app shell, MSW mocks, most components) and import every
-// route's page module through the Nuxt router, so the suite starts against a warm
-// server without keeping a list of routes in sync with the specs.
-export default async function warmUpDevServer(config: FullConfig): Promise<void> {
+export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL = config.projects[0]?.use.baseURL
   if (!baseURL) {
-    return
+    throw new Error('Visual warm-up needs a baseURL in playwright.config.ts')
   }
 
   const startedAt = Date.now()
   const browser = await chromium.launch()
   try {
-    const page = await browser.newPage({ baseURL })
-    page.setDefaultTimeout(WARM_UP_TIMEOUT)
-    await page.goto('/__visual__/?msw=1')
-    await page.waitForFunction(() => !!document.querySelector<AppContainer>('#__nuxt')?.__vue_app__)
-    const routeCount = await page.evaluate(async () => {
-      const router = document.querySelector<AppContainer>('#__nuxt')?.__vue_app__?.config.globalProperties.$router
-      const loaders = (router?.getRoutes() ?? [])
-        .flatMap(route => Object.values(route.components ?? {}))
-        .filter((component): component is () => Promise<unknown> => typeof component === 'function')
-      await Promise.all(loaders.map(load => load()))
-      return loaders.length
-    })
-    await page.waitForLoadState('networkidle')
-    console.log(`[visual warm-up] gallery and ${routeCount} route modules loaded in ${Math.round((Date.now() - startedAt) / 1000)}s`)
-  }
-  catch (error) {
-    // Best effort: the specs' own readiness waits still decide pass or fail.
-    console.warn(`[visual warm-up] skipped: ${error instanceof Error ? error.message : String(error)}`)
+    const context = await browser.newContext({ baseURL })
+    context.setDefaultTimeout(WARM_UP_TIMEOUT_MS)
+
+    // When Vite's dependency cache is cold or stale, a pass makes it discover
+    // dependencies at runtime; re-optimizing them reloads the page and
+    // invalidates every module transformed so far. A second pass can discover
+    // nothing new, so the server stays warm after it.
+    for (let pass = 1; pass <= 2; pass++) {
+      await warm(context)
+    }
   }
   finally {
     await browser.close()
+  }
+  console.log(`Visual warm-up: dev server ready in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`)
+}
+
+async function warm(context: BrowserContext): Promise<void> {
+  // The gallery renders most components and starts the MSW worker most specs use.
+  await render(context, '/__visual__/?msw=1', page => page.getByTestId('visual-gallery'))
+  await render(context, '/__visual__/admin-ci', page => page.getByTestId('visual-admin-ci'))
+  // The default layout, which neither gallery route uses, then every other page.
+  await render(context, '/?msw=1', page => page.locator('.ogb-shell'), loadEveryPageChunk)
+}
+
+async function render(
+  context: BrowserContext,
+  path: string,
+  ready: (page: Page) => Locator,
+  andThen?: (page: Page) => Promise<void>,
+): Promise<void> {
+  // A page per step, so a Vite reload still pending on the previous step's page
+  // cannot interrupt this navigation.
+  const page = await context.newPage()
+  try {
+    await page.goto(path, { waitUntil: 'commit' })
+    // Locator waits survive a Vite reload, so this resolves on the settled page.
+    await ready(page).waitFor({ state: 'visible' })
+    await page.waitForLoadState('networkidle')
+    await andThen?.(page)
+  }
+  finally {
+    await page.close()
+  }
+}
+
+// Import every route's page component (sign-in, pitch, merge requests, ...) so
+// specs that open an app route first find its module graph already transformed.
+async function loadEveryPageChunk(page: Page): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.evaluate(async () => {
+        type RouteRecord = { components?: Record<string, unknown> | null }
+        const { $router } = (window as unknown as {
+          useNuxtApp: () => { $router: { getRoutes: () => RouteRecord[] } }
+        }).useNuxtApp()
+        await Promise.all($router.getRoutes().map((route) => {
+          const component = route.components?.default
+          return typeof component === 'function' ? component() : undefined
+        }))
+      })
+      return
+    }
+    catch (error) {
+      // A dependency first seen in one of these chunks makes Vite reload the page
+      // mid-import; wait for the reloaded app and import the rest.
+      if (attempt === 5 || !String(error).includes('Execution context was destroyed')) {
+        throw error
+      }
+      await page.locator('.ogb-shell').waitFor({ state: 'visible' })
+      await page.waitForLoadState('networkidle')
+    }
   }
 }

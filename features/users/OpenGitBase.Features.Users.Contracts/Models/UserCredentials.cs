@@ -29,4 +29,10 @@ public class UserCredentials : ModelBase<UserCredentialsId, Guid>
     public bool Deleted { get; set; }
 
     public DateTimeOffset? SessionsValidAfter { get; set; }
+
+    public DateTimeOffset? TwoFactorEnabledAt { get; set; }
+
+    public int SecondFactorFailedAttempts { get; set; }
+
+    public DateTimeOffset? SecondFactorLockedUntil { get; set; }
 }

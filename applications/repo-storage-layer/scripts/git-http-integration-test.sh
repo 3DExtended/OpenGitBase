@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Integration test: provision a bare repo via internal HTTP API (:8081),
-# then git clone over Smart HTTP (:8082).
+# then git clone over Smart HTTP (:8082); import a bundle as cold recovery
+# does and check the imported repository takes pushes.
 #
 # Usage:
 #   applications/repo-storage-layer/scripts/git-http-integration-test.sh
@@ -83,12 +84,19 @@ require_cmd git
 require_cmd curl
 require_cmd nc
 require_cmd uuidgen
+require_cmd openssl
 
 TMP=$(mktemp -d)
 trap cleanup EXIT
 
 echo "==> Building Docker image ${IMAGE_TAG}"
 docker build -t "${IMAGE_TAG}" "${APP_DIR}"
+
+# nginx serves :8082 and the peer mTLS port :8443 from one config; without node certificates it does not start at all.
+mkdir -p "${TMP}/tls"
+openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=git-http-it -days 1 \
+  -keyout "${TMP}/tls/node.key" -out "${TMP}/tls/node.crt" 2>/dev/null
+cp "${TMP}/tls/node.crt" "${TMP}/tls/ca.crt"
 
 CONTAINER_NAME="repo-storage-git-http-it-${RANDOM}"
 echo "==> Starting standalone container ${CONTAINER_NAME}"
@@ -99,6 +107,9 @@ docker run -d --name "${CONTAINER_NAME}" \
   -p 0:8081 \
   -p 0:8082 \
   -v "${TMP}/repos:/srv/git" \
+  -v "${TMP}/tls/node.crt:/etc/opengitbase/node.crt:ro" \
+  -v "${TMP}/tls/node.key:/etc/opengitbase/node.key:ro" \
+  -v "${TMP}/tls/ca.crt:/etc/opengitbase/ca.crt:ro" \
   "${IMAGE_TAG}" >/dev/null
 
 PROVISION_PORT=$(docker port "${CONTAINER_NAME}" 8081/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -1)
@@ -143,6 +154,45 @@ done
 
 if [ ! -d "${TMP}/clone/.git" ]; then
   echo "error: clone did not produce a git repository" >&2
+  exit 1
+fi
+
+echo "==> Importing a bundle the way cold recovery does"
+IMPORT_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+git -C "${TMP}/clone" symbolic-ref HEAD refs/heads/main
+git -C "${TMP}/clone" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+# On main's commit: the clone inside import-bundle guesses HEAD from the commit, and the image's git picks this one.
+git -C "${TMP}/clone" branch release
+git -C "${TMP}/clone" bundle create -q "${TMP}/import.bundle" --all
+printf '{"physicalPath":"/srv/git/%s.git","bundleBase64":"%s"}' \
+  "${IMPORT_ID}" "$(base64 < "${TMP}/import.bundle" | tr -d '\n')" > "${TMP}/import.json"
+HTTP_STATUS=$(curl -sS -o "${TMP}/import-response.json" -w "%{http_code}" \
+  -X POST "http://127.0.0.1:${PROVISION_PORT}/internal/repos/import-bundle" \
+  -H "Authorization: Bearer ${API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data @"${TMP}/import.json")
+if [ "${HTTP_STATUS}" != "201" ]; then
+  echo "error: import-bundle failed with status ${HTTP_STATUS}" >&2
+  cat "${TMP}/import-response.json" >&2 || true
+  docker logs "${CONTAINER_NAME}" >&2 || true
+  exit 1
+fi
+
+# A push asks for the receive-pack advertisement first. The non-bare clone import-bundle used to make answered 403.
+IMPORT_URL="http://127.0.0.1:${GIT_HTTP_PORT}/${IMPORT_ID}.git"
+HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "${IMPORT_URL}/info/refs?service=git-receive-pack")
+if [ "${HTTP_STATUS}" != "200" ]; then
+  echo "error: the imported repository refuses pushes (receive-pack info/refs answered ${HTTP_STATUS})" >&2
+  exit 1
+fi
+IMPORTED_BRANCHES=$(git ls-remote --heads "${IMPORT_URL}" | awk '{print $2}' | sort | tr '\n' ' ')
+if [ "${IMPORTED_BRANCHES}" != "refs/heads/main refs/heads/release " ]; then
+  echo "error: the imported repository has branches '${IMPORTED_BRANCHES}', expected main and release" >&2
+  exit 1
+fi
+IMPORTED_HEAD=$(git ls-remote --symref "${IMPORT_URL}" HEAD | awk '/^ref:/ {print $2}')
+if [ "${IMPORTED_HEAD}" != "refs/heads/main" ]; then
+  echo "error: the imported repository's HEAD is '${IMPORTED_HEAD}', expected refs/heads/main" >&2
   exit 1
 fi
 

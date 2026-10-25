@@ -84,6 +84,16 @@ public sealed class GitHttpProxyService
                     context.Request.ContentType
                 );
             }
+
+            // Git gzips an upload-pack request above 1 KiB, and git-http-backend inflates it only when
+            // told so. A content header belongs on the content: HttpRequestHeaders drops it silently.
+            if (context.Request.Headers.TryGetValue("Content-Encoding", out var contentEncoding))
+            {
+                request.Content.Headers.TryAddWithoutValidation(
+                    "Content-Encoding",
+                    contentEncoding.ToArray()
+                );
+            }
         }
 
         foreach (var headerName in ForwardedRequestHeaders)

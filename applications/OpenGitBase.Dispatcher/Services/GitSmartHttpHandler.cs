@@ -16,13 +16,17 @@ public sealed class GitSmartHttpHandler
     private readonly GitHttpProxyService _gitHttpProxyService;
     private readonly DispatcherOptions _options;
     private readonly ILogger<GitSmartHttpHandler> _logger;
+    private readonly LfsPathParser _lfsPathParser;
+    private readonly LfsHandler _lfsHandler;
 
     public GitSmartHttpHandler(
         GitSmartHttpPathParser pathParser,
         RepositoryAccessCheckClient accessCheckClient,
         GitHttpProxyService gitHttpProxyService,
         IOptions<DispatcherOptions> options,
-        ILogger<GitSmartHttpHandler> logger
+        ILogger<GitSmartHttpHandler> logger,
+        LfsPathParser lfsPathParser,
+        LfsHandler lfsHandler
     )
     {
         _pathParser = pathParser;
@@ -30,10 +34,18 @@ public sealed class GitSmartHttpHandler
         _gitHttpProxyService = gitHttpProxyService;
         _options = options.Value;
         _logger = logger;
+        _lfsPathParser = lfsPathParser;
+        _lfsHandler = lfsHandler;
     }
 
     public async Task HandleAsync(HttpContext context)
     {
+        if (_lfsPathParser.TryParse(context.Request.Method, context.Request.Path.Value, out var lfsRequest))
+        {
+            await _lfsHandler.HandleAsync(context, lfsRequest).ConfigureAwait(false);
+            return;
+        }
+
         if (!_pathParser.TryParse(
                 context.Request.Path,
                 context.Request.QueryString,

@@ -5,6 +5,7 @@ using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
@@ -46,6 +47,10 @@ public class AccountController : ControllerBase
             return NotFound();
         }
 
+        var security = await _queryProcessor
+            .RunQueryAsync(new GetAccountSecurityQuery { UserId = userId }, cancellationToken)
+            .ConfigureAwait(false);
+
         var userModel = user.Get();
         var response = new AccountMeResponse
         {
@@ -53,6 +58,7 @@ public class AccountController : ControllerBase
             Username = userModel.Username,
             EmailVerified = emailVerified.Get(),
             IsAdmin = userModel.IsAdmin,
+            TwoFactorEnabled = security.IsSome && security.Get().TwoFactorEnabled,
         };
 
         if (_debugFeatures.Features.EmailVerification)

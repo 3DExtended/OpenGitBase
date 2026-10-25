@@ -177,6 +177,11 @@ internal static class SshSessionRunner
         services.AddHttpClient<GitHttpProxyService>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<GitSmartHttpPathParser>();
+        services.AddHttpClient<LfsApiClient>();
+        // No overall timeout: an LFS object can take long to stream; the client's disconnect cancels it.
+        services.AddHttpClient<LfsObjectTransferService>(client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddSingleton<LfsPathParser>();
+        services.AddSingleton<LfsHandler>();
         services.AddSingleton<GitSmartHttpHandler>();
         services.AddSingleton<GitSessionProxyService>(sp =>
         {

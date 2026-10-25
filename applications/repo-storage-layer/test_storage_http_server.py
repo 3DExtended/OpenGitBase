@@ -3,12 +3,23 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import http.client
 import importlib.util
+import io
+import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.parse
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 MODULE_PATH = Path(__file__).with_name("storage-http-server.py")
 SPEC = importlib.util.spec_from_file_location("storage_http_server", MODULE_PATH)
@@ -378,6 +389,500 @@ class StorageHttpServerTests(unittest.TestCase):
         self.assertEqual(2, storage_http_server.on_disk_artifact_watermark(repository_id))
 
 
+class LfsInternalEndpointTests(unittest.TestCase):
+    REPOSITORY_ID = "0f3c5a52-8f7e-4c55-9a3d-2b1e6f4d7c90"
+    TOKEN = "node-token"
+
+    def setUp(self) -> None:
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.repos_root = self.temp_dir / "git"
+        self.repos_root.mkdir()
+        self.patches = [
+            mock.patch.object(storage_http_server, "REPOS_ROOT", self.repos_root),
+            mock.patch.object(storage_http_server, "LFS_ROOT", self.repos_root / ".lfs"),
+            mock.patch.object(storage_http_server, "LFS_ENCRYPTED_ROOT", self.temp_dir / "data" / "lfs"),
+            mock.patch.object(storage_http_server, "ARTIFACT_ROOT", self.temp_dir / "data" / "artifacts"),
+            mock.patch.object(storage_http_server, "ROLE_DIR", self.temp_dir / "roles"),
+            mock.patch.object(storage_http_server, "WATERMARK_DIR", self.temp_dir / "watermarks"),
+            mock.patch.object(storage_http_server, "STORAGE_API_TOKEN", self.TOKEN),
+            mock.patch.object(storage_http_server, "STORAGE_TOKEN_FILE", str(self.temp_dir / "no-token-file")),
+            # chown to the git user needs root; the hook content is covered elsewhere.
+            mock.patch.object(storage_http_server, "_install_replication_hook", lambda physical_path: None),
+        ]
+        for patch in self.patches:
+            patch.start()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), storage_http_server.StorageHttpHandler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        for patch in reversed(self.patches):
+            patch.stop()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_head_reports_the_size_of_a_stored_object(self) -> None:
+        content = b"lfs object" * 1000
+        oid = self._store(content)
+
+        status, headers, body = self._request("HEAD", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}")
+
+        self.assertEqual(200, status)
+        self.assertEqual(str(len(content)), headers["content-length"])
+        self.assertEqual(b"", body)
+
+    def test_get_streams_a_stored_object(self) -> None:
+        content = b"lfs object" * 1000
+        oid = self._store(content)
+
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}")
+
+        self.assertEqual(200, status)
+        self.assertEqual(content, body)
+
+    def test_head_of_a_missing_object_answers_404(self) -> None:
+        oid = hashlib.sha256(b"never stored").hexdigest()
+
+        status, _, _ = self._request("HEAD", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}")
+
+        self.assertEqual(404, status)
+
+    def test_lfs_endpoints_require_the_node_token(self) -> None:
+        oid = self._store(b"x")
+
+        for method in ("HEAD", "GET"):
+            with self.subTest(method=method):
+                status, _, _ = self._request(method, f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", token=None)
+                self.assertEqual(401, status)
+
+    def test_importing_a_bundle_over_the_repository_leaves_its_lfs_objects_intact(self) -> None:
+        oid = self._store(b"large asset")
+        physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        bundle = self._bundle_with_one_commit()
+
+        for _ in range(2):  # the second import replaces an existing repository directory
+            status, _, body = self._request(
+                "POST",
+                "/internal/repos/import-bundle",
+                json.dumps({"physicalPath": str(physical_path), "bundleBase64": base64.b64encode(bundle).decode()}).encode(),
+            )
+            self.assertEqual(201, status, body)
+
+        status, _, _ = self._request("HEAD", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}")
+        self.assertEqual(200, status)
+        self.assertNotIn(storage_http_server.LFS_ROOT.resolve(), physical_path.resolve().parents)
+
+    def test_importing_a_bundle_makes_a_former_encrypted_replica_the_plaintext_primary(self) -> None:
+        # Cold recovery may pick a node that held the repository's encrypted copy; once the bundle is imported it is
+        # the primary, so it must take plaintext LFS objects and serve git again.
+        self._set_role("EncryptedReplica")
+        physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        content = b"restored after cold recovery" * 100
+        oid = hashlib.sha256(content).hexdigest()
+
+        status, _, body = self._request(
+            "POST",
+            "/internal/repos/import-bundle",
+            json.dumps(
+                {"physicalPath": str(physical_path), "bundleBase64": base64.b64encode(self._bundle_with_one_commit()).decode()}
+            ).encode(),
+        )
+        put, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", content)
+
+        self.assertEqual(201, status, body)
+        self.assertFalse(storage_http_server._is_encrypted_replica(self.REPOSITORY_ID))
+        self.assertEqual(200, put)
+
+    def test_importing_a_bundle_restores_a_bare_repository_that_takes_pushes(self) -> None:
+        # Cold recovery once left a working-tree clone: its hooks sat outside the git directory and git-http-backend
+        # refused the pushes, so the restored primary could not be written to.
+        physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        bundle = self._bundle_with_one_commit(extra_refs=("refs/tags/v1", "refs/internal/layer-promotion"))
+
+        status, _, body = self._request(
+            "POST",
+            "/internal/repos/import-bundle",
+            json.dumps({"physicalPath": str(physical_path), "bundleBase64": base64.b64encode(bundle).decode()}).encode(),
+        )
+
+        self.assertEqual(201, status, body)
+        git = ["git", "--git-dir", str(physical_path)]
+
+        def read(*args: str) -> str:
+            return subprocess.run([*git, *args], check=True, capture_output=True, text=True).stdout.strip()
+
+        self.assertEqual("true", read("rev-parse", "--is-bare-repository"))
+        self.assertEqual("true", read("config", "http.receivepack"))
+        self.assertEqual("refs/heads/main", read("symbolic-ref", "HEAD"))
+        self.assertEqual(
+            ["refs/heads/main", "refs/internal/layer-promotion", "refs/tags/v1"],
+            read("for-each-ref", "--format=%(refname)").splitlines(),
+        )
+        remotes = subprocess.run([*git, "config", "--get-regexp", "^remote\\."], capture_output=True, text=True)
+        self.assertEqual("", remotes.stdout, "the imported repository must not point at the deleted bundle file")
+
+        work = self.temp_dir / "after-recovery"
+        subprocess.run(["git", "clone", "-q", str(physical_path), str(work)], check=True)
+        author = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*author, "commit", "-q", "--allow-empty", "-m", "after recovery"], check=True)
+        subprocess.run([*author, "push", "-q", "origin", "main"], check=True)
+        self.assertEqual(
+            subprocess.run([*author, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip(),
+            read("rev-parse", "refs/heads/main"),
+        )
+
+    def test_put_stores_a_plaintext_object_verified_against_its_oid(self) -> None:
+        content = b"read replica copy" * 500
+        oid = hashlib.sha256(content).hexdigest()
+
+        status, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", content)
+        wrong, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/objects/{'0' * 64}", content)
+
+        self.assertEqual(200, status)
+        self.assertEqual(len(content), storage_http_server.lfs_store().size(self.REPOSITORY_ID, oid))
+        self.assertEqual(422, wrong)
+
+    def test_encrypted_replica_stores_and_serves_encrypted_copies_outside_the_artifact_tree(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"plaintext the replica never sees").hexdigest()
+        ciphertext = b"OLFS" + bytes(range(256)) * 20
+
+        put, _, _ = self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", ciphertext)
+        head, headers, _ = self._request("HEAD", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}")
+        get, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}")
+
+        self.assertEqual(200, put)
+        self.assertEqual((200, str(len(ciphertext))), (head, headers["content-length"]))
+        self.assertEqual((200, ciphertext), (get, body))
+        stored = storage_http_server.encrypted_lfs_store().path(self.REPOSITORY_ID, oid)
+        self.assertTrue(stored.name.endswith(".aead"))
+        self.assertNotIn(storage_http_server.ARTIFACT_ROOT.resolve(), stored.resolve().parents)
+        self.assertNotIn(storage_http_server.REPOS_ROOT.resolve(), stored.resolve().parents)
+
+    def test_encrypted_endpoints_refuse_on_a_plaintext_node(self) -> None:
+        oid = hashlib.sha256(b"x").hexdigest()
+        for role in (None, "Primary", "ReadReplica"):
+            if role:
+                self._set_role(role)
+            for method, body in (("PUT", b"OLFS"), ("GET", None), ("HEAD", None)):
+                with self.subTest(role=role, method=method):
+                    status, _, _ = self._request(method, f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", body)
+                    self.assertEqual(403, status)
+
+    def test_plaintext_endpoints_refuse_on_an_encrypted_replica(self) -> None:
+        content = b"secret"
+        oid = self._store(content)
+        self._set_role("EncryptedReplica")
+
+        for method, body in (("PUT", content), ("GET", None), ("HEAD", None)):
+            with self.subTest(method=method):
+                status, _, _ = self._request(method, f"/internal/lfs/{self.REPOSITORY_ID}/objects/{oid}", body)
+                self.assertEqual(403, status)
+
+    def test_encrypted_lfs_endpoints_require_the_node_token(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"x").hexdigest()
+
+        for method in ("HEAD", "GET", "PUT"):
+            with self.subTest(method=method):
+                status, _, _ = self._request(
+                    method, f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", b"OLFS", token=None
+                )
+                self.assertEqual(401, status)
+
+    def test_inventory_lists_plaintext_objects_on_a_plaintext_node(self) -> None:
+        content = b"lfs object" * 100
+        oid = self._store(content)
+
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual(200, status)
+        self.assertEqual({"kind": "plaintext", "objects": [{"oid": oid, "size": len(content)}]}, json.loads(body))
+
+    def test_inventory_lists_encrypted_copies_on_an_encrypted_replica(self) -> None:
+        self._set_role("EncryptedReplica")
+        oid = hashlib.sha256(b"plaintext the replica never sees").hexdigest()
+        ciphertext = b"OLFS" + bytes(range(256))
+        self._request("PUT", f"/internal/lfs/{self.REPOSITORY_ID}/encrypted/{oid}", ciphertext)
+
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual(200, status)
+        self.assertEqual({"kind": "encrypted", "objects": [{"oid": oid, "size": len(ciphertext)}]}, json.loads(body))
+
+    def test_inventory_of_a_repository_without_objects_is_empty(self) -> None:
+        status, _, body = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory")
+
+        self.assertEqual((200, {"kind": "plaintext", "objects": []}), (status, json.loads(body)))
+
+    def test_inventory_requires_the_node_token(self) -> None:
+        status, _, _ = self._request("GET", f"/internal/lfs/{self.REPOSITORY_ID}/inventory", token=None)
+
+        self.assertEqual(401, status)
+
+    def test_delete_removes_the_plaintext_and_encrypted_lfs_data_of_the_repository(self) -> None:
+        other_repository = "1a2b3c4d-0000-4000-8000-000000000001"
+        self._store(b"plaintext copy")
+        oid = hashlib.sha256(b"encrypted copy").hexdigest()
+        storage_http_server.encrypted_lfs_store().store(self.REPOSITORY_ID, oid, io.BytesIO(b"OLFS"), 4)
+        storage_http_server.lfs_store().store(other_repository, hashlib.sha256(b"kept").hexdigest(), io.BytesIO(b"kept"), 4)
+
+        status, _, body = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+
+        self.assertEqual((200, {"deleted": True}), (status, json.loads(body)))
+        self.assertFalse((storage_http_server.LFS_ROOT / self.REPOSITORY_ID).exists())
+        self.assertFalse((storage_http_server.LFS_ENCRYPTED_ROOT / self.REPOSITORY_ID).exists())
+        self.assertEqual(1, len(storage_http_server.lfs_store().inventory(other_repository)))
+
+    def test_delete_is_idempotent(self) -> None:
+        self._store(b"plaintext copy")
+
+        first, _, _ = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+        status, _, body = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}")
+
+        self.assertEqual(200, first)
+        self.assertEqual((200, {"deleted": False}), (status, json.loads(body)))
+
+    def test_delete_requires_the_node_token(self) -> None:
+        self._store(b"plaintext copy")
+
+        status, _, _ = self._request("DELETE", f"/internal/lfs/{self.REPOSITORY_ID}", token=None)
+
+        self.assertEqual(401, status)
+        self.assertTrue((storage_http_server.LFS_ROOT / self.REPOSITORY_ID).is_dir())
+
+    def test_delete_of_a_malformed_repository_id_answers_404(self) -> None:
+        for path in ("/internal/lfs/..", "/internal/lfs/not-a-guid", f"/internal/lfs/{self.REPOSITORY_ID}/objects"):
+            with self.subTest(path=path):
+                status, _, _ = self._request("DELETE", path)
+                self.assertEqual(404, status)
+
+    def test_inventory_names_every_repository_with_lfs_data(self) -> None:
+        encrypted_only = "1a2b3c4d-0000-4000-8000-000000000001"
+        self._store(b"plaintext copy")
+        storage_http_server.encrypted_lfs_store().store(
+            encrypted_only, hashlib.sha256(b"x").hexdigest(), io.BytesIO(b"OLFS"), 4
+        )
+        storage_http_server.encrypted_lfs_store().store(
+            self.REPOSITORY_ID, hashlib.sha256(b"y").hexdigest(), io.BytesIO(b"OLFS"), 4
+        )
+
+        inventory = storage_http_server.on_disk_inventory()
+
+        self.assertEqual(sorted([self.REPOSITORY_ID, encrypted_only]), inventory["lfsRepositories"])
+        self.assertEqual([], inventory["plaintextRepositories"])
+
+    def test_the_lfs_root_is_never_a_repository_path(self) -> None:
+        lfs_root = storage_http_server.LFS_ROOT
+
+        self.assertFalse(storage_http_server._is_valid_physical_path(str(lfs_root)))
+        self.assertFalse(storage_http_server._is_valid_physical_path(str(lfs_root / self.REPOSITORY_ID)))
+        self.assertFalse(storage_http_server._is_deletable_repo_path(str(lfs_root)))
+        self.assertTrue(storage_http_server._is_valid_physical_path(str(self.repos_root / f"{self.REPOSITORY_ID}.git")))
+
+    def test_raw_blob_of_an_lfs_pointer_names_the_lfs_object_in_its_headers(self) -> None:
+        oid = "e" * 64
+        pointer = f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize 4096\n".encode("ascii")
+        physical_path = self._repository_with_files({"asset.bin": pointer, "README.md": b"hello\n"})
+
+        status, headers, body = self._request("GET", self._raw_path(physical_path, "asset.bin"))
+        _, plain_headers, _ = self._request("GET", self._raw_path(physical_path, "README.md"))
+
+        self.assertEqual(200, status)
+        self.assertEqual(pointer, body)
+        self.assertEqual(oid, headers["x-opengitbase-lfs-oid"])
+        self.assertEqual("4096", headers["x-opengitbase-lfs-size"])
+        self.assertNotIn("x-opengitbase-lfs-oid", plain_headers)
+
+    def _repository_with_files(self, files: dict[str, bytes]) -> str:
+        work = self.temp_dir / "content-work"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+        for name, content in files.items():
+            (work / name).write_bytes(content)
+        git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "files"], check=True)
+        bare = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        subprocess.run(["git", "clone", "-q", "--bare", str(work), str(bare)], check=True)
+        return str(bare)
+
+    @staticmethod
+    def _raw_path(physical_path: str, path: str) -> str:
+        query = urllib.parse.urlencode({"physicalPath": physical_path, "ref": "main", "path": path})
+        return f"/internal/repos/content/blob/raw?{query}"
+
+    def _set_role(self, role: str) -> None:
+        storage_http_server._write_repo_role(self.REPOSITORY_ID, role)
+
+    def _store(self, content: bytes) -> str:
+        oid = hashlib.sha256(content).hexdigest()
+        storage_http_server.lfs_store().store(self.REPOSITORY_ID, oid, io.BytesIO(content), len(content))
+        return oid
+
+    def _bundle_with_one_commit(self, extra_refs: tuple[str, ...] = ()) -> bytes:
+        work = self.temp_dir / "work"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+        (work / "README.md").write_text("hello", encoding="utf-8")
+        git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+        for ref in extra_refs:
+            subprocess.run([*git, "update-ref", ref, "HEAD"], check=True)
+        bundle_path = self.temp_dir / "repo.bundle"
+        subprocess.run([*git, "bundle", "create", "-q", str(bundle_path), "--all"], check=True)
+        return bundle_path.read_bytes()
+
+    def _request(
+        self, method: str, path: str, body: bytes | None = None, token: str | None = TOKEN
+    ) -> tuple[int, dict[str, str], bytes]:
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=30)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        try:
+            connection.request(method, path, body=body, headers=headers)
+            response = connection.getresponse()
+            return response.status, {k.lower(): v for k, v in response.getheaders()}, response.read()
+        finally:
+            connection.close()
+
+
+class ImportBundleTests(unittest.TestCase):
+    """Cold recovery imports a bundle as the repository's new primary, with its hooks installed: it must come out
+    like a created repository, as git-http-backend and the replication hooks see it in production."""
+
+    REPOSITORY_ID = "7805ee16-0199-49ba-a84d-1569ba6e96af"
+    TOKEN = "node-token"
+
+    def setUp(self) -> None:
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.repos_root = self.temp_dir / "git"
+        self.repos_root.mkdir()
+        self.physical_path = self.repos_root / f"{self.REPOSITORY_ID}.git"
+        self.replicate_log = self.temp_dir / "replicate.log"
+        replicate_stub = self.temp_dir / "replicate.sh"
+        replicate_stub.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{self.replicate_log}"\n', encoding="utf-8")
+        replicate_stub.chmod(0o755)
+        real_run = subprocess.run
+
+        def run_without_chown(command, *args, **kwargs):
+            # chown to the git user needs root.
+            if command[0] == "chown":
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, *args, **kwargs)
+
+        self.patches = [
+            # git as the storage image runs it: no global config, and git 2.47's built-in default branch name
+            # (master; newer git says main, which hides a wrong HEAD guess).
+            mock.patch.dict(
+                os.environ,
+                {
+                    "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "init.defaultBranch",
+                    "GIT_CONFIG_VALUE_0": "master",
+                },
+            ),
+            mock.patch.object(storage_http_server, "REPOS_ROOT", self.repos_root),
+            mock.patch.object(storage_http_server, "ROLE_DIR", self.temp_dir / "roles"),
+            mock.patch.object(storage_http_server, "WATERMARK_DIR", self.temp_dir / "watermarks"),
+            mock.patch.object(storage_http_server, "REPLICATE_SCRIPT", str(replicate_stub)),
+            mock.patch.object(storage_http_server, "STORAGE_API_TOKEN", self.TOKEN),
+            mock.patch.object(storage_http_server, "STORAGE_TOKEN_FILE", str(self.temp_dir / "no-token-file")),
+            mock.patch.object(storage_http_server.subprocess, "run", side_effect=run_without_chown),
+        ]
+        for patch in self.patches:
+            patch.start()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), storage_http_server.StorageHttpHandler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        for patch in reversed(self.patches):
+            patch.stop()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_head_stays_on_main_when_another_branch_shares_its_commit(self) -> None:
+        # A bundle carries no symref: a clone guesses HEAD from the commit it points at and picked "release".
+        self._import(self._bundle(branches_at_main=("release",)))
+
+        self.assertEqual("refs/heads/main", self._git("symbolic-ref", "HEAD"))
+        self.assertEqual(self._source_refs, self._git("for-each-ref", "--format=%(objectname) %(refname)"))
+
+    def test_the_imported_repository_accepts_pushes_over_http(self) -> None:
+        self._import(self._bundle())
+
+        # As nginx calls it in production: Debian's fastcgi_params hands git-http-backend an empty REMOTE_USER
+        # before the config's own, so receive-pack runs only where http.receivepack is set (otherwise 403).
+        backend = Path(self._git_exec_path()) / "git-http-backend"
+        result = subprocess.run(
+            [str(backend)],
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "HOME": str(self.temp_dir),
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_PROJECT_ROOT": str(self.repos_root),
+                "GIT_HTTP_EXPORT_ALL": "",
+                "PATH_INFO": f"/{self.physical_path.name}/info/refs",
+                "QUERY_STRING": "service=git-receive-pack",
+                "REQUEST_METHOD": "GET",
+                "REMOTE_USER": "",
+            },
+            capture_output=True,
+            check=False,
+        )
+        headers = result.stdout.split(b"\r\n\r\n", 1)[0].decode("utf-8", errors="replace")
+
+        self.assertNotIn("403", headers)
+        self.assertIn("application/x-git-receive-pack-advertisement", headers)
+
+    def test_git_runs_the_replication_hooks_of_the_imported_repository(self) -> None:
+        self._import(self._bundle())
+
+        # git -C finds the git directory the way receive-pack does; the hooks must be where git looks.
+        subprocess.run(["git", "-C", str(self.physical_path), "hook", "run", "post-receive"], check=True, capture_output=True)
+
+        self.assertEqual(f"{self.physical_path} --post-receive\n", self.replicate_log.read_text(encoding="utf-8"))
+        pre_receive = Path(self._git("rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-receive"))
+        self.assertTrue(os.access(pre_receive, os.X_OK))
+
+    def _bundle(self, branches_at_main: tuple[str, ...] = ()) -> bytes:
+        work = self.temp_dir / "work"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+        git = ["git", "-C", str(work), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        (work / "README.md").write_text("hello", encoding="utf-8")
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+        for branch in branches_at_main:
+            subprocess.run([*git, "branch", branch], check=True)
+        self._source_refs = subprocess.run(
+            [*git, "for-each-ref", "--format=%(objectname) %(refname)"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        bundle_path = self.temp_dir / "repo.bundle"
+        subprocess.run([*git, "bundle", "create", "-q", str(bundle_path), "--all"], check=True)
+        return bundle_path.read_bytes()
+
+    def _import(self, bundle: bytes) -> None:
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=30)
+        body = json.dumps({"physicalPath": str(self.physical_path), "bundleBase64": base64.b64encode(bundle).decode()})
+        try:
+            connection.request(
+                "POST", "/internal/repos/import-bundle", body=body, headers={"Authorization": f"Bearer {self.TOKEN}"}
+            )
+            response = connection.getresponse()
+            self.assertEqual(201, response.status, response.read())
+        finally:
+            connection.close()
+
+    def _git(self, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(self.physical_path), *args], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    @staticmethod
+    def _git_exec_path() -> str:
+        return subprocess.run(["git", "--exec-path"], check=True, capture_output=True, text=True).stdout.strip()
+
+
 class StorageHttpMissingBlobTests(unittest.TestCase):
     """The file endpoints answer 404 for a file that does not exist, never 500.
 
@@ -495,6 +1000,75 @@ class StorageHttpMissingTreeTests(unittest.TestCase):
         self.assertEqual((404, "invalid_ref"), (actual_status, body.get("code")))
 
 
+class StorageHttpWorkspaceArchiveTests(unittest.TestCase):
+    """A CI job's workspace comes from the storage node, since the API has no git.
+
+    The node answers a tar.gz of the commit, or 404 invalid_ref for a commit it lacks, so the
+    API can try another node.
+    """
+
+    setUp = StorageHttpMissingBlobTests.setUp
+    tearDown = StorageHttpMissingBlobTests.tearDown
+
+    def _get_archive(self, **params: str) -> tuple[int, str, bytes]:
+        import urllib.error
+        import urllib.request
+        from urllib.parse import urlencode
+
+        query = urlencode({"physicalPath": str(self.repo_path), **params})
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.server.server_address[1]}/internal/repos/content/archive?{query}",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.status, response.headers.get("Content-Type", ""), response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, error.headers.get("Content-Type", ""), error.read()
+
+    def _head(self) -> str:
+        import subprocess
+
+        return subprocess.run(
+            ["git", "--git-dir", str(self.repo_path), "rev-parse", "main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    def test_the_commit_is_served_as_tar_gz(self) -> None:
+        import io
+        import tarfile
+
+        for depth in ("0", "1"):
+            with self.subTest(depth=depth):
+                status, content_type, body = self._get_archive(sha=self._head(), depth=depth)
+
+                self.assertEqual((200, "application/gzip"), (status, content_type))
+                with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as tar:
+                    names = {name.removeprefix("./") for name in tar.getnames()}
+                self.assertIn("README", names)
+                self.assertEqual(depth == "1", ".git/HEAD" in names)
+
+    def test_a_commit_the_node_lacks_is_404_invalid_ref(self) -> None:
+        import json
+
+        status, _, body = self._get_archive(sha="1" * 40, depth="0")
+
+        self.assertEqual((404, "invalid_ref"), (status, json.loads(body).get("code")))
+
+    def test_a_missing_or_malformed_parameter_is_400(self) -> None:
+        for params in (
+            {"depth": "0"},
+            {"sha": self._head()},
+            {"sha": self._head(), "depth": "-1"},
+            {"sha": self._head(), "depth": "deep"},
+        ):
+            with self.subTest(params=params):
+                status, _, _ = self._get_archive(**params)
+                self.assertEqual(400, status)
+
+
 class StorageImageTests(unittest.TestCase):
     def test_the_image_trusts_repositories_owned_by_the_git_user(self) -> None:
         # Root runs git in repositories that belong to git (create-artifact, content, merges).
@@ -502,6 +1076,27 @@ class StorageImageTests(unittest.TestCase):
         # a container's writable layer and vanished with every recreate.
         dockerfile = Path(__file__).with_name("Dockerfile").read_text(encoding="utf-8")
         self.assertIn("git config --system --add safe.directory '*'", dockerfile)
+
+    def test_the_image_ships_the_lfs_module(self) -> None:
+        dockerfile = Path(__file__).with_name("Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("COPY storage_lfs.py /usr/local/bin/storage_lfs.py", dockerfile)
+
+    def test_the_git_http_port_streams_lfs_transfers_to_the_loopback_server(self) -> None:
+        dispatcher_server, mtls_server = self._nginx_servers()
+
+        self.assertIn('location ~ "^/lfs/[0-9a-fA-F-]{36}/objects/[0-9a-f]{64}$"', dispatcher_server)
+        self.assertIn("proxy_pass http://127.0.0.1:8083;", dispatcher_server)
+        # Buffering would write every upload to nginx's temp dir before python sees a byte.
+        self.assertIn("proxy_request_buffering off;", dispatcher_server)
+        self.assertIn("proxy_buffering off;", dispatcher_server)
+        self.assertNotIn("/lfs/", mtls_server)
+
+    @staticmethod
+    def _nginx_servers() -> tuple[str, str]:
+        config = Path(__file__).with_name("nginx-git-http.conf").read_text(encoding="utf-8")
+        dispatcher_start = config.index("listen 8082;")
+        mtls_start = config.index("listen 8443 ssl;")
+        return config[dispatcher_start:mtls_start], config[mtls_start:]
 
 
 if __name__ == "__main__":

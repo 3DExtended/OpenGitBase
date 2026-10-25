@@ -1,4 +1,4 @@
-namespace OpenGitBase.Features.StorageNode.Contracts;
+﻿namespace OpenGitBase.Features.StorageNode.Contracts;
 
 /// <summary>
 /// A single kind of storage/DB drift the fleet report can detect for a (node, repository) pair.
@@ -18,4 +18,8 @@ public enum FleetDriftKind
 
     /// <summary>An EncryptedReplica record exists for the node, but no artifact is on disk there.</summary>
     MissingArtifact,
+
+    /// <summary>LFS data (plaintext or encrypted) is on disk on the node for a repository that no longer
+    /// exists. The reconciler deletes it on its next pass.</summary>
+    OrphanLfs,
 }

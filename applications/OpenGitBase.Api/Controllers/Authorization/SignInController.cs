@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +10,9 @@ using Microsoft.Extensions.Caching.Memory;
 using OpenGitBase.Api.Models;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Auth;
+using OpenGitBase.Common.Options;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 
@@ -25,6 +28,8 @@ public class SignInController : ControllerBase
     private readonly IQueryProcessor _queryProcessor;
     private readonly IJWTTokenGenerator _jwtTokenGenerator;
     private readonly IAuthCookieService _authCookieService;
+    private readonly SessionIssuer _sessionIssuer;
+    private readonly WebAuthnOptions _webAuthnOptions;
 
     public SignInController(
         IQueryProcessor queryProcessor,
@@ -32,7 +37,9 @@ public class SignInController : ControllerBase
         IMemoryCache cache,
         IGoogleIdentityTokenValidator googleTokenValidator,
         IJWTTokenGenerator jwtTokenGenerator,
-        IAuthCookieService authCookieService
+        IAuthCookieService authCookieService,
+        SessionIssuer sessionIssuer,
+        WebAuthnOptions webAuthnOptions
     )
     {
         _queryProcessor = queryProcessor;
@@ -41,6 +48,8 @@ public class SignInController : ControllerBase
         _googleTokenValidator = googleTokenValidator;
         _jwtTokenGenerator = jwtTokenGenerator;
         _authCookieService = authCookieService;
+        _sessionIssuer = sessionIssuer;
+        _webAuthnOptions = webAuthnOptions;
     }
 
     [HttpPost("login")]
@@ -68,6 +77,12 @@ public class SignInController : ControllerBase
             return Unauthorized();
         }
 
+        var challenge = await BeginSecondFactorAsync(result.Get(), cancellationToken).ConfigureAwait(false);
+        if (challenge is not null)
+        {
+            return Ok(challenge);
+        }
+
         var user = await _queryProcessor
             .RunQueryAsync(
                 new UserGetByIdQuery { ModelId = result.Get() },
@@ -85,6 +100,190 @@ public class SignInController : ControllerBase
         return Ok(token);
     }
 
+    /// <summary>
+    /// The second sign-in step for accounts with 2FA on: answers the challenge from <c>login</c>,
+    /// <c>google</c> or <c>apple</c> with an authenticator code, a recovery code or a passkey assertion,
+    /// and returns the session token.
+    /// </summary>
+    [HttpPost("two-factor")]
+    [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult<string>> CompleteTwoFactorAsync(
+        [FromBody] TwoFactorSignInDto requestDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (requestDto == null || string.IsNullOrWhiteSpace(requestDto.ChallengeToken))
+        {
+            return BadRequest();
+        }
+
+        var passkeyAssertion = requestDto.PasskeyAssertion is { ValueKind: not JsonValueKind.Null } assertion
+            ? assertion
+            : (JsonElement?)null;
+        var answers =
+            (string.IsNullOrWhiteSpace(requestDto.Code) ? 0 : 1)
+            + (string.IsNullOrWhiteSpace(requestDto.RecoveryCode) ? 0 : 1)
+            + (passkeyAssertion is null ? 0 : 1);
+        if (answers != 1)
+        {
+            return BadRequest();
+        }
+
+        if (passkeyAssertion is not null)
+        {
+            if (!_webAuthnOptions.Enabled)
+            {
+                return NotFound();
+            }
+
+            if (passkeyAssertion.Value.ValueKind != JsonValueKind.Object)
+            {
+                return BadRequest();
+            }
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new CompleteTwoFactorSignInQuery
+                {
+                    ChallengeToken = requestDto.ChallengeToken,
+                    Code = requestDto.Code?.Trim() ?? string.Empty,
+                    RecoveryCode = requestDto.RecoveryCode,
+                    PasskeyAssertionJson = passkeyAssertion?.GetRawText(),
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        var outcome = result.IsSome ? result.Get() : new TwoFactorSignInResult(TwoFactorSignInStatus.ChallengeExpired);
+
+        switch (outcome.Status)
+        {
+            case TwoFactorSignInStatus.Succeeded:
+                var token = await _sessionIssuer
+                    .IssueAsync(Response, outcome.UserId!, cancellationToken)
+                    .ConfigureAwait(false);
+                return token is null
+                    ? Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.ChallengeExpired })
+                    : Ok(token);
+            case TwoFactorSignInStatus.InvalidCode:
+                return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.InvalidCode });
+            case TwoFactorSignInStatus.PasskeyRejected:
+                return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.PasskeyRejected });
+            case TwoFactorSignInStatus.LockedOut:
+                return StatusCode(
+                    StatusCodes.Status429TooManyRequests,
+                    new SecondFactorErrorResponse
+                    {
+                        Error = SecondFactorErrorResponse.LockedOut,
+                        LockedUntil = outcome.LockedUntil,
+                    }
+                );
+            default:
+                return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.ChallengeExpired });
+        }
+    }
+
+    /// <summary>
+    /// Request options for answering the second sign-in step with one of the user's passkeys. After the
+    /// password, user verification is only preferred, so a security-key touch is enough.
+    /// </summary>
+    [HttpPost("two-factor/passkey-options")]
+    [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult> StartTwoFactorPasskeyAsync(
+        [FromBody] TwoFactorPasskeyOptionsDto requestDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        if (requestDto == null || string.IsNullOrWhiteSpace(requestDto.ChallengeToken))
+        {
+            return BadRequest();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(new StartTwoFactorPasskeyQuery { ChallengeToken = requestDto.ChallengeToken }, cancellationToken)
+            .ConfigureAwait(false);
+        var options = result.IsSome
+            ? result.Get()
+            : new TwoFactorPasskeyOptions(TwoFactorPasskeyOptionsStatus.ChallengeExpired);
+        return options.Status switch
+        {
+            TwoFactorPasskeyOptionsStatus.Issued => Content(options.OptionsJson!, "application/json"),
+            TwoFactorPasskeyOptionsStatus.NoPasskeys => BadRequest(
+                new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.NoPasskeys }
+            ),
+            _ => Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.ChallengeExpired }),
+        };
+    }
+
+    /// <summary>
+    /// Request options for signing in with any passkey: no username, and no credential listed, so the
+    /// browser offers the passkeys it holds for this site.
+    /// </summary>
+    [HttpPost("passkey/options")]
+    [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult> StartPasskeySignInAsync(CancellationToken cancellationToken)
+    {
+        if (!_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        var options = await _queryProcessor
+            .RunQueryAsync(new StartPasskeySignInQuery(), cancellationToken)
+            .ConfigureAwait(false);
+        return Content(options.Get().OptionsJson, "application/json");
+    }
+
+    /// <summary>
+    /// Signs in with the assertion for <c>passkey/options</c> and returns the session token. A
+    /// user-verified passkey counts as both factors, so there is never a second step. Every failure is
+    /// the same <c>401</c>, so nothing tells which accounts or passkeys exist.
+    /// </summary>
+    [HttpPost("passkey")]
+    [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
+    public async Task<ActionResult<string>> SignInWithPasskeyAsync(
+        [FromBody] PasskeySignInDto requestDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!_webAuthnOptions.Enabled)
+        {
+            return NotFound();
+        }
+
+        if (requestDto == null || requestDto.Assertion.ValueKind != JsonValueKind.Object)
+        {
+            return BadRequest();
+        }
+
+        var result = await _queryProcessor
+            .RunQueryAsync(
+                new CompletePasskeySignInQuery { AssertionResponseJson = requestDto.Assertion.GetRawText() },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (result.IsNone || result.Get().Status != PasskeySignInStatus.SignedIn)
+        {
+            return Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.PasskeyRejected });
+        }
+
+        var token = await _sessionIssuer
+            .IssueAsync(Response, result.Get().UserId!, cancellationToken)
+            .ConfigureAwait(false);
+        return token is null
+            ? Unauthorized(new SecondFactorErrorResponse { Error = SecondFactorErrorResponse.PasskeyRejected })
+            : Ok(token);
+    }
+
     [HttpPost("signout")]
     [AllowAnonymous]
     public ActionResult SignOutAsync()
@@ -95,6 +294,7 @@ public class SignInController : ControllerBase
 
     [HttpPost("google")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<ActionResult<string>> LoginWithGoogleAsync(
         [FromBody] [Required] GoogleLoginDto loginDto,
         CancellationToken cancellationToken
@@ -128,6 +328,7 @@ public class SignInController : ControllerBase
 
     [HttpPost("apple")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<ActionResult<string>> LoginWithAppleAsync(
         [FromBody] [Required] AppleLoginDto loginDto,
         CancellationToken cancellationToken
@@ -249,6 +450,27 @@ public class SignInController : ControllerBase
         return tokenInfo;
     }
 
+    /// <summary>A challenge in place of the session when the account has 2FA on; otherwise null.</summary>
+    private async Task<TwoFactorChallengeResponse?> BeginSecondFactorAsync(
+        UserId userId,
+        CancellationToken cancellationToken
+    )
+    {
+        var start = await _queryProcessor
+            .RunQueryAsync(new BeginTwoFactorSignInQuery { UserId = userId }, cancellationToken)
+            .ConfigureAwait(false);
+        if (start.IsNone || !start.Get().Required)
+        {
+            return null;
+        }
+
+        return new TwoFactorChallengeResponse
+        {
+            ChallengeToken = start.Get().ChallengeToken ?? string.Empty,
+            Methods = start.Get().Methods,
+        };
+    }
+
     private async Task<ActionResult<string>> HandleProviderLoginAsync(
         string internalId,
         string email,
@@ -277,6 +499,13 @@ public class SignInController : ControllerBase
             if (user.IsNone)
             {
                 return BadRequest();
+            }
+
+            var challenge = await BeginSecondFactorAsync(possiblyExistingUserId.Get(), cancellationToken)
+                .ConfigureAwait(false);
+            if (challenge is not null)
+            {
+                return Ok(challenge);
             }
 
             var token = _jwtTokenGenerator.GetJWTToken(

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace OpenGitBase.E2E.Core;
@@ -63,6 +63,13 @@ public interface IGitOperations
     Task CheckoutBranchAsync(string workingDirectory, string branch, bool create, CancellationToken cancellationToken = default);
 
     Task SetRemoteUrlAsync(string workingDirectory, string remoteName, string remoteUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>Runs any git command; <paramref name="environment"/> also reaches git's hooks and filters (git-lfs).</summary>
+    Task<GitCommandResult> RunAsync(
+        string workingDirectory,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IGitAssertions
@@ -134,6 +141,13 @@ public sealed class GitOperations : IGitOperations
     public Task SetRemoteUrlAsync(string workingDirectory, string remoteName, string remoteUrl, CancellationToken cancellationToken = default) =>
         RunGitAsync(workingDirectory, ["remote", "set-url", remoteName, remoteUrl], cancellationToken);
 
+    public Task<GitCommandResult> RunAsync(
+        string workingDirectory,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string>? environment = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteGitAsync(workingDirectory, args, cancellationToken, environment);
+
     private async Task RunGitAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
@@ -150,7 +164,8 @@ public sealed class GitOperations : IGitOperations
     private async Task<GitCommandResult> ExecuteGitAsync(
         string workingDirectory,
         IReadOnlyList<string> args,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         _transcript.RecordWire(new WireEvent
         {
@@ -173,11 +188,20 @@ public sealed class GitOperations : IGitOperations
             startInfo.ArgumentList.Add(arg);
         }
 
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            startInfo.Environment[name] = value;
+        }
+
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start git.");
-        var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        var stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        // Both pipes are drained at once: git (and git-lfs with GIT_CURL_VERBOSE) can fill stderr while stdout is
+        // still open, and reading one after the other would then block both processes.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
 
         _transcript.RecordWire(new WireEvent
         {

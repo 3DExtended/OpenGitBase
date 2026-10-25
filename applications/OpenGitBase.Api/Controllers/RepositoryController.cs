@@ -219,7 +219,9 @@ public class RepositoryController : ControllerBase
         {
             usage = new RepositoryUsageDto
             {
-                BytesUsed = liveBytes.Value,
+                BytesUsed = liveBytes.Value + usage.LfsBytes,
+                GitBytes = liveBytes.Value,
+                LfsBytes = usage.LfsBytes,
                 BytesLimit = usage.BytesLimit,
                 FileSizeLimit = usage.FileSizeLimit,
             };
@@ -292,6 +294,7 @@ public class RepositoryController : ControllerBase
                 OwnerUserId = existing.OwnerUserId,
                 PhysicalPath = existing.PhysicalPath,
                 StorageBytesUsed = existing.StorageBytesUsed,
+                GitBytesUsed = existing.GitBytesUsed,
             },
         };
         var result = await _queryProcessor.RunQueryAsync(query, cancellationToken);

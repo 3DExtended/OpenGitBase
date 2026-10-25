@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdminRepositoryReplicationSummaryDto } from '~/utils/api'
+import type { AdminLfsFleetSummaryDto, AdminRepositoryReplicationSummaryDto } from '~/utils/api'
 
 definePageMeta({ middleware: 'admin' })
 
@@ -11,6 +11,7 @@ useHead({ title: t('admin.replication.indexTitle') })
 const loading = ref(true)
 const error = ref<string | null>(null)
 const items = ref<AdminRepositoryReplicationSummaryDto[]>([])
+const lfsSummary = ref<AdminLfsFleetSummaryDto | null>(null)
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(50)
@@ -62,6 +63,11 @@ async function loadRepositories() {
   }
 }
 
+async function loadLfsSummary() {
+  const result = await api.admin.replication.getLfsSummary()
+  lfsSummary.value = result.error ? null : (result.data ?? null)
+}
+
 function applyRouteQuery() {
   page.value = Number(route.query.page ?? 1) || 1
   attention.value = String(route.query.attention ?? 'all')
@@ -99,7 +105,9 @@ onMounted(() => {
   void loadRepositories()
 })
 
-useAdminReplicationPoll(loadRepositories)
+useAdminReplicationPoll(async () => {
+  await Promise.all([loadRepositories(), loadLfsSummary()])
+})
 </script>
 
 <template>
@@ -138,6 +146,11 @@ useAdminReplicationPoll(loadRepositories)
       color="error"
       variant="subtle"
       :description="error"
+    />
+
+    <AdminLfsFleetSummary
+      v-if="lfsSummary && lfsSummary.objectCount > 0"
+      :summary="lfsSummary"
     />
 
     <UCard>

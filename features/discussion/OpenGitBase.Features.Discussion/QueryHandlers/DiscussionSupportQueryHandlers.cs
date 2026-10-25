@@ -4,6 +4,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Common.SendGrid;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
 using OpenGitBase.Features.Repository.Contracts;
@@ -55,17 +56,29 @@ public class CreateRepositoryTagQueryHandler : IQueryHandler<CreateRepositoryTag
             return Option<RepositoryTagDto>.None;
         }
 
-        var entity = new RepositoryTagEntity
-        {
-            Id = Guid.NewGuid(),
-            RepositoryId = query.RepositoryId,
-            Name = query.Name.Trim(),
-            Color = query.Color,
-            CreatedAt = _systemClock.UtcNow,
-        };
+        var tagId = Guid.NewGuid();
 
-        context.Set<RepositoryTagEntity>().Add(entity);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // Every attempt inserts the same id, so a replayed COMMIT that already landed creates the tag once.
+        var entity = await context
+            .InsertOnceAsync(
+                async ct =>
+                {
+                    var tag = new RepositoryTagEntity
+                    {
+                        Id = tagId,
+                        RepositoryId = query.RepositoryId,
+                        Name = query.Name.Trim(),
+                        Color = query.Color,
+                        CreatedAt = _systemClock.UtcNow,
+                    };
+                    context.Set<RepositoryTagEntity>().Add(tag);
+                    await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return tag;
+                },
+                ct => context.Set<RepositoryTagEntity>().AnyAsync(t => t.Id == tagId, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return Option.From(
             new RepositoryTagDto
