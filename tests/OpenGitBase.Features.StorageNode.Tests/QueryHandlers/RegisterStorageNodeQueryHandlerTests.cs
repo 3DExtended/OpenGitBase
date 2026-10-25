@@ -75,6 +75,57 @@ public class RegisterStorageNodeQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_RegistersTheNodeOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var lostCommit = new LostCommitSimulator();
+        await using var provider = CreateServices(connection, lostCommit.Configure).BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
+
+        var enrollment = await scope
+            .ServiceProvider.GetRequiredService<CreateStorageNodeEnrollmentQueryHandler>()
+            .RunQueryAsync(
+                new CreateStorageNodeEnrollmentQuery { NodeId = "storage-1", CreatedByUserId = Guid.NewGuid() },
+                CancellationToken.None
+            );
+
+        lostCommit.LoseNextCommitInserting("StorageNode");
+        var result = await scope
+            .ServiceProvider.GetRequiredService<RegisterStorageNodeQueryHandler>()
+            .RunQueryAsync(
+                new RegisterStorageNodeQuery
+                {
+                    NodeId = "storage-1",
+                    InternalHost = "storage-1",
+                    InternalHttpPort = 8081,
+                    FreeBytesAvailable = 5_000_000,
+                    TotalBytesAvailable = 10_000_000,
+                    EnrollmentToken = enrollment.Get().EnrollmentToken,
+                    CertificateThumbprint = StorageNodeTestData.SampleCertificateThumbprint,
+                },
+                CancellationToken.None
+            );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        var registered = result.Get();
+        await using var verifyContext = await contextFactory.CreateDbContextAsync();
+        var node = Assert.Single(await verifyContext.Set<Entities.StorageNodeEntity>().ToListAsync());
+        Assert.Equal(node.Id, registered.StorageNodeId.Value);
+        Assert.True(new PasswordHasherService().VerifyPassword(node.ApiTokenHash, registered.ApiToken));
+        var consumed = await verifyContext
+            .Set<Entities.StorageNodeEnrollmentEntity>()
+            .SingleAsync(x => x.Id == enrollment.Get().EnrollmentId);
+        Assert.NotNull(consumed.ConsumedAt);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_ReRegistrationIsIdempotent()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -198,13 +249,16 @@ public class RegisterStorageNodeQueryHandlerTests
         Assert.True(impersonationAttempt.IsNone);
     }
 
-    private static ServiceCollection CreateServices(SqliteConnection connection)
+    private static ServiceCollection CreateServices(
+        SqliteConnection connection,
+        Action<DbContextOptionsBuilder>? configureDbContext = null
+    )
     {
         var services = new ServiceCollection();
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([typeof(StorageNodeMapsterConfig).Assembly])
         );
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection, configureDbContext);
         services.AddLogging();
         services.AddSingleton(new StorageNodeOptions());
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();

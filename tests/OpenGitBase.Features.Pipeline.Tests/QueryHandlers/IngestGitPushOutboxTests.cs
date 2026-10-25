@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
@@ -59,6 +60,35 @@ public class IngestGitPushOutboxTests
         Assert.True((await handler.RunQueryAsync(query, CancellationToken.None)).IsSome);
         Assert.True((await handler.RunQueryAsync(query, CancellationToken.None)).IsSome);
 
+        await using var context = await scope.CreateDbContextAsync();
+        Assert.Equal(1, await context.Set<GitPushOutboxEntity>().CountAsync());
+    }
+
+    [Fact]
+    public async Task Ingest_WritesTheOutboxOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, PipelineMapsterConfig>(
+            lostCommit.Configure,
+            typeof(IngestGitPushQueryHandler).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        lostCommit.LoseNextCommitInserting("GitPushOutbox");
+        var result = await scope
+            .GetHandler<IngestGitPushQueryHandler>()
+            .RunQueryAsync(
+                new IngestGitPushQuery
+                {
+                    RepositoryId = Guid.NewGuid(),
+                    Ref = "refs/heads/main",
+                    AfterSha = "abc123def4560000000000000000000000000000",
+                },
+                CancellationToken.None
+            );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        Assert.True(result.Get());
         await using var context = await scope.CreateDbContextAsync();
         Assert.Equal(1, await context.Set<GitPushOutboxEntity>().CountAsync());
     }
