@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.ComputeNode.Contracts;
 using OpenGitBase.Features.ComputeNode.Entities;
 
@@ -57,8 +58,17 @@ public sealed class CreateComputeNodeEnrollmentQueryHandler
             CreatedAt = now,
             ExpiresAt = expiresAt,
         };
-        context.Set<ComputeNodeEnrollmentEntity>().Add(entity);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context
+            .InsertOnceAsync(
+                ct =>
+                {
+                    context.Set<ComputeNodeEnrollmentEntity>().Add(entity);
+                    return context.SaveChangesAsync(ct);
+                },
+                ct => context.Set<ComputeNodeEnrollmentEntity>().AnyAsync(x => x.Id == entity.Id, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         return Option.From(
             new CreateComputeNodeEnrollmentResult
             {

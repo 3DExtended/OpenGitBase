@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { AccountSecurity, TotpSetup } from '~/utils/twoFactor'
+import type { AdminLfsFleetSummaryDto, AdminRepositoryLfsStatusDto } from '~/utils/api'
 import type { Passkey } from '~/utils/webauthn'
+import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
+import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
 
 definePageMeta({
   layout: false,
@@ -10,8 +13,6 @@ definePageMeta({
 const { instanceName, instanceLogoUrl } = useInstanceBranding()
 const { t } = useI18n()
 const colorMode = useColorMode()
-import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
-import type { AdminLfsFleetSummaryDto, AdminRepositoryLfsStatusDto } from '~/utils/api'
 
 // mfa-01: a fixed secret keeps the setup QR code identical in every snapshot.
 const totpSetupFixture: TotpSetup = {
@@ -761,39 +762,6 @@ const selfHostOptions = [
 
     <section
       class="mt-10 max-w-3xl space-y-4"
-      data-testid="visual-discussion-sub-threads"
-    >
-      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
-        Discussion sub-threads
-      </h2>
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.open as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
-      />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.resolved as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
-      />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.orphan as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="false"
-        :can-reply="false"
-      />
-    </section>
-
-    <section
-      class="mt-10 max-w-3xl space-y-4"
       data-testid="visual-merge-requests-overview"
     >
       <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
@@ -1284,6 +1252,39 @@ const selfHostOptions = [
         Admin Git LFS fleet totals
       </h2>
       <AdminLfsFleetSummary :summary="adminLfsFleetFixture" />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-discussion-sub-threads"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Discussion sub-threads
+      </h2>
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.open as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.resolved as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.orphan as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="false"
+        :can-reply="false"
+      />
     </section>
   </div>
 </template>
