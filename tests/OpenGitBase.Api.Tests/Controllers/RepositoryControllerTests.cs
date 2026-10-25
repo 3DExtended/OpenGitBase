@@ -468,6 +468,57 @@ public class RepositoryControllerTests
     }
 
     [Fact]
+    public async Task GetUsage_WhenStorageReportsLiveUsage_AddsLfsBytesToTheLiveGitBytes()
+    {
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = Guid.NewGuid();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = RepositoryId.From(repositoryId),
+                        Name = "Repo",
+                        Slug = "repo",
+                        OwnerUserId = userId,
+                        PhysicalPath = "/srv/git/test.git",
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryUsageQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryUsageDto
+                    {
+                        BytesUsed = 1_500,
+                        GitBytes = 1_000,
+                        LfsBytes = 500,
+                        BytesLimit = 1_000_000,
+                        FileSizeLimit = 100_000,
+                    }
+                )
+            );
+
+        var repositoryDiskUsageProvider = Substitute.For<IRepositoryDiskUsageProvider>();
+        repositoryDiskUsageProvider
+            .GetDiskUsageBytesAsync(Arg.Any<RepositoryDto>(), Arg.Any<CancellationToken>())
+            .Returns(26_397L);
+
+        var controller = CreateController(queryProcessor, userId, repositoryDiskUsageProvider: repositoryDiskUsageProvider);
+
+        var result = await controller.GetUsage(repositoryId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsType<RepositoryUsageDto>(ok.Value);
+        Assert.Equal(26_397, returned.GitBytes);
+        Assert.Equal(500, returned.LfsBytes);
+        Assert.Equal(26_897, returned.BytesUsed);
+    }
+
+    [Fact]
     public async Task GetUsage_WhenMissing_ReturnsNotFound()
     {
         var userId = UserId.From(Guid.NewGuid());
@@ -648,6 +699,52 @@ public class RepositoryControllerTests
                     query.UpdatedModel.Id == repositoryId
                     && query.UpdatedModel.Name == "Updated name"
                     && query.UpdatedModel.IsPrivate
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task UpdateMetadata_KeepsStorageUsageAndItsGitPartTogether()
+    {
+        // The update overwrites the whole row; a git part reset to 0 under an unchanged total
+        // would be counted twice by the next measurement.
+        var userId = UserId.From(Guid.NewGuid());
+        var repositoryId = RepositoryId.From(Guid.NewGuid());
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryDto
+                    {
+                        Id = repositoryId,
+                        OwnerUserId = userId,
+                        Slug = "my-repo",
+                        Name = DefaultRepositoryName,
+                        StorageBytesUsed = 7_000,
+                        GitBytesUsed = 5_000,
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<UpdateRepositoryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From(Unit.Value));
+
+        var controller = CreateController(queryProcessor, userId);
+
+        await controller.UpdateMetadata(
+            repositoryId.Value,
+            CreateUpdateRequest("Updated name"),
+            CancellationToken.None
+        );
+
+        await queryProcessor
+            .Received(1)
+            .RunQueryAsync(
+                Arg.Is<UpdateRepositoryQuery>(query =>
+                    query.UpdatedModel.StorageBytesUsed == 7_000
+                    && query.UpdatedModel.GitBytesUsed == 5_000
                 ),
                 Arg.Any<CancellationToken>()
             );

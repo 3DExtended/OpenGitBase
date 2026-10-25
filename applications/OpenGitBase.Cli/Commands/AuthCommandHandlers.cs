@@ -1,4 +1,4 @@
-using OpenGitBase.Cli.Auth;
+﻿using OpenGitBase.Cli.Auth;
 using OpenGitBase.Cli.Configuration;
 using OpenGitBase.Cli.Output;
 
@@ -6,7 +6,8 @@ namespace OpenGitBase.Cli.Commands;
 
 public static class AuthCommandHandlers
 {
-    private static readonly TimeSpan LoginTimeout = TimeSpan.FromSeconds(30);
+    // Room for the browser sign-in, including a second step with an authenticator code.
+    private static readonly TimeSpan LoginTimeout = TimeSpan.FromMinutes(5);
 
     public static async Task<int> LoginAsync(CliServices services)
     {

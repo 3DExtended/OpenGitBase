@@ -1,3 +1,3 @@
 [Intent] owner get repository usage
 [HttpRequest] GET http://localhost:8089/api/repository/{{GUID}}/usage | GET http://localhost:8089/api/repository/{{GUID}}/usage
-[HttpResponse] 200 OK | {"bytesUsed":26571,"bytesLimit":{{SHA}},"fileSizeLimit":{{SHA}}}
+[HttpResponse] 200 OK | {"bytesUsed":26571,"gitBytes":26571,"lfsBytes":0,"bytesLimit":{{SHA}},"fileSizeLimit":{{SHA}}}

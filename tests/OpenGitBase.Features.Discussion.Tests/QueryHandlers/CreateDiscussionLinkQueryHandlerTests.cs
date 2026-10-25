@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
@@ -39,6 +40,36 @@ public class CreateDiscussionLinkQueryHandlerTests
         Assert.Equal(42, created.Get().TargetDiscussionNumber);
         Assert.Equal(DiscussionRelationshipType.Parent, created.Get().RelationshipType);
         Assert.Equal("[PRD] Parent spec", created.Get().TargetDiscussionTitle);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_CreatesTheLinkOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        // The COMMIT lands but its acknowledgement does not; the retry must not report the new link as failed.
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new DiscussionHandlerTestScope(lostCommit.Configure);
+        await scope.EnsureCreatedAsync();
+        await using var context = await scope.CreateDbContextAsync();
+        await DiscussionTestData.SeedDiscussionAsync(context, number: 1, title: "Source");
+        await DiscussionTestData.SeedDiscussionAsync(context, number: 2, title: "Target");
+        lostCommit.LoseNextCommitInserting("discussion_links");
+
+        var createHandler = scope.GetHandler<CreateDiscussionLinkQueryHandler>();
+        var created = await createHandler.RunQueryAsync(
+            new CreateDiscussionLinkQuery
+            {
+                RepositoryId = DiscussionTestData.RepositoryId,
+                Number = 1,
+                TargetDiscussionNumber = 2,
+                RelationshipType = DiscussionRelationshipType.Related,
+            },
+            CancellationToken.None);
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        Assert.True(created.IsSome);
+        Assert.Equal(2, created.Get().TargetDiscussionNumber);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        Assert.Single(await verifyContext.Set<DiscussionLinkEntity>().AsNoTracking().ToListAsync());
     }
 
     [Fact]

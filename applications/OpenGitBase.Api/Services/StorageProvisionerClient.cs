@@ -228,7 +228,8 @@ public sealed class StorageProvisionerClient : IStorageProvisionerClient
         using var document = JsonDocument.Parse(body);
         var plaintext = ReadRepositoryIds(document.RootElement, "plaintextRepositories");
         var artifacts = ReadArtifactRepositoryIds(document.RootElement, "artifactRepositories");
-        return StorageInventoryResult.Ok(plaintext, artifacts);
+        var lfs = ReadRepositoryIds(document.RootElement, "lfsRepositories");
+        return StorageInventoryResult.Ok(plaintext, artifacts, lfs);
     }
 
     public async Task<ReplicationArtifactFetchResult> CreateReplicationArtifactAsync(

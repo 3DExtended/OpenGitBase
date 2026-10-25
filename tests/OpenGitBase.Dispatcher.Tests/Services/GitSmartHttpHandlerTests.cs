@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -117,7 +117,9 @@ public class GitSmartHttpHandlerTests
                 new RepositoryAccessCheckClient(api, options),
                 new GitHttpProxyService(storage),
                 options,
-                NullLogger<GitSmartHttpHandler>.Instance
+                NullLogger<GitSmartHttpHandler>.Instance,
+                new LfsPathParser(),
+                new LfsHandler(new LfsApiClient(api, options), new LfsObjectTransferService(storage), NullLogger<LfsHandler>.Instance)
             );
         }
 

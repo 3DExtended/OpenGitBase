@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using OpenGitBase.Cli.Auth;
@@ -10,6 +11,12 @@ public sealed class IssueCommandExtendedTests : IDisposable
     private const string CommentJson = """
         {"id":"22222222-2222-2222-2222-222222222222","bodyMarkdown":"continued","createdAt":"2026-07-12T10:00:01Z","authorUsername":"alice"}
         """;
+
+    private const string CreatedDiscussionJson = """
+        {"id":"11111111-1111-1111-1111-111111111111","number":42,"title":"[PRD] Long","status":0,"createdAt":"2026-07-12T10:00:00Z","updatedAt":"2026-07-12T10:00:00Z","tags":[]}
+        """;
+
+    private static readonly DateTimeOffset DiscussionCreatedAt = DateTimeOffset.Parse("2026-07-12T10:00:00Z", CultureInfo.InvariantCulture);
 
     private readonly List<string> _tempPaths = [];
 
@@ -334,6 +341,9 @@ public sealed class IssueCommandExtendedTests : IDisposable
             {"id":"11111111-1111-1111-1111-111111111111","number":42,"title":"[PRD] Long","status":0,"createdAt":"2026-07-12T10:00:00Z","updatedAt":"2026-07-12T10:00:00Z","tags":[]}
             """);
         handler.EnqueueResponse(HttpStatusCode.InternalServerError, """{"error":"Boom"}""");
+        handler.EnqueueResponse(
+            HttpStatusCode.OK,
+            DiscussionWithCommentsJson(new string('a', 7000), SpecComment(new string('a', 7000), secondsAfterCreate: 1)));
 
         using var output = new StringWriter();
         using var error = new StringWriter();
@@ -350,7 +360,70 @@ public sealed class IssueCommandExtendedTests : IDisposable
         Assert.NotEqual(0, exitCode);
         Assert.Contains("#42", error.ToString(), StringComparison.Ordinal);
         Assert.Contains("part 2 of 2", error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(HttpMethod.Get, handler.Requests[^1].Method);
     }
+
+    [Fact]
+    public async Task Issue_create_carries_on_when_a_failed_continuation_comment_was_saved()
+    {
+        // Prod, 2026-10-18: the API saved body part 2 of 3 yet answered 500, and the publish stopped half-way.
+        string[] parts = [new string('a', 7000), new string('b', 15000), new string('c', 5000)];
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueResponse(HttpStatusCode.Created, CreatedDiscussionJson);
+        handler.EnqueueResponse(HttpStatusCode.InternalServerError, """{"error":"Boom"}""");
+        handler.EnqueueResponse(
+            HttpStatusCode.OK,
+            DiscussionWithCommentsJson(parts[0], SpecComment(parts[0], secondsAfterCreate: 1), SpecComment(parts[1], secondsAfterCreate: 40)));
+        handler.EnqueueResponse(HttpStatusCode.Created, CommentJson);
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var exitCode = await CliApp.RunAsync(
+            [
+                "--hostname", "https://forge.example.com",
+                "issue", "-R", "acme/demo", "create", "--title", "[PRD] Long", "--body", string.Join("\n\n", parts),
+            ],
+            output,
+            error,
+            CliTestSupport.CreateOverrides(handler, "https://forge.example.com"));
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(
+            [
+                "POST /api/repository/by-slug/acme/demo/discussions",
+                "POST /api/repository/by-slug/acme/demo/discussions/42/comments",
+                "GET /api/repository/by-slug/acme/demo/discussions/42?include=comments",
+                "POST /api/repository/by-slug/acme/demo/discussions/42/comments",
+            ],
+            handler.Requests.Select(request => $"{request.Method} {request.RequestUri!.PathAndQuery}"));
+        Assert.Equal(parts[2], ReadJsonString(handler.RequestBodies[^1], "bodyMarkdown"));
+        Assert.Contains("2 continuation comment(s)", output.ToString(), StringComparison.Ordinal);
+    }
+
+    private static string DiscussionWithCommentsJson(string body, params object[] comments) =>
+        JsonSerializer.Serialize(new
+        {
+            id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            number = 42,
+            title = "[PRD] Long",
+            body,
+            status = 0,
+            creatorUsername = "alice",
+            createdAt = DiscussionCreatedAt,
+            updatedAt = DiscussionCreatedAt,
+            tags = Array.Empty<object>(),
+            comments,
+        });
+
+    private static object SpecComment(string body, int secondsAfterCreate) =>
+        new
+        {
+            id = Guid.NewGuid(),
+            authorUsername = "alice",
+            bodyMarkdown = body,
+            createdAt = DiscussionCreatedAt.AddSeconds(secondsAfterCreate),
+            updatedAt = DiscussionCreatedAt.AddSeconds(secondsAfterCreate),
+        };
 
     private static string ReadJsonString(string json, string property)
     {

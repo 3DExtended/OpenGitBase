@@ -13,16 +13,22 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
     private readonly IQueryProcessor _queryProcessor;
     private readonly IStorageProvisionerClient _storageProvisionerClient;
     private readonly IDbContextFactory<OpenGitBaseDbContext> _contextFactory;
+    private readonly IStorageLfsClient _lfsClient;
+    private readonly ILogger<DeleteRepositoryWithStorageQueryHandler> _logger;
 
     public DeleteRepositoryWithStorageQueryHandler(
         IQueryProcessor queryProcessor,
         IStorageProvisionerClient storageProvisionerClient,
-        IDbContextFactory<OpenGitBaseDbContext> contextFactory
+        IDbContextFactory<OpenGitBaseDbContext> contextFactory,
+        IStorageLfsClient lfsClient,
+        ILogger<DeleteRepositoryWithStorageQueryHandler> logger
     )
     {
         _queryProcessor = queryProcessor;
         _storageProvisionerClient = storageProvisionerClient;
         _contextFactory = contextFactory;
+        _lfsClient = lfsClient;
+        _logger = logger;
     }
 
     public async Task<Option<DeleteRepositoryWithStorageResult>> RunQueryAsync(
@@ -137,8 +143,13 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
             .Select(result => result.NodeId)
             .ToList();
         var physicalPath = entity.PhysicalPath;
+        var lfsNodeIds = await FindLfsNodeIdsAsync(context, entity, cancellationToken).ConfigureAwait(false);
         context.Remove(entity);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The LfsObject and LfsObjectCopy rows went with the repository (cascade). The data goes only now, so a
+        // failed quorum above never loses LFS objects of a repository that still exists.
+        await DeleteLfsDataAsync(entity.Id, lfsNodeIds, cancellationToken).ConfigureAwait(false);
 
         if (pendingScrubNodeIds.Count > 0)
         {
@@ -149,6 +160,83 @@ public sealed class DeleteRepositoryWithStorageQueryHandler
         }
 
         return Option.From(DeleteRepositoryWithStorageResult.Deleted());
+    }
+
+    /// <summary>Every node that may hold LFS data of the repository: its replicas, its primary, and any node a copy
+    /// row names (a node that left the replica set keeps its copies until they are deleted).</summary>
+    private static async Task<List<Guid>> FindLfsNodeIdsAsync(
+        OpenGitBaseDbContext context,
+        RepositoryEntity entity,
+        CancellationToken cancellationToken
+    )
+    {
+        var copyNodeIds = await context
+            .Set<LfsObjectCopyEntity>()
+            .AsNoTracking()
+            .Where(copy => copy.RepositoryId == entity.Id)
+            .Select(copy => copy.StorageNodeId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        IEnumerable<Guid?> primaries = [entity.StorageNodeId, entity.PrimaryStorageNodeId];
+        return entity.Replicas
+            .Select(replica => replica.StorageNodeId)
+            .Concat(primaries.OfType<Guid>())
+            .Concat(copyNodeIds)
+            .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
+    /// Asks each node to delete the repository's LFS data. A node that is down or fails keeps it until the
+    /// reconciler finds the directory of a repository that no longer exists and deletes it then.
+    /// </summary>
+    private async Task DeleteLfsDataAsync(
+        Guid repositoryId,
+        IReadOnlyList<Guid> nodeIds,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var nodeId in nodeIds)
+        {
+            var storageNodeId = StorageNodeId.From(nodeId);
+            var storageNode = await _queryProcessor
+                .RunQueryAsync(new GetStorageNodeQuery { ModelId = storageNodeId }, cancellationToken)
+                .ConfigureAwait(false);
+            var apiToken = await _queryProcessor
+                .RunQueryAsync(new GetStorageNodeApiTokenQuery { StorageNodeId = storageNodeId }, cancellationToken)
+                .ConfigureAwait(false);
+            if (storageNode.IsNone || !storageNode.Get().IsHealthy || apiToken.IsNone)
+            {
+                _logger.LogWarning(
+                    "LFS data of deleted repository {RepositoryId} stays on unavailable node {StorageNodeId} until the reconciler removes it.",
+                    repositoryId,
+                    nodeId
+                );
+                continue;
+            }
+
+            var node = storageNode.Get();
+            try
+            {
+                await _lfsClient
+                    .DeleteRepositoryAsync(
+                        new StorageNodeEndpoint(nodeId, node.InternalHost, node.InternalHttpPort, apiToken.Get()),
+                        repositoryId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Deleting LFS data of repository {RepositoryId} on node {StorageNodeId} failed; the reconciler removes it later.",
+                    repositoryId,
+                    nodeId
+                );
+            }
+        }
     }
 
     private async Task ScrubPendingNodesAsync(
