@@ -183,7 +183,7 @@ test.describe('Settings screens', () => {
       }),
     )
     await page.goto('/settings/security?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.getByTestId('two-factor-status-card')).toBeVisible()
     await expect(page.getByTestId('passkey-name')).toHaveText(['MacBook'])
     await expect(page.locator('body')).toHaveScreenshot('security.png', {

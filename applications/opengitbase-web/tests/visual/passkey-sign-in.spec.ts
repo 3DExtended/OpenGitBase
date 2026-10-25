@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import type { CDPSession, Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { blockServiceWorker, waitForPageReady } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -158,7 +158,7 @@ test.describe('passkey sign-in', () => {
 
     await page.goto('/sign-in')
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
 
     await expect(page.getByTestId('passkey-sign-in')).toHaveCount(0)
     await expect(page.getByRole('textbox').first()).toHaveAttribute('autocomplete', 'username webauthn')
