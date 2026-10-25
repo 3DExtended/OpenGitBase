@@ -45,6 +45,7 @@ const createMenuItems = computed(() => [
 const settingsNavItems = computed(() => {
   const items = [
     { label: t('settings.profile.title'), to: '/settings', icon: 'i-lucide-user', exact: true },
+    { label: t('settings.security.link'), to: '/settings/security', icon: 'i-lucide-shield-check' },
     { label: t('settings.accessTokens.link'), to: '/settings/access-tokens', icon: 'i-lucide-key-round' },
   ]
   if (gitConfig.value?.sshEnabled) {

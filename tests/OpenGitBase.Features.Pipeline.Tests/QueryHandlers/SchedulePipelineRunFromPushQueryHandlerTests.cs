@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using OpenGitBase.Common.Tests.Testing;
+using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
@@ -49,6 +51,33 @@ public sealed class SchedulePipelineRunFromPushQueryHandlerTests
         var run = await context.Set<PipelineRunEntity>().SingleAsync();
         Assert.Equal(CommitSha, run.AfterSha);
         Assert.Single(await context.Set<PipelineJobEntity>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_SchedulesTheRunOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = await PipelineHandlerTestScope.CreateAsync(lostCommit.Configure);
+        var repositoryId = await SeedRepositoryAsync(scope, StoragePhysicalPath);
+
+        lostCommit.LoseNextCommitInserting("PipelineRun");
+        var result = await CreateHandler(scope, FakeRepositoryFileReader.WithFiles(CiFiles)).RunQueryAsync(
+            new SchedulePipelineRunFromPushQuery
+            {
+                RepositoryId = repositoryId,
+                Ref = "refs/heads/main",
+                AfterSha = CommitSha,
+            },
+            CancellationToken.None
+        );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        await using var context = await scope.ContextFactory.CreateDbContextAsync();
+        var run = await context.Set<PipelineRunEntity>().SingleAsync();
+        Assert.Equal(run.Id, result.Get().Value);
+        var job = await context.Set<PipelineJobEntity>().SingleAsync();
+        Assert.Equal(run.Id, job.RunId);
+        await scope.JobPublisher.Received(1).PublishAsync(job.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]

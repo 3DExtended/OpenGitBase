@@ -2,7 +2,7 @@
 
 **Purpose:** Baseline for planning encryption improvements and distributed-system evolution.  
 **Audience:** Agents and engineers entering the codebase cold.  
-**Last updated:** 2026-10-18
+**Last updated:** 2026-10-19
 
 For local setup and ports, see [README.md](../README.md). For feature-level design specs, see [prd/](prd/).
 
@@ -99,7 +99,9 @@ flowchart TB
 | User registration, login, email verify, password reset | Done | [features/users/](../features/users/), [Controllers/Authorization/](../applications/OpenGitBase.Api/Controllers/Authorization/) |
 | OAuth (Google, Apple) | Done | [SignInController.cs](../applications/OpenGitBase.Api/Controllers/Authorization/SignInController.cs) |
 | JWT in httpOnly cookies + Bearer | Done | [Startup.cs](../applications/OpenGitBase.Api/Startup.cs), [AuthCookieService.cs](../applications/OpenGitBase.Api/Services/AuthCookieService.cs) |
-| Admin role (`role=admin` claim) | Done | Admin controllers |
+| Admin role (`role=admin` claim) | Done | Admin controllers; `POST /admin/users/{username}/two-factor/reset` ([AdminUsersController.cs](../applications/OpenGitBase.Api/Controllers/AdminUsersController.cs)) |
+| Two-factor sign-in (authenticator app, TOTP, recovery codes, passkeys) | mfa-01 to mfa-06 done in code: authenticator app, recovery codes, passkey as second step, passkey-only 2FA (`POST /account/two-factor/enable`, last-passkey rule); mfa-06 adds security emails, the admin reset and `security.*` log events. Off by default (`TwoFactor:Enabled`); the production switch is the HITL rollout in [account-security-operations.md](deployment/account-security-operations.md) | [features/account-security/](../features/account-security/), [AccountSecurityController.cs](../applications/OpenGitBase.Api/Controllers/AccountSecurityController.cs), `POST /signin/two-factor`, `settings/security.vue`, [SendSecurityNotificationQueryHandler.cs](../features/account-security/OpenGitBase.Features.AccountSecurity/QueryHandlers/SendSecurityNotificationQueryHandler.cs), [SecurityEvent.cs](../features/account-security/OpenGitBase.Features.AccountSecurity/Events/SecurityEvent.cs); PRD [account-security-…](prd/account-security-optional-two-factor-authentication-and-passkeys.md) (#244) |
+| Passkeys (WebAuthn, Fido2NetLib) | mfa-03 and mfa-04 done: register, rename, delete, re-authenticate with a passkey, and sign in with one (button and autofill on the web and CLI sign-in pages, no second step); mfa-05 done: a passkey answers the second step after the password (`POST /signin/two-factor/passkey-options`). Off while `WebAuthn:RelyingPartyId` is empty, which it is in production until the mfa-06 rollout sets `opengitbase.com` | [PasskeysController.cs](../applications/OpenGitBase.Api/Controllers/PasskeysController.cs), [SignInController.cs](../applications/OpenGitBase.Api/Controllers/Authorization/SignInController.cs), [PasskeyCeremonies.cs](../features/account-security/OpenGitBase.Features.AccountSecurity/Passkeys/PasskeyCeremonies.cs), `utils/webauthn.ts`, `utils/passkeySignIn.ts`, `utils/passkeySecondFactor.ts`, `SettingsPasskeysCard` |
 | Personal access tokens (HTTPS git) | Done | [features/git-access-token/](../features/git-access-token/) |
 | SSH public keys (git over SSH) | Done | [features/public-git-ssh-key/](../features/public-git-ssh-key/) |
 | Repository-level authz (private repos) | Done | [RepositoryContentAuthorizationService.cs](../applications/OpenGitBase.Api/Services/RepositoryContentAuthorizationService.cs) |
@@ -260,8 +262,11 @@ DbContext: [OpenGitBaseDbContext.cs](../common/OpenGitBase.Common/Data/OpenGitBa
 | User emails | AES-256-GCM + HMAC lookup hash | [EmailProtectionService.cs](../common/OpenGitBase.Common/Services/EmailProtectionService.cs) → `UserCredentialsEntity.EmailCiphertext` |
 | Storage node API tokens | Same AES-GCM (`EncryptSecret`) | `StorageNodeEntity.ApiTokenProtected` |
 | Fleet dispatcher SSH private key | Same AES-GCM (`EncryptSecret`, stored byte-for-byte, never email-normalized) | `FleetSecretsEntity.DispatcherSshPrivateKeyProtected` |
+| TOTP authenticator secrets | Same AES-GCM (`EncryptSecret`), re-protected by `EncryptionKeyRotation` | `UserTotpAuthenticatorEntity.SecretProtected`, `PendingSecretProtected` |
+| 2FA recovery codes | ASP.NET `PasswordHasher` only; no SHA256 lookup hash (50-bit codes), checked against the user's unused hashes | `UserRecoveryCodeEntity.CodeHash` |
 | Git LFS objects on encrypted replicas | Segmented AES-256-GCM (1 MiB segments) with the Repository Key, encrypted and decrypted only in the API | [LfsObjectCipher.cs](../applications/OpenGitBase.Api/Services/LfsObjectCipher.cs), `/var/lib/opengitbase/lfs/` |
 | Passwords, PATs, invite/enrollment tokens | ASP.NET `PasswordHasher` + SHA256 lookup hashes | Various handlers |
+| Passkey public keys | Plain (public keys are not secret); no rotation entry | `UserPasskeyEntity.PublicKey` |
 | JWT signing | HMAC-SHA512 symmetric key | `Jwt:Key` in config |
 | Transport: storage peer sync | mTLS (per-node X.509) | nginx :8443, [docker/pki/](../docker/pki/) |
 | Transport: user-facing | TLS at edge (deployment-dependent) | HAProxy/Caddy; local dev often HTTP |
@@ -308,6 +313,7 @@ From [code-review-remediation/](issues/code-review-remediation/README.md):
 | Module | DB | Public API | Notes |
 |--------|-----|------------|-------|
 | Users | yes | auth routes | Email encrypted |
+| AccountSecurity | yes | `/account/security`, `/account/reauthenticate`, `/account/two-factor/*`, `/account/passkeys`, `/signin/two-factor`, `/admin/users/{username}/two-factor/reset` | TOTP, recovery codes, passkeys, challenges, lockout, re-authentication, security emails, admin reset |
 | Repository | yes | yes | HA provisioning |
 | RepositoryMember | yes | yes | |
 | Organization | yes | yes | Invites |
@@ -328,6 +334,7 @@ Registration: [FeatureRegistration.cs](../applications/OpenGitBase.Api/FeatureRe
 | [ha-storage-replication.md](prd/ha-storage-replication.md) | RF=3 design, watermarks, failover |
 | [git-lfs.md](prd/git-lfs.md) | Git LFS design: four-copy layout, LFS Quorum, encryption format |
 | [git-lfs-operations.md](deployment/git-lfs-operations.md) | LFS sizing, limits (HAProxy, Cloudflare), rollout and rollback |
+| [account-security-operations.md](deployment/account-security-operations.md) | 2FA and passkey configuration, relying-party ID, admin reset, `security.*` log events, production rollout |
 | [git-storage-proxy.md](prd/git-storage-proxy.md) | Dispatcher architecture |
 | [git-https-personal-access-tokens.md](prd/git-https-personal-access-tokens.md) | HTTPS git auth |
 | [merge-requests.md](prd/merge-requests.md) | MR lifecycle design |

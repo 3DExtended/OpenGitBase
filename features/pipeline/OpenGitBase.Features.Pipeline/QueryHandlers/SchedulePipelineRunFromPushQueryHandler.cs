@@ -3,6 +3,7 @@ using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
@@ -119,7 +120,7 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
             StageOrderJson = JsonSerializer.Serialize(parseResult.Definition.Stages),
             CreatedAt = DateTimeOffset.UtcNow,
         };
-        context.Set<PipelineRunEntity>().Add(run);
+        var rows = new List<object> { run };
 
         // Later stages are released as earlier ones finish, so the first stage `only` left a job in
         // starts; a stage with nothing to run would hold the rest blocked.
@@ -177,28 +178,37 @@ public sealed class SchedulePipelineRunFromPushQueryHandler
                 TimeoutSeconds = isOgbHosted ? 30 * 60 : 0,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
-            context.Set<PipelineJobEntity>().Add(jobEntity);
-            context.Set<JobStatusTransitionEntity>()
-                .Add(
-                    new JobStatusTransitionEntity
-                    {
-                        Id = Guid.NewGuid(),
-                        JobId = jobEntity.Id,
-                        FromStatus = jobEntity.Status,
-                        ToStatus = jobEntity.Status,
-                        Message = jobEntity.Status == PipelineJobStatus.Queued
-                            ? "Job queued by scheduler."
-                            : "Job blocked until prior stages complete.",
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    }
-                );
+            rows.Add(jobEntity);
+            rows.Add(
+                new JobStatusTransitionEntity
+                {
+                    Id = Guid.NewGuid(),
+                    JobId = jobEntity.Id,
+                    FromStatus = jobEntity.Status,
+                    ToStatus = jobEntity.Status,
+                    Message = jobEntity.Status == PipelineJobStatus.Queued
+                        ? "Job queued by scheduler."
+                        : "Job blocked until prior stages complete.",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                }
+            );
             if (jobEntity.Status == PipelineJobStatus.Queued)
             {
                 queuedJobIds.Add(jobEntity.Id);
             }
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context
+            .InsertOnceAsync(
+                ct =>
+                {
+                    context.AddRange(rows);
+                    return context.SaveChangesAsync(ct);
+                },
+                ct => context.Set<PipelineRunEntity>().AnyAsync(entity => entity.Id == run.Id, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         // Announced only once saved, so an agent never wakes for a job it cannot claim.
         foreach (var jobId in queuedJobIds)

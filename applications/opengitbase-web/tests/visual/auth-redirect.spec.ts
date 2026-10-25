@@ -14,14 +14,14 @@ test.describe('Auth redirect safety', () => {
     await page.goto('/sign-in?msw=1')
     await page.getByLabel(/username/i).fill('demo-user')
     await page.getByLabel(/^password$/i).fill('password')
-    await page.getByRole('button', { name: /sign in/i }).click()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   }
 
   test('sign-in honors safe relative redirect', async ({ page }) => {
     await page.goto('/sign-in?redirect=/settings/profile&msw=1')
     await page.getByLabel(/username/i).fill('demo-user')
     await page.getByLabel(/^password$/i).fill('password')
-    await page.getByRole('button', { name: /sign in/i }).click()
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await expect(page).toHaveURL(/\/settings\/profile/)
   })
 

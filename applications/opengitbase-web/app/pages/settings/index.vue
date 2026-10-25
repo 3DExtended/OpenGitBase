@@ -116,6 +116,12 @@ async function deleteAccount() {
       <template #footer>
         <div class="flex flex-wrap gap-2">
           <UButton
+            to="/settings/security"
+            variant="soft"
+          >
+            {{ t('settings.security.link') }}
+          </UButton>
+          <UButton
             to="/settings/access-tokens"
             variant="soft"
           >
