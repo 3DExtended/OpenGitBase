@@ -3,14 +3,16 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.StorageNode.Contracts;
+using OpenGitBase.Features.StorageNode.Entities;
 
 namespace OpenGitBase.Api.Services;
 
 /// <summary>
 /// Builds the fleet drift report: probes every healthy storage node's on-disk inventory and
 /// cross-references it against the control-plane <c>RepositoryReplica</c> records, surfacing both
-/// on-disk copies with no matching record and records with no matching on-disk data. Read-only —
-/// it detects drift, it never remediates.
+/// on-disk copies with no matching record and records with no matching on-disk data. It also
+/// checks each repository's primary pointer against its Primary replica row
+/// (<see cref="FleetDriftKind.PrimaryMismatch"/>). Read-only — it detects drift, it never remediates.
 /// </summary>
 public sealed class GetFleetDriftReportQueryHandler
     : IQueryHandler<GetFleetDriftReportQuery, FleetDriftReportDto>
@@ -178,6 +180,8 @@ public sealed class GetFleetDriftReportQueryHandler
             );
         }
 
+        await AddPrimaryMismatchesAsync(context, drift, repositories, cancellationToken).ConfigureAwait(false);
+
         return Option.From(
             new FleetDriftReportDto
             {
@@ -186,6 +190,52 @@ public sealed class GetFleetDriftReportQueryHandler
                 Drift = drift,
             }
         );
+    }
+
+    /// <summary>
+    /// Repositories whose primary pointer and Primary replica row disagree. Read from the database alone, so reported
+    /// whether or not the nodes answer, on the node the pointer names. A legacy repository without a
+    /// PrimaryStorageNodeId routes through StorageNodeId alone and is skipped.
+    /// </summary>
+    private static async Task AddPrimaryMismatchesAsync(
+        OpenGitBaseDbContext context,
+        List<FleetDriftEntryDto> drift,
+        IReadOnlyList<RepositoryEntity> repositories,
+        CancellationToken cancellationToken
+    )
+    {
+        var mismatches = repositories
+            .Where(repository => repository.PrimaryStorageNodeId is not null)
+            .Select(repository => (Repository: repository, Problems: RepositoryPrimaryConsistency.FindProblems(repository)))
+            .Where(entry => entry.Problems.Count > 0)
+            .ToList();
+        if (mismatches.Count == 0)
+        {
+            return;
+        }
+
+        // The pointed node may be down and so missing from the probed nodes; its name comes from the database.
+        var nodeNameById = await context
+            .Set<StorageNodeEntity>()
+            .AsNoTracking()
+            .ToDictionaryAsync(node => node.Id, node => node.NodeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var (repository, problems) in mismatches)
+        {
+            var pointedNodeId = repository.PrimaryStorageNodeId!.Value;
+            drift.Add(
+                new FleetDriftEntryDto
+                {
+                    StorageNodeId = pointedNodeId,
+                    NodeId = nodeNameById.GetValueOrDefault(pointedNodeId) ?? string.Empty,
+                    RepositoryId = repository.Id,
+                    RepositoryName = repository.Name,
+                    Kind = FleetDriftKind.PrimaryMismatch,
+                    Detail = string.Join(" ", problems),
+                }
+            );
+        }
     }
 
     private static void AddDrift(
