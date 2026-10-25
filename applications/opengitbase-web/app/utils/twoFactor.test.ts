@@ -4,6 +4,8 @@ import {
   formatSetupKey,
   isTwoFactorChallenge,
   normalizeAuthenticatorCode,
+  recoveryCodesFileContent,
+  recoveryCodesRunningLow,
   secondFactorErrorKey,
 } from './twoFactor'
 
@@ -43,7 +45,38 @@ describe('two-factor helpers', () => {
     expect(secondFactorErrorKey('Too Many Requests', 429)).toBe('auth.twoFactor.errors.lockedOut')
     expect(secondFactorErrorKey('invalid_credentials', 401)).toBe('auth.twoFactor.errors.invalidCredentials')
     expect(secondFactorErrorKey('no_pending_setup', 400)).toBe('auth.twoFactor.errors.setupExpired')
+    expect(secondFactorErrorKey('two_factor_not_enabled', 400)).toBe('auth.twoFactor.errors.notEnabled')
     expect(secondFactorErrorKey('boom', 500)).toBe('auth.twoFactor.errors.generic')
+  })
+
+  it('says "recovery code" when a recovery code was wrong', () => {
+    expect(secondFactorErrorKey('invalid_code', 401, 'recovery')).toBe('auth.twoFactor.errors.invalidRecoveryCode')
+    expect(secondFactorErrorKey('locked_out', 429, 'recovery')).toBe('auth.twoFactor.errors.lockedOut')
+  })
+})
+
+describe('recovery codes', () => {
+  it('writes one code per line under a header naming the account and site', () => {
+    const content = recoveryCodesFileContent(['abcde-fghij', 'klmno-pqrst'], {
+      account: 'alice',
+      site: 'opengitbase.com',
+      createdAt: new Date('2026-10-18T12:00:00Z'),
+    })
+
+    expect(content.split('\n')).toEqual([
+      'OpenGitBase recovery codes for alice (opengitbase.com)',
+      'Created 2026-10-18. Each code works once.',
+      '',
+      'abcde-fghij',
+      'klmno-pqrst',
+      '',
+    ])
+  })
+
+  it('warns from two remaining codes down', () => {
+    expect(recoveryCodesRunningLow(3)).toBe(false)
+    expect(recoveryCodesRunningLow(2)).toBe(true)
+    expect(recoveryCodesRunningLow(0)).toBe(true)
   })
 })
 
@@ -81,6 +114,18 @@ describe('two-factor API client', () => {
       code: '123456',
     })
     expect(result.data).toBe('token-2')
+  })
+
+  it('answers the challenge with a recovery code instead', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(textResponse('token-3'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createApi('/api').auth.completeTwoFactor({ challengeToken: 'challenge-1', recoveryCode: 'abcde-fghij' })
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      challengeToken: 'challenge-1',
+      recoveryCode: 'abcde-fghij',
+    })
   })
 
   it('surfaces the error code of a wrong code', async () => {
@@ -138,5 +183,21 @@ describe('two-factor API client', () => {
       '/api/account/two-factor/disable',
     ])
     expect(setup.data).toEqual({ otpauthUri: 'otpauth://totp/x', secret: 'ABC' })
+  })
+
+  it('returns the first recovery codes on confirm and a new set on regenerate', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ twoFactorEnabled: true, recoveryCodes: ['abcde-fghij'] }))
+      .mockResolvedValueOnce(jsonResponse({ recoveryCodes: ['klmno-pqrst'] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createApi('/api')
+
+    const confirmed = await api.account.confirmTotpSetup({ code: '654321' })
+    const regenerated = await api.account.regenerateRecoveryCodes()
+
+    expect(confirmed.data?.recoveryCodes).toEqual(['abcde-fghij'])
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/account/two-factor/recovery-codes')
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST')
+    expect(regenerated.data?.recoveryCodes).toEqual(['klmno-pqrst'])
   })
 })

@@ -6,6 +6,7 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Challenges;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users.Entities;
 
@@ -17,6 +18,8 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
     private readonly IPasswordHasherService _passwordHasher;
     private readonly IEmailProtectionService _protection;
     private readonly ISystemClock _clock;
+    private readonly IRemoteIpAddressAccessor _remoteIp;
+    private readonly IQueryProcessor _queryProcessor;
     private readonly ILogger<ReauthenticateQueryHandler> _logger;
 
     public ReauthenticateQueryHandler(
@@ -24,6 +27,8 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
         IPasswordHasherService passwordHasher,
         IEmailProtectionService protection,
         ISystemClock clock,
+        IRemoteIpAddressAccessor remoteIp,
+        IQueryProcessor queryProcessor,
         ILogger<ReauthenticateQueryHandler> logger
     )
     {
@@ -31,6 +36,8 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
         _passwordHasher = passwordHasher;
         _protection = protection;
         _clock = clock;
+        _remoteIp = remoteIp;
+        _queryProcessor = queryProcessor;
         _logger = logger;
     }
 
@@ -70,18 +77,29 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
                 return new ReauthenticationResult(ReauthenticationStatus.LockedOut, credentials.SecondFactorLockedUntil);
             }
 
-            if (string.IsNullOrEmpty(query.Code))
+            var usesRecoveryCode = !string.IsNullOrWhiteSpace(query.RecoveryCode);
+            if (!usesRecoveryCode && string.IsNullOrEmpty(query.Code))
             {
                 return new ReauthenticationResult(ReauthenticationStatus.SecondFactorRequired);
             }
 
-            if (!await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code, now, cancellationToken))
+            var accepted = usesRecoveryCode
+                ? await RecoveryCodes.TryUseAsync(context, _passwordHasher, credentials.UserId, query.RecoveryCode!, now, cancellationToken)
+                : await TotpCodes.TryUseAsync(context, _protection, credentials.UserId, query.Code!, now, cancellationToken);
+            if (!accepted)
             {
                 var lockStarted = SecondFactorAttempts.RecordFailure(credentials, now);
                 await context.SaveChangesAsync(cancellationToken);
                 if (lockStarted)
                 {
-                    SecondFactorAttempts.LogLockout(_logger, credentials, "re-authentication");
+                    SecondFactorAttempts.LogLockout(_logger, credentials, _remoteIp.RemoteIpAddress, "re-authentication");
+                    await _queryProcessor.NotifyAsync(
+                        credentials.UserId,
+                        SecurityNotification.SecondFactorLockedOut,
+                        now,
+                        _remoteIp.RemoteIpAddress,
+                        cancellationToken
+                    );
                 }
 
                 return lockStarted
@@ -91,6 +109,17 @@ public class ReauthenticateQueryHandler : IQueryHandler<ReauthenticateQuery, Rea
 
             SecondFactorAttempts.RecordSuccess(credentials);
             await context.SaveChangesAsync(cancellationToken);
+            if (usesRecoveryCode)
+            {
+                await RecoveryCodes.LogUseAsync(
+                    _logger,
+                    context,
+                    credentials.UserId,
+                    _remoteIp.RemoteIpAddress,
+                    "re-authentication",
+                    cancellationToken
+                );
+            }
         }
 
         await AuthenticationChallenges.CreateAsync(

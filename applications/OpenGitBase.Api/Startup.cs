@@ -125,6 +125,7 @@ public class Startup
             );
         });
         services.AddHttpContextAccessor();
+        services.AddSingleton<IRemoteIpAddressAccessor, HttpRemoteIpAddressAccessor>();
         services.AddMemoryCache();
         var redisUrl = Configuration["REDIS_URL"];
         if (!string.IsNullOrWhiteSpace(redisUrl))
@@ -190,6 +191,9 @@ public class Startup
         services.AddSingleton(Configuration.GetSection("Lfs").Get<LfsOptions>() ?? new LfsOptions());
         services.AddSingleton(
             Configuration.GetSection("TwoFactor").Get<TwoFactorOptions>() ?? new TwoFactorOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("WebAuthn").Get<WebAuthnOptions>() ?? new WebAuthnOptions()
         );
         services.AddSingleton<LfsActionTokenService>();
         services.AddScoped(sp => new RepositoryAccessCheckEvaluator(
