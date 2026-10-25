@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { freezeClock } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
+  await freezeClock(page)
   await page.goto('/__visual__/?msw=1')
   await page.waitForLoadState('networkidle')
   await page.evaluate(async () => {
