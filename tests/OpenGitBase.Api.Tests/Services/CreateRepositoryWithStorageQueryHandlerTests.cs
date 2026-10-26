@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Options;
@@ -112,6 +113,78 @@ public class CreateRepositoryWithStorageQueryHandlerTests
         );
         Assert.Equal(result.Get().RepositoryId!.Value, stored.Id);
         Assert.Equal(3, stored.Replicas.Count);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheRepositoryInsertFails_RollsBackTheProvisionedStorage()
+    {
+        await using var connection = SqliteTestConnection.OpenInMemory();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        await using var serviceProvider = await BuildProvisioningServicesAsync(
+            connection,
+            provisioner,
+            options => options.AddInterceptors(new FailingCommandInterceptor("INSERT INTO \"Repository\""))
+        );
+
+        var handler = serviceProvider.GetRequiredService<CreateRepositoryWithStorageQueryHandler>();
+        await Assert.ThrowsAnyAsync<Exception>(() => handler.RunQueryAsync(CreateQuery(), CancellationToken.None));
+
+        await provisioner.Received(3).DeleteRepositoryAsync(
+            Arg.Any<StorageNodeDto>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>()
+        );
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenKeyGenerationFailsAfterTheRepositoryCommits_KeepsItsStorage()
+    {
+        // The repository row commits before its key is generated. Deleting the bare repositories on a key failure left
+        // a repository whose storage was gone, which the reconciler goes on reporting healthy.
+        await using var connection = SqliteTestConnection.OpenInMemory();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        await using var serviceProvider = await BuildProvisioningServicesAsync(connection, provisioner);
+        serviceProvider
+            .GetRequiredService<IRepositoryKeyService>()
+            .GenerateAndStoreKeyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Key store unavailable."));
+
+        var handler = serviceProvider.GetRequiredService<CreateRepositoryWithStorageQueryHandler>();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.RunQueryAsync(CreateQuery(), CancellationToken.None)
+        );
+
+        Assert.Equal("Key store unavailable.", error.Message);
+        await provisioner.DidNotReceiveWithAnyArgs().DeleteRepositoryAsync(default!, default!, default!, default);
+        var contextFactory = serviceProvider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var verifyContext = await contextFactory.CreateDbContextAsync();
+        Assert.Single(await verifyContext.Set<RepositoryEntity>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheCommitCannotBeConfirmed_KeepsTheStorageAndRethrowsTheCreateError()
+    {
+        // Storage without a row is an orphan the fleet drift report finds; storage deleted under a committed row is lost.
+        await using var connection = SqliteTestConnection.OpenInMemory();
+        var provisioner = Substitute.For<IStorageProvisionerClient>();
+        await using var serviceProvider = await BuildProvisioningServicesAsync(
+            connection,
+            provisioner,
+            options => options.AddInterceptors(new FailingCommandInterceptor("FROM \"Repository\" AS"))
+        );
+        serviceProvider
+            .GetRequiredService<IRepositoryKeyService>()
+            .GenerateAndStoreKeyAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Key store unavailable."));
+
+        var handler = serviceProvider.GetRequiredService<CreateRepositoryWithStorageQueryHandler>();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.RunQueryAsync(CreateQuery(), CancellationToken.None)
+        );
+
+        Assert.Equal("Key store unavailable.", error.Message);
+        await provisioner.DidNotReceiveWithAnyArgs().DeleteRepositoryAsync(default!, default!, default!, default);
     }
 
     [Fact]

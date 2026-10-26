@@ -97,6 +97,50 @@ public class SignInControllerTwoFactorTests : TwoFactorControllerTestBase
     }
 
     [Fact]
+    public async Task TwoFactor_RecoveryCode_SignsInOnlyOnce()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "recovering");
+        var (_, codes) = await EnableTotpWithRecoveryCodesAsync("recovering");
+        using var first = NewBrowser();
+        var firstChallenge = await LoginForChallengeAsync(first, "recovering");
+
+        var signedIn = await CompleteTwoFactorWithRecoveryCodeAsync(
+            first,
+            firstChallenge.ChallengeToken,
+            codes[0].ToUpperInvariant().Replace("-", " ")
+        );
+
+        signedIn.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await first.GetAsync("/signin/testlogin")).StatusCode);
+        using var second = NewBrowser();
+        var secondChallenge = await LoginForChallengeAsync(second, "recovering");
+        var reused = await CompleteTwoFactorWithRecoveryCodeAsync(second, secondChallenge.ChallengeToken, codes[0]);
+        await AssertErrorAsync(reused, HttpStatusCode.Unauthorized, SecondFactorErrorResponse.InvalidCode);
+    }
+
+    [Theory]
+    [InlineData("123456", "aaaaa-aaaaa")]
+    [InlineData("", "")]
+    [InlineData(" ", null)]
+    public async Task TwoFactor_NotExactlyOneOfCodeAndRecoveryCode_IsBadRequest(string code, string? recoveryCode)
+    {
+        using var browser = NewBrowser();
+
+        var response = await browser.PostAsJsonAsync(
+            "/signin/two-factor",
+            new TwoFactorSignInDto
+            {
+                ChallengeToken = "challenge",
+                Code = code,
+                RecoveryCode = recoveryCode,
+            }
+        );
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task TwoFactor_ChallengeOlderThanFiveMinutes_IsRejected()
     {
         using var setup = NewBrowser();
@@ -128,6 +172,28 @@ public class SignInControllerTwoFactorTests : TwoFactorControllerTestBase
 
         var claims = new JwtSecurityTokenHandler().ReadJwtToken(token).Claims;
         Assert.Contains(claims, c => c.Type == "role" && c.Value == "admin");
+    }
+
+    [Fact]
+    public async Task TwoFactor_FiveWrongCodes_EmailTheLockoutOnce()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "warned");
+        var secret = await EnableTotpAsync("warned");
+        using var browser = NewBrowser();
+        var wrong = WrongCode(NextCode(secret));
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            var challenge = await LoginForChallengeAsync(browser, "warned");
+            await CompleteTwoFactorAsync(browser, challenge.ChallengeToken, wrong);
+        }
+
+        var lockout = Assert.Single(
+            Emails.GetByRecipient("warned@example.com"),
+            message => message.Subject == "Sign-in blocked after failed second steps"
+        );
+        Assert.Contains("password was entered correctly", lockout.HtmlBody, StringComparison.Ordinal);
     }
 
     [Fact]

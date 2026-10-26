@@ -98,6 +98,34 @@ public class ReauthenticateQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_RecoveryCodeInsteadOfTheAppCode_ReauthenticatesAndSpendsTheCode()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var codes = await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        var first = await ReauthenticateAsync(scope, userId, AccountSecurityTestScope.Password, recoveryCode: codes[0]);
+        var reused = await ReauthenticateAsync(scope, userId, AccountSecurityTestScope.Password, recoveryCode: codes[0]);
+
+        Assert.Equal(ReauthenticationStatus.Succeeded, first.Status);
+        Assert.Equal(ReauthenticationStatus.InvalidCode, reused.Status);
+        Assert.Equal(9, (await scope.GetRecoveryCodesAsync(userId)).Count(code => code.UsedAt is null));
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WrongRecoveryCode_CountsTowardTheLockout()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        await scope.EnableTotpWithRecoveryCodesAsync(userId);
+
+        var result = await ReauthenticateAsync(scope, userId, AccountSecurityTestScope.Password, recoveryCode: "aaaaa-aaaaa");
+
+        Assert.Equal(ReauthenticationStatus.InvalidCode, result.Status);
+        Assert.Equal(1, (await scope.GetCredentialsAsync(userId)).SecondFactorFailedAttempts);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_AccountWithoutPasswordOrTwoFactor_CannotReauthenticate()
     {
         await using var scope = await AccountSecurityTestScope.CreateAsync();
@@ -124,7 +152,8 @@ public class ReauthenticateQueryHandlerTests
         AccountSecurityTestScope scope,
         UserId userId,
         string password,
-        string? code = null
+        string? code = null,
+        string? recoveryCode = null
     ) =>
         QueryHandlerResultAssert.AssertSome(
             await scope
@@ -136,6 +165,7 @@ public class ReauthenticateQueryHandlerTests
                         SessionId = SessionId,
                         Password = password,
                         Code = code,
+                        RecoveryCode = recoveryCode,
                     },
                     CancellationToken.None
                 )

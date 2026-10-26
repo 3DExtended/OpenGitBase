@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { waitForPageReady } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -12,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('Community pitch @regression', () => {
   test('loads title slide and primary CTA links', async ({ page }) => {
     await page.goto('/pitch')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.waitForSelector('[data-testid="community-pitch-deck"]')
 
     await expect(page.getByTestId('community-pitch')).toBeVisible()
@@ -31,7 +32,7 @@ test.describe('Community pitch @regression', () => {
 
   test('run locally slide links to hosted README', async ({ page }) => {
     await page.goto('/pitch#/cta-run')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.waitForSelector('#cta-run')
 
     const readmeLink = page.locator('a.pitch-link-primary', {
@@ -49,7 +50,7 @@ test.describe('Community pitch @regression', () => {
       route.fulfill({ status: 401, body: '' }),
     )
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
 
     await expect(
       page.getByRole('link', { name: 'Community', exact: true }),
@@ -58,7 +59,7 @@ test.describe('Community pitch @regression', () => {
 
   test('exit control returns to home', async ({ page }) => {
     await page.goto('/pitch')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.getByRole('link', { name: 'Exit' }).click()
     await expect(page).toHaveURL('/')
   })
