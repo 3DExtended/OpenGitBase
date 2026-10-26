@@ -20,10 +20,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     const context = await browser.newContext({ baseURL })
     context.setDefaultTimeout(WARM_UP_TIMEOUT_MS)
 
-    // When Vite's dependency cache is cold or stale, a pass makes it discover
-    // dependencies at runtime; re-optimizing them reloads the page and
-    // invalidates every module transformed so far. A second pass can discover
-    // nothing new, so the server stays warm after it.
+    // A dependency missing from `vite.optimizeDeps.include` in nuxt.config.ts is
+    // discovered at runtime the first time a pass imports it; re-optimizing
+    // reloads the page and invalidates every module transformed so far. A
+    // second pass can discover nothing new, so the server stays warm after it.
     for (let pass = 1; pass <= 2; pass++) {
       await warm(context)
     }

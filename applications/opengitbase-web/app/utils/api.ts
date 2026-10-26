@@ -6,6 +6,10 @@ import type {
   PublicStatusOutageWindowDto,
   PublicStatusSnapshot,
 } from './publicStatus'
+import type { AccountSecurity, SecondFactorAnswer, TotpSetup, TwoFactorChallenge } from './twoFactor'
+import type { Passkey, PasskeyCredentialJSON } from './webauthn'
+
+export type { AccountSecurity, TotpSetup, TwoFactorChallenge } from './twoFactor'
 
 export interface ApiResult<T> {
   data: T | null
@@ -211,6 +215,7 @@ export interface AccountMe {
   username: string
   emailVerified: boolean
   isAdmin: boolean
+  twoFactorEnabled: boolean
   debug?: AccountDebugFeatures
 }
 
@@ -1646,8 +1651,27 @@ export function createApi(baseUrl: string) {
 
   return {
     auth: {
+      /** A session token, or a {@link TwoFactorChallenge} when the account has 2FA on. */
       login: (body: { username: string, password: string }) =>
-        request<string>('/signin/login', { method: 'POST', body: JSON.stringify(body) }),
+        request<string | TwoFactorChallenge>('/signin/login', { method: 'POST', body: JSON.stringify(body) }),
+
+      completeTwoFactor: (body: { challengeToken: string } & SecondFactorAnswer) =>
+        request<string>('/signin/two-factor', { method: 'POST', body: JSON.stringify(body) }),
+
+      /** Request options for answering the second step with one of the account's passkeys. */
+      twoFactorPasskeyOptions: (body: { challengeToken: string }) =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/signin/two-factor/passkey-options', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+
+      /** Request options for any passkey of this site; `404` while passkeys are off. */
+      passkeySignInOptions: () =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/signin/passkey/options', { method: 'POST' }),
+
+      /** A session token; a user-verified passkey needs no second step. */
+      signInWithPasskey: (body: { assertion: PasskeyCredentialJSON }) =>
+        request<string>('/signin/passkey', { method: 'POST', body: JSON.stringify(body) }),
 
       register: (body: { username: string, email: string, password: string }) =>
         request<string>('/register/register', { method: 'POST', body: JSON.stringify(body) }),
@@ -1674,6 +1698,7 @@ export function createApi(baseUrl: string) {
           username: string
           emailVerified: boolean
           isAdmin: boolean
+          twoFactorEnabled?: boolean
           debug?: { emailVerification: boolean }
         }>('/account/me')
         if (!result.data) {
@@ -1686,12 +1711,68 @@ export function createApi(baseUrl: string) {
             username: result.data.username,
             emailVerified: result.data.emailVerified,
             isAdmin: result.data.isAdmin,
+            twoFactorEnabled: result.data.twoFactorEnabled ?? false,
             debug: result.data.debug?.emailVerification
               ? { emailVerification: true }
               : undefined,
           },
         }
       },
+
+      security: () =>
+        request<AccountSecurity>('/account/security'),
+
+      /**
+       * Confirms the caller again for 10 minutes before a security change. With the password, a
+       * passkey stands in for the code; on its own it must verify the user.
+       */
+      reauthenticate: (
+        body:
+          | { password: string, code?: string, recoveryCode?: string }
+          | { passkeyAssertion: PasskeyCredentialJSON, password?: string },
+      ) =>
+        request<null>('/account/reauthenticate', { method: 'POST', body: JSON.stringify(body) }),
+
+      /** Request options for re-authenticating with one of the caller's passkeys. */
+      passkeyReauthenticationOptions: () =>
+        request<PublicKeyCredentialRequestOptionsJSON>('/account/reauthenticate/passkey-options', { method: 'POST' }),
+
+      passkeys: () =>
+        request<Passkey[]>('/account/passkeys'),
+
+      passkeyRegistrationOptions: () =>
+        request<PublicKeyCredentialCreationOptionsJSON>('/account/passkeys/registration-options', { method: 'POST' }),
+
+      registerPasskey: (body: { name: string, attestationResponse: PasskeyCredentialJSON }) =>
+        request<Passkey>('/account/passkeys', { method: 'POST', body: JSON.stringify(body) }),
+
+      renamePasskey: (id: string, body: { name: string }) =>
+        request<Passkey>(`/account/passkeys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+      deletePasskey: (id: string) =>
+        request<null>(`/account/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+      startTotpSetup: () =>
+        request<TotpSetup>('/account/two-factor/totp/setup', { method: 'POST' }),
+
+      confirmTotpSetup: (body: { code: string }) =>
+        request<{ twoFactorEnabled: boolean, recoveryCodes?: string[] | null }>('/account/two-factor/totp/confirm', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+
+      /** Replaces every recovery code; the new set is only in this answer. */
+      regenerateRecoveryCodes: () =>
+        request<{ recoveryCodes: string[] }>('/account/two-factor/recovery-codes', { method: 'POST' }),
+
+      /** Turns 2FA on with the account's passkeys; the first recovery codes are only in this answer. */
+      enableTwoFactorWithPasskeys: () =>
+        request<{ twoFactorEnabled: boolean, recoveryCodes?: string[] | null }>('/account/two-factor/enable', {
+          method: 'POST',
+        }),
+
+      disableTwoFactor: () =>
+        request<{ twoFactorEnabled: boolean }>('/account/two-factor/disable', { method: 'POST' }),
 
       changePassword: (body: { currentPassword: string, newPassword: string }) =>
         request<string>('/account/change-password', { method: 'POST', body: JSON.stringify(body) }),

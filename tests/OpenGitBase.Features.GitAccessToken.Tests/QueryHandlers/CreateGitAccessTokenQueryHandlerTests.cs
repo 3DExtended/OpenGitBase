@@ -1,4 +1,6 @@
-﻿using OpenGitBase.Common.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using OpenGitBase.Common.Data;
+using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.GitAccessToken;
@@ -49,6 +51,44 @@ public class CreateGitAccessTokenQueryHandlerTests
         Assert.NotNull(entity);
         Assert.NotEqual(result.Get().Token, entity.TokenHash);
         Assert.DoesNotContain(result.Get().Token, entity.TokenHash, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_StoresTheTokenOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new GitAccessTokenHandlerTestScope(lostCommit.Configure);
+        await scope.EnsureCreatedAsync();
+
+        await using (var seedContext = await scope.CreateDbContextAsync())
+        {
+            seedContext.Set<OpenGitBase.Features.Users.Entities.UserEntity>().Add(GitAccessTokenTestData.CreateOwner());
+            await seedContext.SaveChangesAsync();
+        }
+
+        lostCommit.LoseNextCommitInserting("GitAccessToken");
+        var result = await scope
+            .GetHandler<CreateGitAccessTokenQueryHandler>()
+            .RunQueryAsync(
+                new CreateGitAccessTokenQuery
+                {
+                    OwnerUserId = GitAccessTokenTestData.OwnerUserId,
+                    Name = GitAccessTokenTestData.SampleName,
+                    Scope = GitAccessTokenScopes.Write,
+                },
+                CancellationToken.None
+            );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        var created = QueryHandlerResultAssert.AssertSome(result);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        var entity = Assert.Single(
+            await verifyContext
+                .Set<OpenGitBase.Features.GitAccessToken.Entities.GitAccessTokenEntity>()
+                .ToListAsync()
+        );
+        Assert.Equal(created.Id.Value, entity.Id);
+        Assert.True(new PasswordHasherService().VerifyPassword(entity.TokenHash, created.Token));
     }
 
     [Fact]

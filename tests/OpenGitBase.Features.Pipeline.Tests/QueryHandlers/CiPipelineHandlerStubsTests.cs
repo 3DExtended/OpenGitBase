@@ -523,7 +523,9 @@ internal sealed class PipelineHandlerTestScope : IAsyncDisposable
     public IJobAvailableEventPublisher JobPublisher =>
         _provider.GetRequiredService<IJobAvailableEventPublisher>();
 
-    public static async Task<PipelineHandlerTestScope> CreateAsync()
+    public static async Task<PipelineHandlerTestScope> CreateAsync(
+        Action<DbContextOptionsBuilder>? configureDbContext = null
+    )
     {
         var connection = SqliteTestConnection.OpenInMemory();
         var services = new ServiceCollection();
@@ -538,7 +540,7 @@ internal sealed class PipelineHandlerTestScope : IAsyncDisposable
                 ]
             )
         );
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection, configureDbContext);
         services.AddSingleton<IJobAvailableEventPublisher>(
             Substitute.For<IJobAvailableEventPublisher>()
         );

@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Auth;
 using OpenGitBase.Common.Data;
@@ -52,39 +51,6 @@ public sealed class UserSessionValidator
         }
 
         return session.ValidAfter is null
-            || (TryReadIssuedAt(principal, out var issuedAt) && issuedAt >= session.ValidAfter.Value);
-    }
-
-    private static bool TryReadIssuedAt(ClaimsPrincipal principal, out DateTimeOffset issuedAt)
-    {
-        if (
-            long.TryParse(
-                principal.FindFirstValue(SessionClaims.IssuedAtMilliseconds),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out var milliseconds
-            )
-        )
-        {
-            issuedAt = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
-            return true;
-        }
-
-        // Tokens issued before the millisecond claim existed only carry iat (seconds).
-        if (
-            long.TryParse(
-                principal.FindFirstValue("iat"),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out var seconds
-            )
-        )
-        {
-            issuedAt = DateTimeOffset.FromUnixTimeSeconds(seconds);
-            return true;
-        }
-
-        issuedAt = default;
-        return false;
+            || (SessionClaims.TryReadIssuedAt(principal, out var issuedAt) && issuedAt >= session.ValidAfter.Value);
     }
 }
