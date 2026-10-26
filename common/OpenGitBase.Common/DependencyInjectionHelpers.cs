@@ -243,23 +243,16 @@ public static class DependencyInjectionHelpers
         IReadOnlyList<Assembly> featureAssemblies
     )
     {
-        if (Debugger.IsAttached)
+        // EF Core design-time tooling (`dotnet ef migrations add`, `database update`) builds the
+        // API host for its DbContext and sets IsDesignTime before it does. Never guess this from
+        // the command line: any path or argument containing "ef" would skip startup migrations.
+        if (Debugger.IsAttached || EF.IsDesignTime)
         {
             return;
         }
 
         var env = services.BuildServiceProvider().GetRequiredService<IHostEnvironment>();
         if (env.IsEnvironment("E2ETest"))
-        {
-            return;
-        }
-
-        var isEfMigrations = Array.Exists(
-            Environment.GetCommandLineArgs(),
-            arg => arg.Contains("ef", StringComparison.OrdinalIgnoreCase)
-        );
-
-        if (isEfMigrations)
         {
             return;
         }
