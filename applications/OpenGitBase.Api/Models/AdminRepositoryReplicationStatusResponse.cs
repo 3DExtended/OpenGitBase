@@ -19,4 +19,6 @@ public sealed class AdminRepositoryReplicationStatusResponse
     public bool WriteQuorumAvailable { get; init; }
 
     public IReadOnlyList<AdminRepositoryReplicaStatusResponse> Replicas { get; init; } = [];
+
+    public AdminRepositoryLfsStatusResponse? Lfs { get; init; }
 }

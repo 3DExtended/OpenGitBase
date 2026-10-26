@@ -44,11 +44,18 @@ public class GetRepositoryUsageQueryHandler
 
         var bytesLimit = entity.MaxBytesOverride
             ?? await ResolveBytesLimitAsync(entity.OwnerUserId, cancellationToken).ConfigureAwait(false);
+        var lfsBytes = await context
+            .Set<LfsObjectEntity>()
+            .Where(x => x.RepositoryId == entity.Id)
+            .SumAsync(x => x.Size, cancellationToken)
+            .ConfigureAwait(false);
 
         return Option.From(
             new RepositoryUsageDto
             {
                 BytesUsed = entity.StorageBytesUsed,
+                GitBytes = Math.Max(0, entity.StorageBytesUsed - lfsBytes),
+                LfsBytes = lfsBytes,
                 BytesLimit = bytesLimit,
                 FileSizeLimit = _quotaOptions.MaxFileBytes,
             }

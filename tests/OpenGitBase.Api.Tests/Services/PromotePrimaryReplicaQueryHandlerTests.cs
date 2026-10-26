@@ -1,10 +1,11 @@
-using Mapster;
+﻿using Mapster;
 using MapsterMapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using OpenGitBase.Api.Services;
+using OpenGitBase.Api.Tests.Services.Lfs;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -113,6 +114,201 @@ public class PromotePrimaryReplicaQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenRf4ReadReplicaIsPromoted_SchedulesAnLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 5
+        );
+
+        await using (provider)
+        {
+            await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal([repositoryId], provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenRf3ReplicaIsPromoted_SchedulesAnLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryHealthy: false,
+            replicaWatermark: 5,
+            primaryWatermark: 2
+        );
+
+        await using (provider)
+        {
+            await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal([repositoryId], provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenThePrimaryIsHealthy_SchedulesNoLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryHealthy: true,
+            replicaWatermark: 5,
+            primaryWatermark: 5
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheReadReplicaLagsAndColdRecoveryFails_SchedulesNoLfsRepair()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 3
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheUnhealthyPrimaryStillAnswers_KeepsItAsThePrimary()
+    {
+        // Heartbeats also stop when the API or the database cannot take them (2026-10-18: a database stall left
+        // every node without a recent heartbeat). A primary that answers directly is up; moving off it is wrong.
+        var repositoryId = Guid.NewGuid();
+        var oldPrimaryId = Guid.NewGuid();
+        var (handler, provider) = await CreateHandlerAsync(
+            repositoryId,
+            oldPrimaryId,
+            Guid.NewGuid(),
+            primaryHealthy: false,
+            replicaWatermark: 5,
+            primaryWatermark: 2,
+            replicationEpoch: 3,
+            primaryAnswers: true
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            var repository = await LoadRepositoryAsync(provider, repositoryId);
+            Assert.Equal(oldPrimaryId, repository.PrimaryStorageNodeId);
+            Assert.Equal(3, repository.ReplicationEpoch);
+            Assert.Empty(provider.GetRequiredService<RecordingLfsRepairQueue>().Scheduled);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheUnhealthyPrimaryStillAnswers_StartsNoColdRecovery()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 5,
+            readReplicaHealthy: false,
+            primaryAnswers: true
+        );
+
+        await using (provider)
+        {
+            var result = await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            await provider.GetRequiredService<IColdRecoveryService>()
+                .DidNotReceiveWithAnyArgs()
+                .TryRecoverAsync(default, default);
+            Assert.Equal(ReplicationState.Rf4Healthy, (await LoadRepositoryAsync(provider, repositoryId)).ReplicationState);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenNoPlaintextCopyIsHealthyAndThePrimaryIsDown_StartsColdRecovery()
+    {
+        var repositoryId = Guid.NewGuid();
+        var (handler, provider) = await CreateRf4HandlerAsync(
+            repositoryId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            primaryWatermark: 5,
+            readWatermark: 5,
+            readReplicaHealthy: false
+        );
+
+        await using (provider)
+        {
+            await handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(repositoryId) },
+                CancellationToken.None
+            );
+
+            await provider.GetRequiredService<IColdRecoveryService>()
+                .Received(1)
+                .TryRecoverAsync(repositoryId, Arg.Any<CancellationToken>());
+        }
+    }
+
+    private static async Task<RepositoryEntity> LoadRepositoryAsync(ServiceProvider provider, Guid repositoryId)
+    {
+        var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        return await context.Set<RepositoryEntity>().AsNoTracking().SingleAsync(repository => repository.Id == repositoryId);
+    }
+
     private static async Task<(PromotePrimaryReplicaQueryHandler Handler, ServiceProvider Provider)>
         CreateRf4HandlerAsync(
             Guid repositoryId,
@@ -120,7 +316,9 @@ public class PromotePrimaryReplicaQueryHandlerTests
             Guid readReplicaId,
             Guid encId,
             long primaryWatermark,
-            long readWatermark
+            long readWatermark,
+            bool readReplicaHealthy = true,
+            bool primaryAnswers = false
         )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -137,6 +335,10 @@ public class PromotePrimaryReplicaQueryHandlerTests
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton(LivenessProbe(primaryAnswers));
+        services.AddLogging();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
 
         var provider = services.BuildServiceProvider();
@@ -160,7 +362,7 @@ public class PromotePrimaryReplicaQueryHandlerTests
                     NodeId = "storage-2",
                     InternalHost = "storage-2",
                     InternalHttpPort = 8081,
-                    IsHealthy = true,
+                    IsHealthy = readReplicaHealthy,
                     RegisteredAt = DateTimeOffset.UtcNow,
                 },
                 new StorageNodeEntity
@@ -226,7 +428,8 @@ public class PromotePrimaryReplicaQueryHandlerTests
             bool primaryHealthy,
             long replicaWatermark,
             long primaryWatermark,
-            long replicationEpoch = 1
+            long replicationEpoch = 1,
+            bool primaryAnswers = false
         )
     {
         var connection = SqliteTestConnection.OpenInMemory();
@@ -243,6 +446,10 @@ public class PromotePrimaryReplicaQueryHandlerTests
         );
         services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
         services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton(LivenessProbe(primaryAnswers));
+        services.AddLogging();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
         services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
 
         var provider = services.BuildServiceProvider();
@@ -305,5 +512,13 @@ public class PromotePrimaryReplicaQueryHandlerTests
         }
 
         return (provider.GetRequiredService<PromotePrimaryReplicaQueryHandler>(), provider);
+    }
+
+    /// <summary>A probe on which only storage-1, the old primary in both fixtures, may answer.</summary>
+    private static IStorageNodeLivenessProbe LivenessProbe(bool primaryAnswers)
+    {
+        var probe = Substitute.For<IStorageNodeLivenessProbe>();
+        probe.AnswersAsync("storage-1", 8081, Arg.Any<CancellationToken>()).Returns(primaryAnswers);
+        return probe;
     }
 }

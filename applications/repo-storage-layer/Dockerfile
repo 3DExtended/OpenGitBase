@@ -6,7 +6,7 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git openssh-server ca-certificates python3 curl openssl python3-cryptography \
-    nginx-light fcgiwrap spawn-fcgi \
+    nginx-light fcgiwrap spawn-fcgi tini \
     && apt-get autoremove -y --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -34,6 +34,7 @@ COPY storage_commit.py /usr/local/bin/storage_commit.py
 COPY storage_merge.py /usr/local/bin/storage_merge.py
 COPY storage_push_validation.py /usr/local/bin/storage_push_validation.py
 COPY storage_artifact_crypto.py /usr/local/bin/storage_artifact_crypto.py
+COPY storage_lfs.py /usr/local/bin/storage_lfs.py
 COPY storage-pre-receive.sh /usr/local/bin/storage-pre-receive.sh
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
 COPY scripts/storage-quorum-replicate.sh /usr/local/bin/storage-quorum-replicate.sh
@@ -52,4 +53,9 @@ EXPOSE 22 8081 8082 8443
 # does not lose its only copy of the data on a rolling deploy (ticket #227).
 VOLUME ["/home/git/.ssh", "/srv/git", "/var/lib/opengitbase"]
 
+# tini is PID 1 and entrypoint.sh its child: the script supervises sshd, storage-http-server.py,
+# nginx and the heartbeat loop (the container exits when any of them dies), and tini reaps the
+# processes orphaned to PID 1 (the fcgiwrap workers spawn-fcgi leaves behind) and passes
+# docker stop's SIGTERM on to the script.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/usr/local/bin/entrypoint.sh"]

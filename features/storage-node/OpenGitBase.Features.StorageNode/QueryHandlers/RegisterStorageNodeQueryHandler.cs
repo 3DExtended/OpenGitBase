@@ -6,6 +6,7 @@ using OpenGitBase.Common.Options;
 using OpenGitBase.Common.Security;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.StorageNode.Entities;
 
@@ -85,7 +86,7 @@ public sealed class RegisterStorageNodeQueryHandler
             }
 
             apiToken = GenerateApiToken();
-            existing = new StorageNodeEntity
+            var node = new StorageNodeEntity
             {
                 Id = Guid.NewGuid(),
                 NodeId = query.NodeId.Trim(),
@@ -106,7 +107,27 @@ public sealed class RegisterStorageNodeQueryHandler
                 MaxBytes = enrollment?.MaxBytes ?? 0,
                 HostingScope = enrollment?.HostingScope ?? HostingScope.OwnOrgOnly,
             };
-            context.Set<StorageNodeEntity>().Add(existing);
+            var enrollmentId = enrollment?.Id;
+            var consumedAt = enrollment?.ConsumedAt;
+            await context
+                .InsertOnceAsync(
+                    async ct =>
+                    {
+                        // Every attempt starts with an empty change tracker, so the enrollment is loaded
+                        // again to be consumed.
+                        var pendingEnrollment = await context
+                            .Set<StorageNodeEnrollmentEntity>()
+                            .SingleAsync(entity => entity.Id == enrollmentId, ct)
+                            .ConfigureAwait(false);
+                        pendingEnrollment.ConsumedAt = consumedAt;
+                        context.Set<StorageNodeEntity>().Add(node);
+                        return await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    },
+                    ct => context.Set<StorageNodeEntity>().AnyAsync(entity => entity.Id == node.Id, ct),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            existing = node;
         }
         else
         {
@@ -146,9 +167,9 @@ public sealed class RegisterStorageNodeQueryHandler
                     apiToken = null;
                 }
             }
-        }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return Option.From(
             new RegisterStorageNodeResult

@@ -18,6 +18,7 @@ public static class FeatureRegistration
         typeof(global::OpenGitBase.Features.Status.StatusMapsterConfig).Assembly,
         typeof(global::OpenGitBase.Features.Pipeline.PipelineMapsterConfig).Assembly,
         typeof(global::OpenGitBase.Features.ComputeNode.ComputeNodeMapsterConfig).Assembly,
+        typeof(global::OpenGitBase.Features.AccountSecurity.AccountSecurityMapsterConfig).Assembly,
 // agentGenCli:feature-assemblies
         ];
 }

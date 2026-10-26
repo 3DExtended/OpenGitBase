@@ -24,7 +24,11 @@ Add or extend a section in `applications/opengitbase-web/app/pages/__visual__/in
 
 Add or extend `applications/opengitbase-web/tests/visual/<feature>.spec.ts`:
 
+Import `test` and `expect` from `./helpers`, not `@playwright/test`: its `test` pins the browser clock (`PINNED_NOW`) so relative times in fixtures ("3 months ago") render the same on any day. `pinned-clock.spec.ts` fails for a spec that imports them from `@playwright/test`.
+
 ```typescript
+import { expect, test } from './helpers';
+
 await waitForApp(page);
 await page.goto('/__visual__/?msw=1');
 await expect(page.getByTestId('visual-<name>')).toHaveScreenshot('<name>.png');
@@ -48,3 +52,5 @@ pnpm test:visual:update       # regenerate baselines after intentional change
 ## Compose vs dev server
 
 Visual tests use Playwright `webServer` (`pnpm dev` + MSW) — compose not required for gallery snapshots. Run compose E2E separately when API integration matters.
+
+`tests/visual/global-setup.ts` warms the fresh dev server before any spec runs (renders the gallery, `admin-ci` and the default layout, then imports every page chunk), so the first spec does not race Vite's on-demand compilation and the suite passes with `--retries=0`. A new layout or a runtime `import()` is not covered by the page-chunk import — render it in the warm-up too.

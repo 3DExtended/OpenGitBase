@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.ComputeNode.Contracts;
 using OpenGitBase.Features.ComputeNode.Entities;
 
@@ -49,7 +50,7 @@ public sealed class RegisterComputeNodeQueryHandler
             return Option<RegisterComputeNodeResultDto>.None;
         }
 
-        enrollment.ConsumedAt = DateTimeOffset.UtcNow;
+        var consumedAt = DateTimeOffset.UtcNow;
         var node = new ComputeNodeEntity
         {
             Id = Guid.NewGuid(),
@@ -65,8 +66,24 @@ public sealed class RegisterComputeNodeQueryHandler
         };
         var identityToken = ComputeNodeIdentityTokens.Mint(node.Id);
         node.IdentityTokenHash = _passwordHasherService.HashPassword(identityToken);
-        context.Set<ComputeNodeEntity>().Add(node);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context
+            .InsertOnceAsync(
+                async ct =>
+                {
+                    // Every attempt starts with an empty change tracker, so the enrollment is loaded
+                    // again to be consumed.
+                    var pendingEnrollment = await context
+                        .Set<ComputeNodeEnrollmentEntity>()
+                        .SingleAsync(entity => entity.Id == enrollment.Id, ct)
+                        .ConfigureAwait(false);
+                    pendingEnrollment.ConsumedAt = consumedAt;
+                    context.Set<ComputeNodeEntity>().Add(node);
+                    return await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                },
+                ct => context.Set<ComputeNodeEntity>().AnyAsync(entity => entity.Id == node.Id, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         return Option.From(
             new RegisterComputeNodeResultDto
             {

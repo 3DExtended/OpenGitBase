@@ -17,10 +17,11 @@ import base64
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 from storage_content import (
     GitContentError,
+    build_workspace_archive,
     count_commits_ahead,
     get_blob,
     get_disk_usage,
@@ -33,6 +34,7 @@ from storage_content import (
     resolve_ref,
 )
 from storage_commit import get_commit
+import storage_lfs
 from storage_merge import check_mergeability, delete_branch_ref, execute_merge, get_diff, is_ancestor_commit, list_commits_since_merge_base
 
 STORAGE_API_TOKEN = os.environ.get("STORAGE_API_TOKEN", "")
@@ -46,6 +48,17 @@ REPLICATE_SCRIPT = os.environ.get("STORAGE_REPLICATE_SCRIPT", "/usr/local/bin/st
 # Serialises artifact swaps against reads, so nobody sees one write's manifest with another's bundle.
 _ARTIFACT_LOCK = threading.Lock()
 REPOS_ROOT = Path("/srv/git")
+# Outside every bare repository directory: import-bundle and cold recovery replace that directory whole.
+LFS_ROOT = Path(os.environ.get("STORAGE_LFS_ROOT", "/srv/git/.lfs"))
+# Loopback only: nginx forwards /lfs/... from the git HTTP port here (see nginx-git-http.conf).
+LFS_TRANSFER_PORT = int(os.environ.get("STORAGE_LFS_TRANSFER_PORT", "8083"))
+# Encrypted LFS copies live on the persistent data volume, beside (not inside) the per-watermark artifact tree.
+LFS_ENCRYPTED_ROOT = Path(os.environ.get("STORAGE_LFS_ENCRYPTED_ROOT", "/var/lib/opengitbase/lfs"))
+INTERNAL_LFS_OBJECT_PATH_PATTERN = re.compile(
+    r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/(?P<kind>objects|encrypted)/(?P<oid>[0-9a-f]{64})$"
+)
+INTERNAL_LFS_INVENTORY_PATH_PATTERN = re.compile(r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})/inventory$")
+INTERNAL_LFS_REPOSITORY_PATH_PATTERN = re.compile(r"^/internal/lfs/(?P<repository_id>[0-9a-fA-F-]{36})$")
 ARTIFACT_PATH_PATTERN = re.compile(
     r"^/internal/repos/(?P<repository_id>[0-9a-fA-F-]{36})/artifacts/(?P<watermark>\d+)$"
 )
@@ -69,6 +82,19 @@ SYNC_ALLOWED_HOSTS = {
 }
 
 
+def lfs_store() -> storage_lfs.LfsObjectStore:
+    return storage_lfs.LfsObjectStore(LFS_ROOT)
+
+
+def encrypted_lfs_store() -> storage_lfs.LfsObjectStore:
+    return storage_lfs.LfsObjectStore(LFS_ENCRYPTED_ROOT, suffix=".aead", content_addressed=False)
+
+
+def _is_inside_lfs_root(resolved: Path) -> bool:
+    lfs_root = LFS_ROOT.resolve()
+    return resolved == lfs_root or lfs_root in resolved.parents
+
+
 def _is_valid_physical_path(physical_path: str) -> bool:
     if not physical_path:
         return False
@@ -79,6 +105,8 @@ def _is_valid_physical_path(physical_path: str) -> bool:
     except OSError:
         return False
 
+    if _is_inside_lfs_root(resolved):
+        return False
     return resolved == repos_root or repos_root in resolved.parents
 
 
@@ -92,6 +120,8 @@ def _is_deletable_repo_path(physical_path: str) -> bool:
     except OSError:
         return False
 
+    if _is_inside_lfs_root(resolved):
+        return False
     return resolved != repos_root and repos_root in resolved.parents
 
 
@@ -237,9 +267,12 @@ def on_disk_inventory() -> dict[str, Any]:
                     {"repositoryId": entry.name, "artifactWatermark": watermark}
                 )
 
+    lfs = set(lfs_store().repositories()) | set(encrypted_lfs_store().repositories())
+
     return {
         "plaintextRepositories": sorted(plaintext),
         "artifactRepositories": sorted(artifacts, key=lambda a: a["repositoryId"]),
+        "lfsRepositories": sorted(lfs),
     }
 
 
@@ -462,12 +495,38 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         self._send_json(500, {"error": exc.message, "code": exc.code})
 
+    def do_HEAD(self) -> None:
+        if not self._check_auth():
+            self.send_error(401)
+            return
+
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(urlparse(self.path).path)
+        if lfs_match:
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.send_object(self, store, repository_id, oid, False),
+            )
+            return
+
+        self.send_error(404)
+
     def do_GET(self) -> None:
         if not self._check_auth():
             self.send_error(401)
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.send_object(self, store, repository_id, oid, True),
+            )
+            return
+        inventory_match = INTERNAL_LFS_INVENTORY_PATH_PATTERN.match(parsed.path)
+        if inventory_match:
+            self._handle_lfs_inventory(inventory_match.group("repository_id").lower())
+            return
         if parsed.path == "/internal/repos/content/branches":
             self._handle_list_branches()
             return
@@ -482,6 +541,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/internal/repos/content/blob/raw":
             self._handle_get_blob_raw()
+            return
+        if parsed.path == "/internal/repos/content/archive":
+            self._handle_get_workspace_archive()
             return
         if parsed.path == "/internal/repos/content/readme":
             self._handle_get_readme()
@@ -656,8 +718,38 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             "Content-Disposition",
             f'attachment; filename="{Path(normalized_path).name}"',
         )
+        # The API serves the LFS object instead of the pointer; the headers spare it parsing the body.
+        pointer = storage_lfs.parse_pointer(raw)
+        if pointer is not None:
+            self.send_header("X-OpenGitBase-Lfs-Oid", pointer[0])
+            self.send_header("X-OpenGitBase-Lfs-Size", str(pointer[1]))
         self.end_headers()
         self.wfile.write(raw)
+
+    def _handle_get_workspace_archive(self) -> None:
+        physical_path = self._physical_path_from_query()
+        params = self._query_params()
+        sha = params.get("sha", [""])[0]
+        depth = params.get("depth", [""])[0]
+        if not physical_path or not _is_valid_physical_path(physical_path):
+            self._send_json(400, {"error": "Invalid physicalPath."})
+            return
+        if not sha or not (depth.isascii() and depth.isdigit()):
+            self._send_json(400, {"error": "sha and a non-negative depth are required."})
+            return
+        if not os.path.isdir(physical_path):
+            self._send_json(404, {"error": "Repository not found."})
+            return
+        try:
+            archive = build_workspace_archive(physical_path, sha, int(depth))
+        except GitContentError as exc:
+            self._handle_content_error(exc)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/gzip")
+        self.send_header("Content-Length", str(len(archive)))
+        self.end_headers()
+        self.wfile.write(archive)
 
     def _handle_get_readme(self) -> None:
         physical_path = self._physical_path_from_query()
@@ -842,6 +934,13 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_OBJECT_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            self._handle_lfs_object(
+                lfs_match,
+                lambda store, repository_id, oid: storage_lfs.receive_object(self, store, repository_id, oid),
+            )
+            return
         artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
         if not artifact_match:
             self.send_error(404)
@@ -851,6 +950,50 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             artifact_match.group("repository_id"),
             int(artifact_match.group("watermark")),
         )
+
+    def _handle_lfs_object(
+        self,
+        match: re.Match[str],
+        action: Callable[[storage_lfs.LfsObjectStore, str, str], None],
+    ) -> None:
+        """Plaintext objects never land on an encrypted replica, and encrypted copies only there."""
+        repository_id = match.group("repository_id").lower()
+        encrypted_replica = _is_encrypted_replica(repository_id)
+        if match.group("kind") == "encrypted":
+            if not encrypted_replica:
+                self._send_json(403, {"error": "Encrypted LFS copies belong on encrypted replica storage only."})
+                return
+            store = encrypted_lfs_store()
+        else:
+            if encrypted_replica:
+                self._send_json(403, {"error": "Plaintext LFS objects are not allowed on encrypted replica storage."})
+                return
+            store = lfs_store()
+        try:
+            action(store, repository_id, match.group("oid"))
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
+
+    def _handle_lfs_inventory(self, repository_id: str) -> None:
+        """The repository's LFS copies on this node: encrypted on an encrypted replica, plaintext elsewhere."""
+        encrypted_replica = _is_encrypted_replica(repository_id)
+        store = encrypted_lfs_store() if encrypted_replica else lfs_store()
+        try:
+            objects = store.inventory(repository_id)
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
+            return
+        self._send_json(200, {"kind": "encrypted" if encrypted_replica else "plaintext", "objects": objects})
+
+    def _handle_delete_lfs_repository(self, repository_id: str) -> None:
+        """Removes the repository's LFS data whatever this node's role: plaintext objects and encrypted copies.
+        Deleting what is already gone succeeds, so a retry or a reconciler pass is harmless."""
+        try:
+            deleted = [store.delete_repository(repository_id) for store in (lfs_store(), encrypted_lfs_store())]
+        except ValueError:
+            self._send_json(404, {"error": "Not found."})
+            return
+        self._send_json(200, {"deleted": any(deleted)})
 
     def _handle_get_inventory(self) -> None:
         self._send_json(200, on_disk_inventory())
@@ -1162,17 +1305,38 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             bundle_path = bundle_file.name
 
         try:
+            # A bare repository like the one repository creation makes; --mirror keeps every ref, not only branches
+            # and tags (refs/internal/*).
             subprocess.run(
-                ["git", "clone", bundle_path, physical_path],
+                ["git", "clone", "--mirror", bundle_path, physical_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            git_config_env = {**os.environ, "GIT_DIR": physical_path}
+            # The clone recorded the temporary bundle file as its origin; the restored primary has no upstream.
+            subprocess.run(
+                ["git", "config", "--remove-section", "remote.origin"],
+                env=git_config_env,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            # A bundle carries no symref, so the clone guessed HEAD from its commit: git 2.47 picks another branch at
+            # main's commit (a release branch cut from main). Repository creation puts HEAD on main, and nothing moves it.
+            subprocess.run(
+                ["git", "symbolic-ref", "HEAD", "refs/heads/main"],
+                env=git_config_env,
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
             subprocess.run(
-                ["git", "-C", physical_path, "config", "receive.denyCurrentBranch", "ignore"],
+                ["git", "config", "http.receivepack", "true"],
+                env=git_config_env,
                 check=True,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
             )
             _write_initial_watermark(physical_path)
             _install_replication_hook(physical_path)
@@ -1189,6 +1353,9 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
         finally:
             os.unlink(bundle_path)
 
+        # Only cold recovery imports a bundle, and the node it imports to is the repository's new primary. The node
+        # may have held its encrypted copy before; that role must not keep refusing plaintext and git content.
+        _write_repo_role(_repository_id_from_path(physical_path), "Primary")
         self._send_json(201, {"physicalPath": physical_path})
 
     def do_DELETE(self) -> None:
@@ -1197,6 +1364,11 @@ class StorageHttpHandler(BaseHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        lfs_match = INTERNAL_LFS_REPOSITORY_PATH_PATTERN.match(parsed.path)
+        if lfs_match:
+            self._handle_delete_lfs_repository(lfs_match.group("repository_id"))
+            return
+
         artifact_match = ARTIFACT_PATH_PATTERN.match(parsed.path)
         if artifact_match:
             delete_replication_artifact(
@@ -1229,6 +1401,12 @@ def main() -> None:
         raise SystemExit("STORAGE_API_TOKEN is required")
 
     _backfill_replication_hooks()
+    transfer_server = ThreadingHTTPServer(
+        ("127.0.0.1", LFS_TRANSFER_PORT),
+        storage_lfs.make_transfer_handler(lfs_store(), _is_encrypted_replica),
+    )
+    threading.Thread(target=transfer_server.serve_forever, name="lfs-transfer", daemon=True).start()
+    print(f"storage-http: LFS transfers on 127.0.0.1:{LFS_TRANSFER_PORT}")
     server = ThreadingHTTPServer(("0.0.0.0", STORAGE_HTTP_PORT), StorageHttpHandler)
     print(f"storage-http: listening on 0.0.0.0:{STORAGE_HTTP_PORT}")
     server.serve_forever()

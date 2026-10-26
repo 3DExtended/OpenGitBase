@@ -94,6 +94,55 @@ public class GetRepositoryUsageQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_ReportsLfsBytesSeparatelyFromGitBytes()
+    {
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMapsterConfig>(
+            typeof(GetRepositoryUsageQueryHandler).Assembly,
+            typeof(UserEntity).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        await using var seedContext = await scope.CreateDbContextAsync();
+        var (repositoryId, _) = await RepositoryTestData.SeedPublicRepositoryAsync(seedContext);
+        var entity = await seedContext
+            .Set<RepositoryEntity>()
+            .SingleAsync(repository => repository.Id == repositoryId.Value);
+        entity.StorageBytesUsed += 500;
+        seedContext
+            .Set<LfsObjectEntity>()
+            .AddRange(
+                new LfsObjectEntity { RepositoryId = repositoryId.Value, Oid = new string('a', 64), Size = 300 },
+                new LfsObjectEntity { RepositoryId = repositoryId.Value, Oid = new string('b', 64), Size = 200 }
+            );
+        await seedContext.SaveChangesAsync();
+
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetOrganizationQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<OrganizationDto>.None);
+        var handler = new GetRepositoryUsageQueryHandler(
+            scope.GetService<IDbContextFactory<OpenGitBaseDbContext>>(),
+            new RepositoryStorageQuotaOptions(),
+            queryProcessor
+        );
+
+        var result = await handler.RunQueryAsync(
+            new GetRepositoryUsageQuery { RepositoryId = repositoryId },
+            CancellationToken.None
+        );
+
+        QueryHandlerResultAssert.AssertSome(
+            result,
+            usage =>
+            {
+                Assert.Equal(1024, usage.GitBytes);
+                Assert.Equal(500, usage.LfsBytes);
+                Assert.Equal(1524, usage.BytesUsed);
+            }
+        );
+    }
+
+    [Fact]
     public async Task RunQueryAsync_WhenRepositoryMissing_ReturnsNone()
     {
         await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, RepositoryMapsterConfig>(

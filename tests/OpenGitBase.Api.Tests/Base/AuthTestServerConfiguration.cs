@@ -116,6 +116,9 @@ internal static class AuthTestServerConfiguration
         services.RemoveAll<IStorageContentClient>();
         services.AddSingleton<IStorageContentClient, FakeStorageContentClient>();
 
+        services.RemoveAll<TwoFactorOptions>();
+        services.AddSingleton(new TwoFactorOptions { Enabled = true });
+
         ConfigureDebugFeatures(services, emailVerificationEnabled: false);
     }
 

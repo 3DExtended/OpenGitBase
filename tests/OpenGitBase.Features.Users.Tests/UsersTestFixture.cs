@@ -22,7 +22,8 @@ internal static class UsersTestFixture
 
     internal static async Task<(ServiceProvider Provider, SqliteConnection Connection)> CreateAsync(
         Action<ServiceCollection>? configure = null,
-        DateTimeOffset? utcNow = null
+        DateTimeOffset? utcNow = null,
+        Action<DbContextOptionsBuilder>? configureDbContext = null
     )
     {
         var connection = new SqliteConnection("Data Source=:memory:");
@@ -33,8 +34,10 @@ internal static class UsersTestFixture
             new FeatureAssemblyProvider([typeof(UsersMapsterConfig).Assembly])
         );
         services.AddDbContextFactory<OpenGitBaseDbContext>(options =>
-            options.UseSqlite(connection)
-        );
+        {
+            options.UseSqlite(connection);
+            configureDbContext?.Invoke(options);
+        });
         services.AddLogging();
 
         var mapsterConfig = new TypeAdapterConfig();

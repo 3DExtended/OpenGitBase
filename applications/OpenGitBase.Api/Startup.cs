@@ -125,6 +125,7 @@ public class Startup
             );
         });
         services.AddHttpContextAccessor();
+        services.AddSingleton<IRemoteIpAddressAccessor, HttpRemoteIpAddressAccessor>();
         services.AddMemoryCache();
         var redisUrl = Configuration["REDIS_URL"];
         if (!string.IsNullOrWhiteSpace(redisUrl))
@@ -148,12 +149,15 @@ public class Startup
         services.AddScoped<MergeRequestCompareService>();
         services.AddScoped<MergeRequestMergeService>();
         services.AddScoped<GitPushEnforcementService>();
+        services.AddScoped<RepositoryGitUsageMeter>();
         services.AddSingleton<WebReadReplicaSelector>();
+        services.AddScoped<ILfsContentReader, LfsContentReader>();
         services.AddScoped<RepositoryContentService>();
         services.AddScoped<IRepositoryDiskUsageProvider>(sp => sp.GetRequiredService<RepositoryContentService>());
         services.AddScoped<IRepositoryContentCache, RepositoryContentCacheService>();
         services.AddHttpClient<IStorageContentClient, StorageContentClient>();
         services.AddScoped<IRepositoryFileReader, StorageRepositoryFileReader>();
+        services.AddScoped<IRepositoryArchiveReader, StorageRepositoryFileReader>();
         services.AddHttpClient<ILayerStoreClient, LayerStoreClient>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ISshKeyService, SshKeyService>();
@@ -184,6 +188,31 @@ public class Startup
             Configuration.GetSection("PlatformMergeIdentity").Get<PlatformMergeIdentityOptions>()
                 ?? new PlatformMergeIdentityOptions()
         );
+        services.AddSingleton(Configuration.GetSection("Lfs").Get<LfsOptions>() ?? new LfsOptions());
+        services.AddSingleton(
+            Configuration.GetSection("TwoFactor").Get<TwoFactorOptions>() ?? new TwoFactorOptions()
+        );
+        services.AddSingleton(
+            Configuration.GetSection("WebAuthn").Get<WebAuthnOptions>() ?? new WebAuthnOptions()
+        );
+        services.AddSingleton<LfsActionTokenService>();
+        services.AddScoped(sp => new RepositoryAccessCheckEvaluator(
+            sp.GetRequiredService<IQueryProcessor>(),
+            sp.GetRequiredService<ISshKeyService>(),
+            sp.GetRequiredService<GitPushEnforcementService>(),
+            sp.GetRequiredService<RepositoryGitUsageMeter>(),
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<RepositoryAccessCheckEvaluator>(),
+            sp.GetRequiredService<RepositoryStorageQuotaOptions>(),
+            sp.GetRequiredService<PlatformMergeIdentityOptions>()
+        ));
+        services.AddScoped<LfsService>();
+        services.AddScoped<LfsReplicationService>();
+        services.AddSingleton<ILfsCopyCompletionScheduler, LfsCopyCompletionScheduler>();
+        services.AddScoped<ILfsCopyReconciler, LfsCopyReconciler>();
+        services.AddSingleton<LfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(provider => provider.GetRequiredService<LfsRepairQueue>());
+        services.AddHostedService(provider => provider.GetRequiredService<LfsRepairQueue>());
+        services.AddScoped<ILfsOrphanCleaner, LfsOrphanCleaner>();
         services.AddSingleton(
             Configuration.GetSection("Debug").Get<DebugFeaturesOptions>()
                 ?? new DebugFeaturesOptions()
@@ -376,11 +405,17 @@ public class Startup
         );
         services.AddScoped<OpenGitBase.Features.Pipeline.Services.GitPushOutboxDrainService>();
         services.AddScoped<IAuthCookieService, AuthCookieService>();
+        services.AddScoped<SessionIssuer>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<IUserContext, UserContextProvider>();
         services.AddSingleton<UserSessionValidator>();
         services.AddHttpClient<IStorageProvisionerClient, StorageProvisionerClient>(client =>
             client.Timeout = TimeSpan.FromMinutes(5));
+        // The probe bounds each request itself (StorageNodeLivenessProbe.DefaultTimeout).
+        services.AddHttpClient<IStorageNodeLivenessProbe, StorageNodeLivenessProbe>();
+        // LFS objects may be large; every caller bounds its own transfer (Lfs:ReplicaUploadTimeoutSeconds).
+        services.AddHttpClient<IStorageLfsClient, StorageLfsClient>(client =>
+            client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddTransient<
             IQueryHandler<
                 CreateRepositoryWithStorageQuery,

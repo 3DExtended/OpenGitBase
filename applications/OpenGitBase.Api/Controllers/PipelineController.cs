@@ -9,6 +9,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
+using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Contracts;
 
 namespace OpenGitBase.Api.Controllers;
@@ -479,14 +480,23 @@ public sealed class PipelineController : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _queryProcessor.RunQueryAsync(
-            new MaterializeWorkspaceArchiveQuery
-            {
-                JobId = PipelineJobId.From(jobId),
-                JobIdentityToken = token,
-            },
-            cancellationToken
-        ).ConfigureAwait(false);
+        Option<WorkspaceArchiveResult> result;
+        try
+        {
+            result = await _queryProcessor.RunQueryAsync(
+                new MaterializeWorkspaceArchiveQuery
+                {
+                    JobId = PipelineJobId.From(jobId),
+                    JobIdentityToken = token,
+                },
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+        catch (RepositoryFileUnavailableException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
         if (result.IsNone)
         {
             return Unauthorized();

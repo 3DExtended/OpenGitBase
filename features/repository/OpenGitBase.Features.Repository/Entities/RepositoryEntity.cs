@@ -31,7 +31,17 @@ public class RepositoryEntity : IIdentifiableEntity<Guid>
 
     public bool IsPrivate { get; set; } = false;
 
+    /// <summary>
+    /// Everything that counts against the repository's byte limit: <see cref="GitBytesUsed"/>
+    /// plus whatever else is stored for it (Git LFS objects).
+    /// </summary>
     public long StorageBytesUsed { get; set; }
+
+    /// <summary>
+    /// The git part of <see cref="StorageBytesUsed"/>: the bare repository's size on its primary,
+    /// as last measured. A new measurement replaces it inside <see cref="StorageBytesUsed"/>.
+    /// </summary>
+    public long GitBytesUsed { get; set; }
 
     public string? DefaultBranchName { get; set; }
 

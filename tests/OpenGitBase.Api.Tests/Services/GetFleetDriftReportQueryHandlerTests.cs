@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using OpenGitBase.Api.Services;
@@ -89,6 +89,57 @@ public class GetFleetDriftReportQueryHandlerTests
             Assert.Equal(repoTracked, missing.RepositoryId);
             Assert.Equal(nodeBId, missing.StorageNodeId);
             Assert.Equal("tracked", missing.RepositoryName);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ReportsLfsDataOfARepositoryThatNoLongerExists()
+    {
+        var nodeId = Guid.NewGuid();
+        var repoTracked = Guid.NewGuid();
+        var repoDeleted = Guid.NewGuid();
+
+        var provisioner = new FakeStorageProvisionerClient
+        {
+            InventoryProvider = _ => StorageInventoryResult.Ok([repoTracked], [], [repoTracked, repoDeleted]),
+        };
+
+        var (handler, provider) = await CreateHandlerAsync(
+            provisioner,
+            [nodeId],
+            configure: context =>
+            {
+                context.Set<RepositoryEntity>().Add(
+                    new RepositoryEntity
+                    {
+                        Id = repoTracked,
+                        Name = "tracked",
+                        Slug = "tracked",
+                        OwnerUserId = Guid.NewGuid(),
+                        PhysicalPath = $"/srv/git/{repoTracked}.git",
+                        Replicas =
+                        [
+                            new RepositoryReplicaEntity
+                            {
+                                RepositoryId = repoTracked,
+                                StorageNodeId = nodeId,
+                                Role = RepositoryReplicaRole.Primary,
+                            },
+                        ],
+                    }
+                );
+            }
+        );
+
+        await using (provider)
+        {
+            var report = (await handler.RunQueryAsync(new GetFleetDriftReportQuery(), default)).Get();
+
+            var orphan = Assert.Single(report.Drift);
+            Assert.Equal(FleetDriftKind.OrphanLfs, orphan.Kind);
+            Assert.Equal(repoDeleted, orphan.RepositoryId);
+            Assert.Equal(nodeId, orphan.StorageNodeId);
+            Assert.Null(orphan.RepositoryName);
         }
     }
 

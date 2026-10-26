@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.Discussion.Entities;
 
@@ -140,18 +141,18 @@ public class CreateDiscussionLinkQueryHandler
             return Option<DiscussionLinkDto>.None;
         }
 
-        var exists = await context
-            .Set<DiscussionLinkEntity>()
-            .AnyAsync(
-                link =>
-                    link.SourceDiscussionId == sourceDiscussion.Id
-                    && link.TargetDiscussionId == targetDiscussion.Id
-                    && link.RelationshipType == (int)query.RelationshipType,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        Task<bool> LinkExistsAsync(CancellationToken ct) =>
+            context
+                .Set<DiscussionLinkEntity>()
+                .AnyAsync(
+                    link =>
+                        link.SourceDiscussionId == sourceDiscussion.Id
+                        && link.TargetDiscussionId == targetDiscussion.Id
+                        && link.RelationshipType == (int)query.RelationshipType,
+                    ct
+                );
 
-        if (exists)
+        if (await LinkExistsAsync(cancellationToken).ConfigureAwait(false))
         {
             return Option.From(
                 new DiscussionLinkDto
@@ -164,16 +165,27 @@ public class CreateDiscussionLinkQueryHandler
             );
         }
 
-        context.Set<DiscussionLinkEntity>().Add(
-            new DiscussionLinkEntity
-            {
-                SourceDiscussionId = sourceDiscussion.Id,
-                TargetDiscussionId = targetDiscussion.Id,
-                RelationshipType = (int)query.RelationshipType,
-                CreatedAt = _clock.UtcNow,
-            }
-        );
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // The link is keyed by its ends and relationship, so a replayed COMMIT that already landed creates it once.
+        await context
+            .InsertOnceAsync(
+                async ct =>
+                {
+                    context.Set<DiscussionLinkEntity>().Add(
+                        new DiscussionLinkEntity
+                        {
+                            SourceDiscussionId = sourceDiscussion.Id,
+                            TargetDiscussionId = targetDiscussion.Id,
+                            RelationshipType = (int)query.RelationshipType,
+                            CreatedAt = _clock.UtcNow,
+                        }
+                    );
+                    await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return true;
+                },
+                LinkExistsAsync,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return Option.From(
             new DiscussionLinkDto

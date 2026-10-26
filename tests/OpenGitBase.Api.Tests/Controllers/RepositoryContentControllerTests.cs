@@ -18,6 +18,7 @@ namespace OpenGitBase.Api.Tests.Controllers;
 
 public class RepositoryContentControllerTests
 {
+    private const string LfsOid = "4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393";
     private static readonly DateTimeOffset ReadmeLastModifiedAt = new(2025, 2, 3, 4, 5, 6, TimeSpan.Zero);
 
     [Fact]
@@ -252,6 +253,249 @@ public class RepositoryContentControllerTests
         Assert.Equal(expectedStatus, Assert.IsAssignableFrom<StatusCodeResult>(result).StatusCode);
     }
 
+    [Fact]
+    public async Task GetBlob_OfAnLfsPointer_DescribesTheRecordedLfsObject()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(4096L);
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerBlob, lfs);
+
+        var result = await controller.GetBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        var response = Assert.IsType<RepositoryContentBlobResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.NotNull(response.Lfs);
+        Assert.Equal(LfsOid, response.Lfs.Oid);
+        Assert.Equal(4096, response.Lfs.Size);
+        Assert.True(response.Lfs.Available);
+        Assert.Null(response.TextContent);
+        Assert.Null(response.ContentBase64);
+    }
+
+    [Fact]
+    public async Task GetBlob_OfAnLfsPointerNeverUploaded_IsNotAvailable()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns((long?)null);
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerBlob, lfs);
+
+        var result = await controller.GetBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        var response = Assert.IsType<RepositoryContentBlobResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        Assert.False(response.Lfs?.Available);
+    }
+
+    [Fact]
+    public async Task GetRawBlob_OfAnLfsPointer_StreamsTheObjectWithItsTypeAndLength()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var content = new MemoryStream(new byte[4096]);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(4096L);
+        lfs.OpenAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(content);
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerRaw, lfs);
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Same(content, file.FileStream);
+        Assert.Equal("image/png", file.ContentType);
+        Assert.Equal("logo.png", file.FileDownloadName);
+        Assert.Equal(4096, controller.Response.ContentLength);
+        Assert.Equal("nosniff", controller.Response.Headers.XContentTypeOptions.ToString());
+    }
+
+    [Theory]
+    [InlineData("assets/page.html")]
+    [InlineData("assets/drawing.svg")]
+    [InlineData("assets/archive.zip")]
+    public async Task GetRawBlob_OfAnLfsFileThatIsNotAPlainImage_IsServedAsOctetStream(string path)
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(4096L);
+        lfs.OpenAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(new MemoryStream(new byte[4096]));
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerRaw, lfs);
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", path, CancellationToken.None);
+
+        Assert.Equal("application/octet-stream", Assert.IsType<FileStreamResult>(result).ContentType);
+    }
+
+    [Fact]
+    public async Task GetRawBlob_OfAnLfsPointerNeverUploaded_AnswersNotAvailable()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns((long?)null);
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerRaw, lfs);
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        await lfs.DidNotReceive().OpenAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetRawBlob_OfARecordedLfsObjectNoNodeHolds_AnswersServiceUnavailableWithRetryAfter()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        lfs.FindRecordedSizeAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns(4096L);
+        lfs.OpenAsync(repository.Id.Value, LfsOid, Arg.Any<CancellationToken>()).Returns((Stream?)null);
+        var controller = CreateController(repository, authenticatedUserId: null, ConfigureLfsPointerRaw, lfs);
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, Assert.IsType<ObjectResult>(result).StatusCode);
+        Assert.Equal("10", controller.Response.Headers.RetryAfter.ToString());
+    }
+
+    [Fact]
+    public async Task GetRawBlob_OfAnLfsFileInAPrivateRepository_IsForbiddenForAnOutsider()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: true);
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        ConfigureRepositoryLookup(queryProcessor, repository);
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetRepositoryMemberQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option<RepositoryMemberDto>.None);
+        var storage = Substitute.For<IStorageContentClient>();
+        ConfigureLfsPointerRaw(queryProcessor, storage, repository);
+        var lfs = Substitute.For<ILfsContentReader>();
+        var controller = CreateController(queryProcessor, UserId.From(Guid.NewGuid()), storage, lfs);
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "assets/logo.png", CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result);
+        await lfs.DidNotReceive().OpenAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await storage.DidNotReceive().GetRawAsync(
+            Arg.Any<RepositoryRoutingTargetDto>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>()
+        );
+    }
+
+    [Fact]
+    public async Task GetRawBlob_OfAnOrdinaryFile_StillReturnsItsBytes()
+    {
+        var repository = CreateRepository(UserId.From(Guid.NewGuid()), isPrivate: false);
+        var lfs = Substitute.For<ILfsContentReader>();
+        var controller = CreateController(
+            repository,
+            authenticatedUserId: null,
+            (queryProcessor, storage, repo) =>
+            {
+                ConfigureRouting(queryProcessor);
+                storage
+                    .GetRawAsync(Arg.Any<RepositoryRoutingTargetDto>(), Arg.Any<string>(), repo.PhysicalPath, "main", "README.md", Arg.Any<CancellationToken>())
+                    .Returns(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent("# Hi\n"u8.ToArray()) });
+            },
+            lfs
+        );
+
+        var result = await controller.GetRawBlob("owner", "repo", "main", "README.md", CancellationToken.None);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("# Hi\n"u8.ToArray(), file.FileContents);
+        await lfs.DidNotReceive().FindRecordedSizeAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static void ConfigureRouting(IQueryProcessor queryProcessor)
+    {
+        queryProcessor
+            .RunQueryAsync(Arg.Any<RepositoryReplicationRoutingQuery>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Option.From(
+                    new RepositoryReplicationRoutingDto
+                    {
+                        WriteQuorumAvailable = true,
+                        Targets =
+                        [
+                            new RepositoryRoutingTargetDto
+                            {
+                                StorageNodeId = Guid.NewGuid(),
+                                InternalHost = "replica.local",
+                                InternalHttpPort = 8080,
+                                IsHealthy = true,
+                                IsPrimary = false,
+                                IsInSync = true,
+                            },
+                        ],
+                    }
+                )
+            );
+        queryProcessor
+            .RunQueryAsync(Arg.Any<GetStorageNodeApiTokenQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Option.From("storage-token"));
+    }
+
+    private static void ConfigureLfsPointerBlob(
+        IQueryProcessor queryProcessor,
+        IStorageContentClient storageContentClient,
+        RepositoryDto repository
+    )
+    {
+        ConfigureRouting(queryProcessor);
+        storageContentClient
+            .GetBlobAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                repository.PhysicalPath,
+                "main",
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new StorageContentBlobResult
+                {
+                    Payload = new StorageContentBlobPayload
+                    {
+                        Ref = "main",
+                        Path = "assets/logo.png",
+                        Size = 4096,
+                        IsBinary = true,
+                        PreviewKind = "image",
+                        Lfs = new StorageContentLfsPointerPayload { Oid = LfsOid, Size = 4096 },
+                    },
+                }
+            );
+    }
+
+    private static void ConfigureLfsPointerRaw(
+        IQueryProcessor queryProcessor,
+        IStorageContentClient storageContentClient,
+        RepositoryDto repository
+    )
+    {
+        ConfigureRouting(queryProcessor);
+        storageContentClient
+            .GetRawAsync(
+                Arg.Any<RepositoryRoutingTargetDto>(),
+                Arg.Any<string>(),
+                repository.PhysicalPath,
+                "main",
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(
+                        System.Text.Encoding.ASCII.GetBytes($"version https://git-lfs.github.com/spec/v1\noid sha256:{LfsOid}\nsize 4096\n")
+                    ),
+                };
+                response.Headers.Add("X-OpenGitBase-Lfs-Oid", LfsOid);
+                response.Headers.Add("X-OpenGitBase-Lfs-Size", "4096");
+                return response;
+            });
+    }
+
     private static void ConfigureSuccessfulTree(
         IQueryProcessor queryProcessor,
         IStorageContentClient storageContentClient,
@@ -328,7 +572,8 @@ public class RepositoryContentControllerTests
     private static RepositoryContentController CreateController(
         RepositoryDto repository,
         UserId? authenticatedUserId,
-        Action<IQueryProcessor, IStorageContentClient, RepositoryDto>? configureStorage = null
+        Action<IQueryProcessor, IStorageContentClient, RepositoryDto>? configureStorage = null,
+        ILfsContentReader? lfsContent = null
     )
     {
         var queryProcessor = Substitute.For<IQueryProcessor>();
@@ -336,13 +581,14 @@ public class RepositoryContentControllerTests
         ConfigureRepositoryLookup(queryProcessor, repository);
         configureStorage?.Invoke(queryProcessor, storageContentClient, repository);
 
-        return CreateController(queryProcessor, authenticatedUserId, storageContentClient);
+        return CreateController(queryProcessor, authenticatedUserId, storageContentClient, lfsContent);
     }
 
     private static RepositoryContentController CreateController(
         IQueryProcessor queryProcessor,
         UserId? authenticatedUserId,
-        IStorageContentClient? storageContentClient = null
+        IStorageContentClient? storageContentClient = null,
+        ILfsContentReader? lfsContent = null
     )
     {
         storageContentClient ??= Substitute.For<IStorageContentClient>();
@@ -360,7 +606,8 @@ public class RepositoryContentControllerTests
             queryProcessor,
             new WebReadReplicaSelector(),
             storageContentClient,
-            cache
+            cache,
+            lfsContent ?? Substitute.For<ILfsContentReader>()
         );
 
         var controller = new RepositoryContentController(contentService)

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Repository.Entities;
@@ -166,6 +166,15 @@ public sealed class GetFleetDriftReportQueryHandler
                 repositoryNameById,
                 FleetDriftKind.MissingArtifact,
                 "EncryptedReplica record exists for this node but no artifact is on disk."
+            );
+            AddDrift(
+                drift,
+                inventory.LfsRepositories.Where(repositoryId => !repositoryNameById.ContainsKey(repositoryId)),
+                node,
+                nodeGuid,
+                repositoryNameById,
+                FleetDriftKind.OrphanLfs,
+                "LFS data is on disk for a repository that no longer exists."
             );
         }
 

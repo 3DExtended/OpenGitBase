@@ -59,6 +59,15 @@ function formatBytes(bytes: number): string {
         <span class="text-[var(--ogb-text-muted)]">{{ percentLabel }}%</span>
       </div>
 
+      <p
+        v-if="usage.lfsBytes"
+        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ogb-text-muted)]"
+        data-testid="storage-usage-split"
+      >
+        <span>{{ t('repo.storage.gitBytes', { bytes: formatBytes(usage.gitBytes ?? usage.bytesUsed - usage.lfsBytes) }) }}</span>
+        <span>{{ t('repo.storage.lfsBytes', { bytes: formatBytes(usage.lfsBytes) }) }}</span>
+      </p>
+
       <UProgress
         :model-value="usagePercentValue"
         :color="atLimit ? 'error' : warningThreshold ? 'warning' : 'primary'"

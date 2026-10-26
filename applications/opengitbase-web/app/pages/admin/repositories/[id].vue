@@ -203,6 +203,11 @@ useAdminReplicationPoll(loadDetail)
           </div>
         </div>
       </UCard>
+
+      <AdminLfsCopyStatus
+        v-if="detail.lfs && detail.lfs.objectCount > 0"
+        :lfs="detail.lfs"
+      />
     </template>
   </div>
 </template>
