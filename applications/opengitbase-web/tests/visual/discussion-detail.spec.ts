@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { waitForPageReady } from './helpers'
 
 const mockDiscussionDetail = {
   id: 'disc-0001-0000-0000-000000000001',
@@ -179,7 +180,7 @@ async function waitForApp(
   })
   await installDiscussionRoutes(page, detail)
   await page.goto('/demo-user/hello-world/discussions/1')
-  await page.waitForLoadState('networkidle')
+  await waitForPageReady(page)
 }
 
 async function settleForScreenshot(page: import('@playwright/test').Page) {

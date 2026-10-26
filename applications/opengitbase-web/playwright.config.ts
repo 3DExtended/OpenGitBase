@@ -12,6 +12,10 @@ const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:$
 export default defineConfig({
   testDir: './tests/visual',
   globalSetup: './tests/visual/global-setup.ts',
+  // networkidle and action waits are bounded only by the test timeout. Under heavy
+  // machine load a warm page alone can take 20-30 s to load from the dev server;
+  // toHaveScreenshot keeps the 5 s expect default.
+  timeout: 60_000,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -37,6 +41,8 @@ export default defineConfig({
   webServer: {
     command: `pnpm dev --port ${playwrightPort}`,
     url: playwrightBaseUrl,
+    // nuxt dev needs well over the 60 s default to answer when the machine is busy.
+    timeout: 180_000,
     reuseExistingServer: false,
     env: {
       NUXT_PUBLIC_MSW: 'false',

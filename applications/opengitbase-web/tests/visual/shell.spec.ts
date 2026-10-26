@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { freezeClock } from './helpers'
+import { freezeClock, waitForPageReady } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -24,10 +24,7 @@ async function authenticate(page: import('@playwright/test').Page) {
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.goto('/__visual__/?msw=1')
-  await page.waitForLoadState('networkidle')
-  await page.evaluate(async () => {
-    await document.fonts.ready
-  })
+  await waitForPageReady(page)
   await page.addStyleTag({
     content: `
       *, *::before, *::after {
@@ -93,7 +90,7 @@ test.describe('Shell components @regression', () => {
 test.describe('Auth screens', () => {
   test('sign-in', async ({ page }) => {
     await page.goto('/sign-in?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.evaluate(async () => { await document.fonts.ready })
     await expect(page.locator('body')).toHaveScreenshot('sign-in.png', {
       fullPage: true,
@@ -102,7 +99,7 @@ test.describe('Auth screens', () => {
 
   test('sign-up', async ({ page }) => {
     await page.goto('/sign-up?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.evaluate(async () => { await document.fonts.ready })
     await expect(page.locator('body')).toHaveScreenshot('sign-up.png', {
       fullPage: true,
@@ -111,7 +108,7 @@ test.describe('Auth screens', () => {
 
   test('forgot-password', async ({ page }) => {
     await page.goto('/forgot-password?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('forgot-password.png', {
       fullPage: true,
     })
@@ -119,7 +116,7 @@ test.describe('Auth screens', () => {
 
   test('reset-password', async ({ page }) => {
     await page.goto('/reset-password?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('reset-password.png', {
       fullPage: true,
     })
@@ -127,7 +124,7 @@ test.describe('Auth screens', () => {
 
   test('verify-email', async ({ page }) => {
     await page.goto('/verify-email?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('verify-email.png', {
       fullPage: true,
     })
@@ -138,7 +135,7 @@ test.describe('Settings screens', () => {
   test('settings', async ({ page }) => {
     await authenticate(page)
     await page.goto('/settings?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('settings.png', {
       fullPage: true,
     })
@@ -147,7 +144,7 @@ test.describe('Settings screens', () => {
   test('ssh-keys', async ({ page }) => {
     await authenticate(page)
     await page.goto('/settings/ssh-keys?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('ssh-keys.png', {
       fullPage: true,
     })
@@ -186,7 +183,7 @@ test.describe('Settings screens', () => {
       }),
     )
     await page.goto('/settings/security?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.getByTestId('two-factor-status-card')).toBeVisible()
     await expect(page.getByTestId('passkey-name')).toHaveText(['MacBook'])
     await expect(page.locator('body')).toHaveScreenshot('security.png', {
@@ -198,7 +195,7 @@ test.describe('Settings screens', () => {
 test.describe('Discovery screens', () => {
   test('explore', async ({ page }) => {
     await page.goto('/explore?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('explore.png', {
       fullPage: true,
     })
@@ -207,7 +204,7 @@ test.describe('Discovery screens', () => {
   test('logged-out home', async ({ page }) => {
     await page.route('**/api/account/me', route => route.fulfill({ status: 401, body: '' }))
     await page.goto('/?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('home-logged-out.png', {
       fullPage: true,
     })
@@ -215,7 +212,7 @@ test.describe('Discovery screens', () => {
 
   test('profile', async ({ page }) => {
     await page.goto('/demo-user?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('profile.png', {
       fullPage: true,
     })
@@ -226,7 +223,7 @@ test.describe('Repository screens', () => {
   test('dashboard', async ({ page }) => {
     await authenticate(page)
     await page.goto('/?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('dashboard.png', {
       fullPage: true,
     })
@@ -234,7 +231,7 @@ test.describe('Repository screens', () => {
 
   test('repo overview', async ({ page }) => {
     await page.goto('/demo-user/hello-world?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('repo-overview.png', {
       fullPage: true,
     })
@@ -243,7 +240,7 @@ test.describe('Repository screens', () => {
   test('repo settings', async ({ page }) => {
     await authenticate(page)
     await page.goto('/demo-user/hello-world/settings?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('repo-settings.png', {
       fullPage: true,
     })
@@ -252,7 +249,7 @@ test.describe('Repository screens', () => {
   test('repo members', async ({ page }) => {
     await authenticate(page)
     await page.goto('/demo-user/hello-world/members?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('repo-members.png', {
       fullPage: true,
     })
@@ -261,7 +258,7 @@ test.describe('Repository screens', () => {
   test('new repo', async ({ page }) => {
     await authenticate(page)
     await page.goto('/repos/new?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('repo-new.png', {
       fullPage: true,
     })
@@ -270,7 +267,7 @@ test.describe('Repository screens', () => {
   test('new org', async ({ page }) => {
     await authenticate(page)
     await page.goto('/orgs/new?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.locator('body')).toHaveScreenshot('org-new.png', {
       fullPage: true,
     })
@@ -278,7 +275,7 @@ test.describe('Repository screens', () => {
 
   test('public status page', async ({ page }) => {
     await page.goto('/status?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await page.evaluate(async () => { await document.fonts.ready })
     await expect(page.locator('body')).toHaveScreenshot('status-page.png', {
       fullPage: true,

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { freezeClock } from './helpers'
+import { freezeClock, waitForPageReady } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
@@ -7,10 +7,7 @@ async function waitForApp(page: import('@playwright/test').Page) {
   })
   await freezeClock(page)
   await page.goto('/__visual__/?msw=1')
-  await page.waitForLoadState('networkidle')
-  await page.evaluate(async () => {
-    await document.fonts.ready
-  })
+  await waitForPageReady(page)
   await page.addStyleTag({
     content: `
       *, *::before, *::after {

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import type { CDPSession, Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { PAGE_READY_TIMEOUT, blockServiceWorker, waitForPageReady } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -115,7 +115,7 @@ test.describe('passkey sign-in', () => {
     await page.goto('/sign-in?redirect=/settings')
     await page.getByTestId('passkey-sign-in').click()
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/settings')
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: PAGE_READY_TIMEOUT }).toBe('/settings')
     expect(api.signedIn).toBe(true)
     expect(api.passwordLogins).toBe(0)
     const { credentials } = await cdp.send('WebAuthn.getCredentials', { authenticatorId })
@@ -129,7 +129,7 @@ test.describe('passkey sign-in', () => {
     // the user picking the passkey from the autofill menu. Nothing is clicked.
     await page.goto('/sign-in?redirect=/settings')
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/settings')
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: PAGE_READY_TIMEOUT }).toBe('/settings')
     expect(api.signedIn).toBe(true)
     expect(api.optionsRequests).toBe(1)
     expect(api.passwordLogins).toBe(0)
@@ -158,7 +158,7 @@ test.describe('passkey sign-in', () => {
 
     await page.goto('/sign-in')
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
 
     await expect(page.getByTestId('passkey-sign-in')).toHaveCount(0)
     await expect(page.getByRole('textbox').first()).toHaveAttribute('autocomplete', 'username webauthn')
@@ -183,7 +183,10 @@ test.describe('passkey sign-in', () => {
     })
 
     await page.goto('/sign-in')
-    await expect.poll(() => page.evaluate(() => (window as unknown as { passkeyRequests: string[] }).passkeyRequests)).toEqual(['conditional'])
+    await expect.poll(
+      () => page.evaluate(() => (window as unknown as { passkeyRequests: string[] }).passkeyRequests),
+      { timeout: PAGE_READY_TIMEOUT },
+    ).toEqual(['conditional'])
     await page.getByRole('textbox').first().fill('demo-user')
     await page.locator('input[type="password"]').fill('wrong')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
