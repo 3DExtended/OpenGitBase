@@ -10,6 +10,7 @@ See skills [`cli-goldens`](skills/cli-goldens/SKILL.md) and [`visual-snapshots`]
 | Feature scoped | `dotnet test tests/OpenGitBase.Features.{Feature}.Tests` | Faster TDD |
 | CLI unit | `dotnet test tests/OpenGitBase.Cli.Tests` | `ogb` changes |
 | CLI integration | `dotnet test tests/OpenGitBase.Cli.Integration.Tests` | CLI + in-process API |
+| Real Postgres | `dotnet test tests/OpenGitBase.Api.Tests` with Docker running | `[RequiresDockerFact]` tests start Postgres through Testcontainers (startup migrations); skipped without Docker, as in ogb-hosted CI |
 | Compose E2E | `dotnet test tests/OpenGitBase.E2E.Tests --filter "RequiresCompose"` | Real stack |
 | Domain E2E scripts | `./scripts/test-*-e2e.sh` | See script name for domain |
 | Web unit | `cd applications/opengitbase-web && pnpm test` | TS/Vue logic |
@@ -51,6 +52,7 @@ Opt out: `[ExcludeFromCoverageTests]` on types that genuinely need no test class
 | Vue component/page | Gallery fixture + Playwright snapshot |
 | CLI `--json` contract | JSON golden in `Goldens/` (see [cli-goldens](skills/cli-goldens/SKILL.md)) |
 | API + compose path | Relevant E2E script or tier test |
+| API / ComputeAgent Dockerfile or compose service | `scripts/test-dotnet-abort-restart.sh` |
 | Storage / Dispatcher entrypoint, Dockerfile or compose service | `scripts/test-entrypoint-supervision.sh` |
 
 ## TDD
@@ -67,5 +69,8 @@ Tracer-bullet: one test → minimal code → green. With PRD slice: [`/tdd`](ski
 | `scripts/check-docs-mirror-freshness.sh` | Compare pull inventory vs git mirror |
 | `scripts/test-discussions-e2e.sh` | Discussions API |
 | `scripts/test-repo-browse-e2e.sh` | Repo browse / git HTTP |
+| `scripts/test-kafka-quorum-reset.sh` | `kafka-quorum-reset.sh --wipe` removes only its own compose project's Kafka volumes and stops before touching the stack when the project cannot be resolved (stub `docker`; needs `docker-compose`, no daemon) |
 | `applications/OpenGitBase.Dispatcher/scripts/entrypoint-key-bootstrap-test.sh` | Dispatcher entrypoint storage SSH key bootstrap (builds the image; needs Docker) |
+| `scripts/test-dotnet-abort-restart.sh` | Docker restarts the API and ComputeAgent containers after an unhandled .NET exception, and `docker stop` stops them gracefully (builds both images; needs Docker) |
+| `scripts/test-kafka-data-placement.sh` | Kafka data placement: named volumes on dev/CI/E2E, SSD bind mounts in the prod overlay and Tower override template, placement guard, wipe (needs Docker) |
 | `scripts/test-entrypoint-supervision.sh` | Docker restarts the storage and dispatcher containers when any process their entrypoint supervises dies (storage-http-server.py, nginx, sshd, the heartbeat loop, dotnet; dispatcher with and without `GIT_SSH_ENABLED`), and `docker stop` reaches every process and exits 143 inside the grace period (builds both images; needs Docker) |

@@ -18,7 +18,7 @@ public sealed class GitAccessTokenHandlerTestScope : IAsyncDisposable
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _serviceProvider;
 
-    public GitAccessTokenHandlerTestScope()
+    public GitAccessTokenHandlerTestScope(Action<DbContextOptionsBuilder>? configureDbContext = null)
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
@@ -28,7 +28,7 @@ public sealed class GitAccessTokenHandlerTestScope : IAsyncDisposable
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider([handlerAssembly, typeof(GitAccessTokenMapsterConfig).Assembly])
         );
-        services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection);
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(_connection, configureDbContext);
         services.AddLogging();
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddSingleton<ISystemClock, SystemClock>();

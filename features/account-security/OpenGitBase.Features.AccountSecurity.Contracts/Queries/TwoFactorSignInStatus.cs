@@ -10,4 +10,7 @@ public enum TwoFactorSignInStatus
 
     /// <summary>Too many wrong second-factor attempts in a row; see <c>LockedUntil</c>.</summary>
     LockedOut = 4,
+
+    /// <summary>The passkey assertion failed verification or is not one of the user's passkeys; counted like a wrong code.</summary>
+    PasskeyRejected = 5,
 }

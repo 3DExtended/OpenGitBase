@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.StorageNode.Contracts;
 using OpenGitBase.Features.StorageNode.Entities;
 
@@ -50,8 +51,17 @@ public sealed class CreateStorageNodeEnrollmentQueryHandler
             MaxBytes = query.MaxBytes,
             HostingScope = query.HostingScope,
         };
-        context.Set<StorageNodeEnrollmentEntity>().Add(entity);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context
+            .InsertOnceAsync(
+                ct =>
+                {
+                    context.Set<StorageNodeEnrollmentEntity>().Add(entity);
+                    return context.SaveChangesAsync(ct);
+                },
+                ct => context.Set<StorageNodeEnrollmentEntity>().AnyAsync(x => x.Id == entity.Id, ct),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return Option.From(
             new CreateStorageNodeEnrollmentResult

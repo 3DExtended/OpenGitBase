@@ -14,23 +14,34 @@ internal static class AuthenticationChallenges
 {
     /// <summary>
     /// Stores a challenge bound to <paramref name="binding"/>, or renews the one already bound to it,
-    /// and drops the user's expired ones.
+    /// and drops the user's expired ones; without a user, the expired ones of nobody.
     /// </summary>
     public static async Task CreateAsync(
         OpenGitBaseDbContext context,
         AuthenticationChallengePurpose purpose,
-        Guid userId,
+        Guid? userId,
         string binding,
         TimeSpan lifetime,
         DateTimeOffset now,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? payload = null
     )
     {
         var tokenHash = Hash(binding);
-        var existing = await context
-            .Set<AuthenticationChallengeEntity>()
-            .Where(c => c.UserId == userId)
-            .ToListAsync(cancellationToken);
+        if (userId is null)
+        {
+            await DeleteExpiredAnonymousAsync(context, now, cancellationToken);
+        }
+
+        var existing = userId is null
+            ? await context
+                .Set<AuthenticationChallengeEntity>()
+                .Where(c => c.UserId == null && c.Purpose == purpose && c.TokenHash == tokenHash)
+                .ToListAsync(cancellationToken)
+            : await context
+                .Set<AuthenticationChallengeEntity>()
+                .Where(c => c.UserId == userId)
+                .ToListAsync(cancellationToken);
         var renewed = existing.FirstOrDefault(c => c.Purpose == purpose && c.TokenHash == tokenHash);
         context
             .Set<AuthenticationChallengeEntity>()
@@ -45,6 +56,7 @@ internal static class AuthenticationChallenges
                     Purpose = purpose,
                     UserId = userId,
                     TokenHash = tokenHash,
+                    Payload = payload,
                     ExpiresAt = now + lifetime,
                     CreatedAt = now,
                 }
@@ -54,6 +66,7 @@ internal static class AuthenticationChallenges
         {
             renewed.ExpiresAt = now + lifetime;
             renewed.CreatedAt = now;
+            renewed.Payload = payload;
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -93,6 +106,32 @@ internal static class AuthenticationChallenges
     /// <summary>A random 256-bit token for the client, base64url without padding.</summary>
     public static string NewToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    /// <summary>
+    /// Anonymous challenges belong to nobody, so no later request of their owner cleans them up; each
+    /// new one removes the expired rest. Only ids and expiry are read, compared in memory.
+    /// </summary>
+    private static async Task DeleteExpiredAnonymousAsync(
+        OpenGitBaseDbContext context,
+        DateTimeOffset now,
+        CancellationToken cancellationToken
+    )
+    {
+        var anonymous = await context
+            .Set<AuthenticationChallengeEntity>()
+            .AsNoTracking()
+            .Where(c => c.UserId == null)
+            .Select(c => new { c.Id, c.ExpiresAt })
+            .ToListAsync(cancellationToken);
+        var expired = anonymous.Where(c => c.ExpiresAt <= now).Select(c => c.Id).ToList();
+        if (expired.Count > 0)
+        {
+            await context
+                .Set<AuthenticationChallengeEntity>()
+                .Where(c => expired.Contains(c.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+    }
 
     private static string Hash(string binding) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(binding)));

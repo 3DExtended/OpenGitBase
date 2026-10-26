@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker, freezeClock } from './helpers'
+import { PAGE_READY_TIMEOUT, blockServiceWorker, freezeClock, waitForPageReady } from './helpers'
 
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
@@ -155,7 +155,7 @@ test('gallery unified diff fixture', async ({ page }) => {
     document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
   })
   await page.goto('/__visual__/?msw=1')
-  await page.waitForLoadState('networkidle')
+  await waitForPageReady(page)
   await disableAnimations(page)
   await expect(page.getByTestId('visual-commit-unified-diff')).toHaveScreenshot('visual-commit-unified-diff.png')
 })
@@ -169,8 +169,8 @@ test.describe('Commit change view', () => {
     await installCommitRoutes(page)
     await freezeClock(page)
     await page.goto('/demo-user/hello-world/commit/abc123de?from=mr/7', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
-    await expect(page.getByText('src/policy.ts')).toBeVisible()
+    await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
+    await expect(page.getByText('src/policy.ts')).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
     await disableAnimations(page)
     await expect(page.locator('body')).toHaveScreenshot('commit-change-view-page.png', { fullPage: true })
   })
@@ -180,8 +180,8 @@ test.describe('Commit change view', () => {
     await page.goto('/demo-user/hello-world/merge-requests/7', { waitUntil: 'domcontentloaded' })
     await page.getByRole('tab', { name: 'Commits' }).click()
     await page.getByText(commitDetailPayload.message).click()
-    await expect(page).toHaveURL(/\/demo-user\/hello-world\/commit\//)
-    await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible()
+    await expect(page).toHaveURL(/\/demo-user\/hello-world\/commit\//, { timeout: PAGE_READY_TIMEOUT })
+    await expect(page.getByRole('heading', { name: commitDetailPayload.message })).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
     await expect(page.getByRole('link', { name: 'Back to merge request !7' })).toBeVisible()
   })
 
