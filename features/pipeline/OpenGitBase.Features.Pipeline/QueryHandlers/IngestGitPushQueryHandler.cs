@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 
@@ -40,19 +41,26 @@ public sealed class IngestGitPushQueryHandler : IQueryHandler<IngestGitPushQuery
 
         if (!exists)
         {
-            context.Set<GitPushOutboxEntity>()
-                .Add(
-                    new GitPushOutboxEntity
+            var outbox = new GitPushOutboxEntity
+            {
+                Id = Guid.NewGuid(),
+                RepositoryId = query.RepositoryId,
+                Ref = query.Ref ?? string.Empty,
+                AfterSha = query.AfterSha,
+                Status = GitPushOutboxStatus.Pending,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            await context
+                .InsertOnceAsync(
+                    ct =>
                     {
-                        Id = Guid.NewGuid(),
-                        RepositoryId = query.RepositoryId,
-                        Ref = query.Ref ?? string.Empty,
-                        AfterSha = query.AfterSha,
-                        Status = GitPushOutboxStatus.Pending,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    }
-                );
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                        context.Set<GitPushOutboxEntity>().Add(outbox);
+                        return context.SaveChangesAsync(ct);
+                    },
+                    ct => context.Set<GitPushOutboxEntity>().AnyAsync(entity => entity.Id == outbox.Id, ct),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         return Option.From(true);

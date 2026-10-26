@@ -1,7 +1,10 @@
+import type { PasskeyCredentialJSON } from './webauthn'
+
 /** What sign-in answers instead of a session token when the account has 2FA on. */
 export interface TwoFactorChallenge {
   twoFactorRequired: true
   challengeToken: string
+  /** `totp`, `passkey` and `recovery`, as far as the account has them. */
   methods: string[]
 }
 
@@ -12,7 +15,17 @@ export interface AccountSecurity {
   totpConfigured: boolean
   /** False for Google/Apple-only accounts. */
   hasPassword: boolean
+  /** Unused recovery codes. */
+  recoveryCodesRemaining: number
+  /** Whether passkeys can be used on this instance (`WebAuthn:RelyingPartyId`). */
+  passkeysAvailable: boolean
 }
+
+/** How the second step is answered: the authenticator code, one recovery code or a passkey. */
+export type SecondFactorAnswer =
+  | { code: string }
+  | { recoveryCode: string }
+  | { passkeyAssertion: PasskeyCredentialJSON }
 
 export interface TotpSetup {
   otpauthUri: string
@@ -35,6 +48,28 @@ export function formatSetupKey(secret: string): string {
   return secret.match(/.{1,4}/g)?.join(' ') ?? secret
 }
 
+/** The warning shows from this many unused recovery codes down. */
+export const RECOVERY_CODES_LOW = 2
+
+export function recoveryCodesRunningLow(remaining: number): boolean {
+  return remaining <= RECOVERY_CODES_LOW
+}
+
+/** The text file people download to keep their recovery codes. */
+export function recoveryCodesFileContent(
+  codes: string[],
+  context: { account: string, site: string, createdAt: Date },
+): string {
+  const created = context.createdAt.toISOString().slice(0, 10)
+  return [
+    `OpenGitBase recovery codes for ${context.account} (${context.site})`,
+    `Created ${created}. Each code works once.`,
+    '',
+    ...codes,
+    '',
+  ].join('\n')
+}
+
 const errorKeys: Record<string, string> = {
   invalid_code: 'auth.twoFactor.errors.invalidCode',
   challenge_expired: 'auth.twoFactor.errors.challengeExpired',
@@ -42,12 +77,26 @@ const errorKeys: Record<string, string> = {
   invalid_credentials: 'auth.twoFactor.errors.invalidCredentials',
   second_factor_required: 'auth.twoFactor.errors.codeRequired',
   no_pending_setup: 'auth.twoFactor.errors.setupExpired',
+  two_factor_not_enabled: 'auth.twoFactor.errors.notEnabled',
   reauthentication_required: 'auth.twoFactor.errors.reauthenticationRequired',
   reauthentication_unavailable: 'auth.twoFactor.errors.reauthenticationUnavailable',
+  passkey_rejected: 'settings.security.passkeys.errors.rejected',
+  passkey_already_registered: 'settings.security.passkeys.errors.alreadyRegistered',
+  no_passkeys: 'settings.security.passkeys.errors.noPasskeys',
+  invalid_name: 'settings.security.passkeys.errors.invalidName',
+  last_second_factor: 'settings.security.passkeys.errors.lastSecondFactor',
+  two_factor_already_enabled: 'auth.twoFactor.errors.alreadyEnabled',
 }
 
 /** The translation key for a failed second-factor or re-authentication request. */
-export function secondFactorErrorKey(error: string | null, status: number): string {
+export function secondFactorErrorKey(
+  error: string | null,
+  status: number,
+  method: 'code' | 'recovery' = 'code',
+): string {
+  if (error === 'invalid_code' && method === 'recovery') {
+    return 'auth.twoFactor.errors.invalidRecoveryCode'
+  }
   if (error && errorKeys[error]) {
     return errorKeys[error]
   }

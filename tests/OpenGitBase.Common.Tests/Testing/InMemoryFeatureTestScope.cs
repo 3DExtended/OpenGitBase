@@ -20,6 +20,15 @@ public sealed class InMemoryFeatureTestScope<TDbContext, TMapsterConfig> : IAsyn
         Assembly handlerAssembly,
         params Assembly[] additionalConfigurationAssemblies
     )
+        : this(configureDbContext: null, handlerAssembly, additionalConfigurationAssemblies)
+    {
+    }
+
+    public InMemoryFeatureTestScope(
+        Action<DbContextOptionsBuilder>? configureDbContext,
+        Assembly handlerAssembly,
+        params Assembly[] additionalConfigurationAssemblies
+    )
     {
         _connection = SqliteTestConnection.OpenInMemory();
 
@@ -31,7 +40,7 @@ public sealed class InMemoryFeatureTestScope<TDbContext, TMapsterConfig> : IAsyn
         services.AddSingleton<IFeatureAssemblyProvider>(
             new FeatureAssemblyProvider(assemblies.Distinct().ToArray())
         );
-        services.AddTestDbContextFactory<TDbContext>(_connection);
+        services.AddTestDbContextFactory<TDbContext>(_connection, configureDbContext);
         services.AddLogging();
 
         var mapsterConfig = new TypeAdapterConfig();

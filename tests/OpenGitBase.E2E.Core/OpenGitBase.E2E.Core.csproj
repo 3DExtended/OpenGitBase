@@ -8,6 +8,12 @@
   <ItemGroup>
     <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.1" />
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The API tests' software passkey, so the compose suite runs the same WebAuthn answers against Postgres. -->
+    <Compile Include="..\OpenGitBase.Common.Tests\Testing\SoftwarePasskeyAuthenticator.cs" Link="SoftwarePasskeyAuthenticator.cs" />
   </ItemGroup>
 
 </Project>

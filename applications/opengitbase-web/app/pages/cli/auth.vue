@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TwoFactorChallenge } from '~/utils/twoFactor'
+import type { SecondFactorAnswer, TwoFactorChallenge } from '~/utils/twoFactor'
 import { isTwoFactorChallenge, secondFactorErrorKey } from '~/utils/twoFactor'
 
 definePageMeta({
@@ -28,6 +28,17 @@ const hostLabel = computed(() => {
   return runtimeConfig.public.instanceName as string
 })
 
+const {
+  available: passkeyAvailable,
+  busy: passkeyBusy,
+  errorKey: passkeyError,
+  signIn: signInWithPasskey,
+  pause: pausePasskeyAutofill,
+  resume: resumePasskeyAutofill,
+} = usePasskeySignIn(token => returnTokenToCli(token), () => queryParams.value !== null)
+
+const { supported: passkeySecondFactorSupported, answer: answerWithPasskey } = usePasskeySecondFactor()
+
 useHead({ title: 'CLI sign in' })
 
 async function onSubmit() {
@@ -37,11 +48,13 @@ async function onSubmit() {
 
   loading.value = true
   error.value = null
+  pausePasskeyAutofill()
   try {
     const api = useApi()
     const result = await api.auth.login({ username: username.value, password: password.value })
     if (result.error || !result.data) {
       error.value = t('auth.signIn.invalidCredentials')
+      void resumePasskeyAutofill()
       return
     }
     if (isTwoFactorChallenge(result.data)) {
@@ -56,7 +69,7 @@ async function onSubmit() {
   }
 }
 
-async function onSubmitCode(code: string) {
+async function onSubmitCode(answer: SecondFactorAnswer) {
   if (!queryParams.value || !challenge.value) {
     return
   }
@@ -64,16 +77,39 @@ async function onSubmitCode(code: string) {
   loading.value = true
   error.value = null
   try {
-    const result = await useApi().auth.completeTwoFactor({ challengeToken: challenge.value.challengeToken, code })
+    const result = await useApi().auth.completeTwoFactor({ challengeToken: challenge.value.challengeToken, ...answer })
     if (result.error || !result.data) {
       if (result.error === 'challenge_expired') {
         backToPassword()
       }
-      error.value = t(secondFactorErrorKey(result.error, result.status))
+      error.value = t(secondFactorErrorKey(result.error, result.status, 'recoveryCode' in answer ? 'recovery' : 'code'))
       return
     }
 
     returnTokenToCli(result.data)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function onPasskeySecondFactor() {
+  if (!queryParams.value || !challenge.value) {
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    const outcome = await answerWithPasskey(challenge.value.challengeToken)
+    if ('answer' in outcome) {
+      await onSubmitCode(outcome.answer)
+      return
+    }
+    if (outcome.expired) {
+      backToPassword()
+    }
+    error.value = outcome.errorKey ? t(outcome.errorKey) : null
   }
   finally {
     loading.value = false
@@ -92,6 +128,7 @@ function backToPassword() {
   challenge.value = null
   error.value = null
   password.value = ''
+  void resumePasskeyAutofill()
 }
 </script>
 
@@ -122,7 +159,12 @@ function backToPassword() {
       v-else-if="challenge"
       :loading="loading"
       :error="error"
+      :recovery-available="challenge.methods.includes('recovery')"
+      :code-available="challenge.methods.includes('totp')"
+      :passkey-available="passkeySecondFactorSupported && challenge.methods.includes('passkey')"
       @submit="onSubmitCode"
+      @passkey="onPasskeySecondFactor"
+      @switch-method="error = null"
       @back="backToPassword"
     />
 
@@ -138,7 +180,7 @@ function backToPassword() {
       >
         <UInput
           v-model="username"
-          autocomplete="username"
+          autocomplete="username webauthn"
           required
         />
       </UFormField>
@@ -169,6 +211,13 @@ function backToPassword() {
       >
         {{ t('auth.signIn.submit') }}
       </UButton>
+
+      <AuthPasskeySignInButton
+        v-if="passkeyAvailable"
+        :loading="passkeyBusy"
+        :error="passkeyError"
+        @click="signInWithPasskey"
+      />
     </form>
   </UCard>
 </template>

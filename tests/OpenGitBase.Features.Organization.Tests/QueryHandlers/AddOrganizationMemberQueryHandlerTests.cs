@@ -50,6 +50,42 @@ public class AddOrganizationMemberQueryHandlerTests
     }
 
     [Fact]
+    public async Task RunQueryAsync_AddsTheMemberOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, OrganizationMapsterConfig>(
+            lostCommit.Configure,
+            typeof(AddOrganizationMemberQueryHandler).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        await using var seedContext = await scope.CreateDbContextAsync();
+        var (organizationId, _, _) = await OrganizationTestData.SeedAsync(seedContext);
+        var memberUserId = UserId.From(Guid.NewGuid());
+        seedContext.Set<UserEntity>().Add(OrganizationTestData.CreateUser(memberUserId.Value, "member"));
+        await seedContext.SaveChangesAsync();
+
+        lostCommit.LoseNextCommitInserting("OrganizationMember");
+        var result = await scope
+            .GetHandler<AddOrganizationMemberQueryHandler>()
+            .RunQueryAsync(
+                new AddOrganizationMemberQuery
+                {
+                    OrganizationId = organizationId,
+                    UserId = memberUserId,
+                    Role = OrganizationMemberRole.Member,
+                },
+                CancellationToken.None
+            );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        QueryHandlerResultAssert.AssertUnit(result);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        var member = Assert.Single(await verifyContext.Set<OrganizationMemberEntity>().ToListAsync());
+        Assert.Equal(memberUserId.Value, member.UserId);
+    }
+
+    [Fact]
     public async Task RunQueryAsync_WhenMemberAlreadyExists_ReturnsNone()
     {
         await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, OrganizationMapsterConfig>(

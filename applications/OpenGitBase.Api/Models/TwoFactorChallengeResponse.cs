@@ -7,6 +7,6 @@ public class TwoFactorChallengeResponse
 
     public string ChallengeToken { get; set; } = string.Empty;
 
-    /// <summary>The second factors the account can answer with, for now only <c>totp</c>.</summary>
+    /// <summary>The second factors the account can answer with: <c>totp</c>, <c>passkey</c> and <c>recovery</c>.</summary>
     public IReadOnlyList<string> Methods { get; set; } = [];
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OpenGitBase.Features.AccountSecurity.Events;
 using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.AccountSecurity.SecondFactor;
@@ -30,13 +31,13 @@ internal static class SecondFactorAttempts
         return true;
     }
 
-    public static void LogLockout(ILogger logger, UserCredentialsEntity credentials, string step) =>
-        logger.LogWarning(
-            "Second-factor lockout for user {UserId} after {Failures} wrong codes during {Step}; locked until {LockedUntil}",
+    public static void LogLockout(ILogger logger, UserCredentialsEntity credentials, string? remoteIp, string step) =>
+        SecurityEventLog.Write(
+            logger,
+            SecurityEvent.SecondFactorLockedOut,
             credentials.UserId,
-            MaxConsecutiveFailures,
-            step,
-            credentials.SecondFactorLockedUntil
+            remoteIp,
+            $"step={step} failures={MaxConsecutiveFailures} locked_until={credentials.SecondFactorLockedUntil:O}"
         );
 
     public static void RecordSuccess(UserCredentialsEntity credentials)

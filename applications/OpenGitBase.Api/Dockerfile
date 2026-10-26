@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl openssh-client \
+    && apt-get install -y --no-install-recommends curl openssh-client tini \
     && rm -rf /var/lib/apt/lists/*
 EXPOSE 8080
 
@@ -48,4 +48,7 @@ RUN --mount=type=cache,id=opengitbase-nuget,target=/root/.nuget/packages \
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "OpenGitBase.Api.dll"]
+# tini is PID 1, not dotnet: the kernel drops the SIGABRT an init raises on itself, so an
+# unhandled exception would hang the process instead of exiting for the restart policy.
+# tini forwards SIGTERM to dotnet and exits with its status (134 after an abort).
+ENTRYPOINT ["/usr/bin/tini", "--", "dotnet", "OpenGitBase.Api.dll"]

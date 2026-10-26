@@ -78,14 +78,41 @@ public class AccountSecurityControllerTests : TwoFactorControllerTestBase
 
         confirm.EnsureSuccessStatusCode();
         Assert.True(confirm.Headers.Contains("Set-Cookie"));
+        var confirmed = await confirm.Content.ReadFromJsonAsync<TwoFactorStatusResponse>();
+        Assert.Equal(10, confirmed?.RecoveryCodes?.Distinct().Count());
         var me = await browser.GetFromJsonAsync<AccountMeResponse>("/account/me");
         Assert.True(me?.TwoFactorEnabled);
+        var status = await browser.GetFromJsonAsync<AccountSecurityResponse>("/account/security");
+        Assert.Equal(10, status?.RecoveryCodesRemaining);
         Assert.Equal(
             HttpStatusCode.Unauthorized,
             (await SendWithBearerOnlyAsync(HttpMethod.Get, "/signin/testlogin", otherSession)).StatusCode
         );
         var challenge = await LoginForChallengeAsync(NewBrowser(), "enabler");
-        Assert.Equal(["totp"], challenge.Methods);
+        Assert.Equal(["totp", "recovery"], challenge.Methods);
+    }
+
+    [Fact]
+    public async Task EnableFlow_EmailsTheAccountOnce()
+    {
+        using var browser = NewBrowser();
+        await RegisterAsync(browser, "notified");
+        (await ReauthenticateAsync(browser)).EnsureSuccessStatusCode();
+        var setup = await (await browser.PostAsync("/account/two-factor/totp/setup", null))
+            .Content.ReadFromJsonAsync<TotpSetupResponse>();
+
+        var confirm = await browser.PostAsJsonAsync(
+            "/account/two-factor/totp/confirm",
+            new ConfirmTotpSetupDto { Code = NextCode(setup!.Secret) }
+        );
+
+        confirm.EnsureSuccessStatusCode();
+        var email = Assert.Single(
+            Emails.GetByRecipient("notified@example.com"),
+            message => message.Subject.StartsWith("Two-factor", StringComparison.Ordinal)
+        );
+        Assert.Equal("Two-factor authentication turned on", email.Subject);
+        Assert.Contains("https://opengitbase.com/settings/security", email.HtmlBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,6 +220,75 @@ public class AccountSecurityControllerTests : TwoFactorControllerTestBase
         Assert.NotEqual(oldSecret, restart!.Secret);
         // The new phone is not confirmed yet, so the old one still signs in.
         await SignInWithCodeAsync(NewBrowser(), "newphone", oldSecret);
+
+        var confirm = await browser.PostAsJsonAsync(
+            "/account/two-factor/totp/confirm",
+            new ConfirmTotpSetupDto { Code = NextCode(restart.Secret) }
+        );
+        confirm.EnsureSuccessStatusCode();
+        Assert.Null((await confirm.Content.ReadFromJsonAsync<TwoFactorStatusResponse>())?.RecoveryCodes);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_WithoutReauthentication_IsForbidden()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "noreauth");
+        var secret = await EnableTotpAsync("noreauth");
+        using var browser = NewBrowser();
+        await SignInWithCodeAsync(browser, "noreauth", secret);
+
+        var response = await browser.PostAsync("/account/two-factor/recovery-codes", null);
+
+        await AssertErrorAsync(response, HttpStatusCode.Forbidden, SecondFactorErrorResponse.ReauthenticationRequired);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_TwoFactorOff_IsBadRequest()
+    {
+        using var browser = NewBrowser();
+        await RegisterAsync(browser, "nocodes");
+        (await ReauthenticateAsync(browser)).EnsureSuccessStatusCode();
+
+        var response = await browser.PostAsync("/account/two-factor/recovery-codes", null);
+
+        await AssertErrorAsync(response, HttpStatusCode.BadRequest, SecondFactorErrorResponse.TwoFactorNotEnabled);
+    }
+
+    [Fact]
+    public async Task RecoveryCodes_AfterLosingThePhone_SignInAndReauthenticate()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "lostphone");
+        var (_, codes) = await EnableTotpWithRecoveryCodesAsync("lostphone");
+        using var browser = NewBrowser();
+        var challenge = await LoginForChallengeAsync(browser, "lostphone");
+        Assert.Equal(["totp", "recovery"], challenge.Methods);
+
+        (await CompleteTwoFactorWithRecoveryCodeAsync(browser, challenge.ChallengeToken, codes[0])).EnsureSuccessStatusCode();
+        var reauthenticated = await ReauthenticateAsync(browser, recoveryCode: codes[1]);
+
+        Assert.Equal(HttpStatusCode.NoContent, reauthenticated.StatusCode);
+        var status = await browser.GetFromJsonAsync<AccountSecurityResponse>("/account/security");
+        Assert.Equal(8, status?.RecoveryCodesRemaining);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodes_OldSetStopsWorking()
+    {
+        using var setup = NewBrowser();
+        await RegisterAsync(setup, "regenerator");
+        var (secret, oldCodes) = await EnableTotpWithRecoveryCodesAsync("regenerator");
+        using var browser = NewBrowser();
+        await SignInWithCodeAsync(browser, "regenerator", secret);
+        (await ReauthenticateAsync(browser, code: NextCode(secret))).EnsureSuccessStatusCode();
+
+        var newCodes = await RegenerateRecoveryCodesAsync(browser);
+
+        Assert.Empty(newCodes.Intersect(oldCodes));
+        var challenge = await LoginForChallengeAsync(NewBrowser(), "regenerator");
+        var withOldCode = await CompleteTwoFactorWithRecoveryCodeAsync(NewBrowser(), challenge.ChallengeToken, oldCodes[0]);
+        await AssertErrorAsync(withOldCode, HttpStatusCode.Unauthorized, SecondFactorErrorResponse.InvalidCode);
     }
 
     private static async Task AssertErrorAsync(HttpResponseMessage response, HttpStatusCode status, string error)

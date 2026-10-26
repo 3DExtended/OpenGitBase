@@ -14,6 +14,10 @@ namespace OpenGitBase.Api.Services;
 
 public sealed class AdminUserSeedService : IHostedService
 {
+    // Same numbering as startup migrations (84007001), the status aggregator (84007201) and
+    // BackgroundWorkerAdvisoryLocks (840073xx).
+    private const long AdminSeedAdvisoryLockKey = 84007002;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly AdminSeedOptions _options;
     private readonly ILogger<AdminUserSeedService> _logger;
@@ -50,17 +54,55 @@ public sealed class AdminUserSeedService : IHostedService
         var emailProtection = scope.ServiceProvider.GetRequiredService<IEmailProtectionService>();
 
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var adminUserId = await EnsureAdminUserAsync(
-                context,
-                passwordHasher,
-                emailProtection,
-                cancellationToken
-            )
+        await SeedHoldingLockAsync(context, passwordHasher, emailProtection, cancellationToken)
             .ConfigureAwait(false);
-        await EnsureOrganizationAsync(context, adminUserId, cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Every API replica seeds on startup. Both replicas found no admin on a fresh database, both
+    /// inserted it, and the loser failed startup with 23505 on "IX_Users_NormalizedUsername".
+    /// Holding this advisory lock across the checks and inserts makes the others wait and then find
+    /// the admin and organization. Advisory locks are Postgres-only, so other providers seed
+    /// without it.
+    /// </summary>
+    private async Task SeedHoldingLockAsync(
+        OpenGitBaseDbContext context,
+        IPasswordHasherService passwordHasher,
+        IEmailProtectionService emailProtection,
+        CancellationToken cancellationToken
+    )
+    {
+        var holdsLock = context.Database.IsNpgsql();
+        if (holdsLock)
+        {
+            await PostgresAdvisoryLockService
+                .AcquireAsync(context, AdminSeedAdvisoryLockKey, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        try
+        {
+            var adminUserId = await EnsureAdminUserAsync(
+                    context,
+                    passwordHasher,
+                    emailProtection,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            await EnsureOrganizationAsync(context, adminUserId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (holdsLock)
+            {
+                await PostgresAdvisoryLockService
+                    .ReleaseAsync(context, AdminSeedAdvisoryLockKey, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
 
     private async Task<Guid> EnsureAdminUserAsync(
         OpenGitBaseDbContext context,

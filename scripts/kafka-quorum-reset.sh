@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=docker-env.sh
 source "${SCRIPT_DIR}/docker-env.sh"
+# shellcheck source=kafka-storage.sh
+source "${SCRIPT_DIR}/kafka-storage.sh"
 
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
@@ -22,7 +24,8 @@ Usage: $(basename "$0") [--restart|--wipe] [--no-republish] [--help]
 Manage the OpenGitBase Kafka quorum as one unit.
 
   --restart       Stop and start kafka-1/2/3 together (default; keeps volumes)
-  --wipe          Remove broker containers AND named volumes, then bootstrap fresh
+  --wipe          Remove broker containers, empty the Kafka data dirs (named volumes, or the
+                  SSD cache pool bind mounts on Tower), then bootstrap fresh
   --no-republish  Skip POST /api/v1/internal/pipelines/kafka-wake-republish after init
   -h, --help      Show this help
 
@@ -68,7 +71,8 @@ compose() {
 }
 
 BROKERS=(kafka-1 kafka-2 kafka-3)
-# Compose volume keys (project prefix added by Docker).
+# Compose volume keys (project prefix added by Docker). Tower bind-mounts the SSD cache pool
+# instead (#232), so there these are only stale copies from before the move, if still present.
 VOLUME_KEYS=(kafka1_data kafka2_data kafka3_data)
 # Legacy names from the first durable deploy (safe to remove on wipe).
 LEGACY_VOLUME_KEYS=(opengitbase_kafka1_data opengitbase_kafka2_data opengitbase_kafka3_data)
@@ -111,25 +115,23 @@ wait_for_brokers_healthy() {
   return 1
 }
 
+# The compose project as compose resolves it (COMPOSE_PROJECT_NAME, a top-level name: in the
+# compose files, else the checkout directory); Compose v2 prints it first in `config`. Not read
+# from containers: every checkout gives the brokers the same container_name, so a lookup by name
+# can return another stack's project.
 project_name() {
-  local container
-  container="$(compose ps -q kafka-1 2>/dev/null || true)"
-  if [ -n "${container}" ]; then
-    docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "${container}" 2>/dev/null && return
+  local config name
+  config="$(compose config)" || return 1
+  name="$(awk '/^name: / && name == "" { name = $2 } END { print name }' <<<"${config}")"
+  if [ -z "${name}" ]; then
+    echo "error: compose config printed no top-level name: (Compose v2 required)" >&2
+    return 1
   fi
-  # Match compose project label used on Tower (directory / compose -p).
-  local from_ps
-  from_ps="$(docker ps -a --filter name=opengitbase_kafka --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | head -1 || true)"
-  if [ -n "${from_ps}" ]; then
-    echo "${from_ps}"
-    return
-  fi
-  basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
+  echo "${name}"
 }
 
 remove_kafka_volumes() {
-  local project
-  project="$(project_name)"
+  local project="${PROJECT}"
   echo "==> Removing Kafka data volumes for project '${project}'"
   local key full
   for key in "${VOLUME_KEYS[@]}" "${LEGACY_VOLUME_KEYS[@]}"; do
@@ -195,13 +197,30 @@ republish_wakes() {
   return 0
 }
 
+# A wipe resolves the project whose volumes it removes before it stops anything, so a failure
+# leaves the running quorum alone.
+PROJECT=""
+if [ "${MODE}" = "wipe" ]; then
+  PROJECT="$(project_name)" || {
+    echo "error: could not resolve the compose project; nothing was stopped or removed" >&2
+    exit 1
+  }
+fi
+
 echo "==> Kafka quorum ${MODE} in ${REPO_ROOT}"
+
+# Before touching the brokers: recreating them from compose files without Tower's SSD mounts
+# would restart the quorum on the array (#232), and a wipe would empty the wrong dirs.
+kafka_require_ssd_mounts
 
 compose stop "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
 compose rm -f "${BROKERS[@]}" kafka-init kafka-vol-init 2>/dev/null || true
 
 if [ "${MODE}" = "wipe" ]; then
   remove_kafka_volumes
+  # Removing named volumes does not reach bind mounts; empty whatever kafka-vol-init mounts.
+  echo "==> Emptying Kafka data dirs"
+  kafka_empty_data_dirs
 fi
 
 # Create volumes (if needed) and chown before brokers start.

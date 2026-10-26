@@ -102,7 +102,7 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 - **New backend feature `account-security`** (vertical slice under `features/`, scaffolded with `agentGenCli new backend-feature`). It owns TOTP authenticators, recovery codes, passkeys, authentication challenges and the second-factor attempt counter. The Users feature keeps owning credentials and the password login.
 - The feature follows the codebase's CQRS shape: query handlers plus small internal static helpers, no service interfaces (as built in mfa-01).
 - **`TotpAlgorithm`**: generate secret, build `otpauth://` URI, verify code against a given time with ±1 step window, report the matched time step. Fixed parameters: SHA1, 6 digits, 30 seconds. These are not configurable — Google Authenticator ignores `algorithm`/`digits`/`period`, and Microsoft Authenticator only works reliably with SHA1. In-house RFC 6238 implementation (no Otp.NET dependency), checked against the RFC 6238 Appendix B vectors. Takes time from the existing `ISystemClock`. **`TotpCodes`** adds single use via `LastUsedTimeStep`.
-- **`IPasskeyService`** wraps Fido2NetLib (`Fido2` 4.3.x, MIT, net10.0): create registration options, verify attestation, create assertion options, verify assertion. ASP.NET Core Identity's built-in .NET 10 passkey support is not usable because OpenGitBase has a custom user store without `UserManager`.
+- **`PasskeyCeremonies`** (internal static helpers, as built in mfa-03) wraps Fido2NetLib (`Fido2` 4.3.x, MIT, net10.0): create registration options, verify attestation, create assertion options, verify assertion. ASP.NET Core Identity's built-in .NET 10 passkey support is not usable because OpenGitBase has a custom user store without `UserManager`.
 - **`AuthenticationChallenges`**: single-use challenges shared by both API replicas (see below).
 - **`BeginTwoFactorSignInQuery`** (the second-factor gate): decides after a successful primary sign-in (password, Google, Apple) whether to issue a session or a pending-2FA challenge. Every primary sign-in path calls it, so no path can bypass 2FA.
 - **`SecondFactorAttempts`**: the per-account failure counter and lockout.
@@ -111,23 +111,25 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 ### Schema (EF Core migration in `common/OpenGitBase.Common/Migrations/`)
 
 - `UserTotpAuthenticators`: `UserId` (PK/FK), `SecretProtected`, `ConfirmedAt` (null = never confirmed), `PendingSecretProtected`, `LastUsedTimeStep`, `CreatedAt`. One per user. A new setup writes the pending secret and replaces an earlier pending one; it only replaces the confirmed secret when it is confirmed, so the old authenticator keeps working until then.
-- `UserRecoveryCodes`: `Id`, `UserId`, `LookupHash`, `CodeHash`, `UsedAt`, `CreatedAt`. 10 codes per set; regenerating deletes the old set.
-- `UserPasskeys`: `Id`, `UserId`, `CredentialId` (bytes, unique), `PublicKey` (COSE bytes), `SignCount`, `Aaguid`, `Transports`, `IsBackupEligible`, `IsBackedUp`, `Name`, `CreatedAt`, `LastUsedAt`.
-- `AuthenticationChallenges`: `Id`, `Purpose` (`TwoFactorSignIn`, `PasskeyRegistration`, `PasskeySignIn`, `PasskeySecondFactor`, `ReAuthentication`), `UserId` (nullable for usernameless passkey sign-in), `TokenHash` or `Challenge`, `ExpiresAt`, `CreatedAt`. No per-challenge attempt counter (see *Attempt limits*).
+- `UserRecoveryCodes`: `Id`, `UserId`, `CodeHash`, `UsedAt`, `CreatedAt`. 10 codes per set; regenerating deletes the old set.
+- `UserPasskeys`: `Id`, `UserId`, `CredentialId` (bytes, unique), `PublicKey` (COSE bytes), `SignCount` (`bigint`, since Npgsql maps `uint` to `xid`), `Aaguid`, `Transports`, `IsBackupEligible`, `IsBackedUp`, `Name`, `CreatedAt`, `LastUsedAt`.
+- `AuthenticationChallenges`: `Id`, `Purpose` (`TwoFactorSignIn`, `PasskeyRegistration`, `PasskeyReauthentication`, `PasskeySignIn`, `PasskeySecondFactor`, `ReAuthentication`), `UserId` (nullable for usernameless passkey sign-in, migration `AllowAnonymousChallenges`; anonymous rows are purged when the next one is created), `TokenHash` (SHA-256 of the challenge token, or of the WebAuthn challenge so the answer's `clientDataJSON` finds the row), `Payload` (the options JSON of a WebAuthn ceremony, which Fido2NetLib verifies the answer against), `ExpiresAt`, `CreatedAt`. No per-challenge attempt counter (see *Attempt limits*).
 - `UserCredentials` gains `TwoFactorEnabledAt`, `SecondFactorFailedAttempts`, `SecondFactorLockedUntil`.
 
 ### Secrets at rest
 
 - The TOTP secret is encrypted with `EncryptSecret` (AES-256-GCM, byte-for-byte). **Never `EncryptEmail`**, which lowercases and trims — the same mistake corrupted the fleet dispatcher SSH key.
 - `UserTotpAuthenticators.SecretProtected` and `PendingSecretProtected` are added to the hand-maintained column list in `EncryptionKeyRotation`, with a test.
-- Recovery codes are hashed like personal access tokens (SHA-256 lookup hash plus `PasswordHasher` hash).
+- Recovery codes are stored only as `PasswordHasher` hashes. Unlike personal access tokens they get no SHA-256 lookup hash: a code has 50 bits, so an unsalted hash could be brute-forced from a database leak. The second step checks the input against the user's at most 10 unused hashes.
 - Passkey public keys are not secret and are stored in plain form; they need no rotation entry.
 
 ### Sign-in contract
 
 - `POST /signin/login` (and the Google/Apple sign-in endpoints) keep returning the session token string and cookie when 2FA is off, unchanged. When 2FA is on they return `200 { "twoFactorRequired": true, "challengeToken": "…", "methods": ["totp","passkey","recovery"] }` and set no cookie. Clients tell the two apart by the `twoFactorRequired` field (web `useAuth`, `cli/auth.vue`, MSW mocks); consumers that never meet 2FA, such as the API test base and E2E `TestIsolation`, are unaffected.
 - `challengeToken` is a random opaque value whose SHA-256 is stored in `AuthenticationChallenges` (purpose `TwoFactorSignIn`, 5-minute lifetime). It is not a JWT, so bearer authentication never accepts it.
-- `POST /signin/two-factor` with `{ challengeToken, code }`, `{ challengeToken, recoveryCode }`, or `{ challengeToken, passkeyAssertion }` (after `POST /signin/two-factor/passkey-options`). On success the challenge is consumed and the normal session token and cookie are issued. Errors: `401 { error: "invalid_code" | "challenge_expired" }`, `429 { error: "locked_out", lockedUntil }`.
+- `POST /signin/two-factor` with exactly one of `{ challengeToken, code }`, `{ challengeToken, recoveryCode }` and `{ challengeToken, passkeyAssertion }`. On success the challenge is consumed and the normal session token and cookie are issued. Errors: `401 { error: "invalid_code" | "passkey_rejected" | "challenge_expired" }`, `429 { error: "locked_out", lockedUntil }`.
+- The passkey answer needs `POST /signin/two-factor/passkey-options` with `{ challengeToken }` first. It returns request options for the user's passkeys (`401 challenge_expired`, `400 no_passkeys`) and stores them as a single-use `PasskeySecondFactor` challenge. A rejected assertion counts like a wrong code. `methods` only lists `passkey` while passkeys are switched on, so accounts with passkey-only 2FA fall back to their recovery codes if an instance switches passkeys off again.
+
 - Attempt limits:
   - One per-account counter (`SecondFactorFailedAttempts`) counts wrong second-factor attempts across challenges and re-authentications, so signing in again does not reset it.
   - The 5th consecutive failure sets `SecondFactorLockedUntil` to 15 minutes from now, returns `429`, consumes the current challenge (the user starts over with the password), and emails the user (email from mfa-06). The counter resets on success.
@@ -137,17 +139,17 @@ The `ogb` CLI benefits automatically: `ogb auth login` already signs in through 
 
 ### Passkey endpoints and configuration
 
-- Registration (signed in, re-authenticated): `POST /account/passkeys/registration-options` → `POST /account/passkeys`. Management: `GET /account/passkeys`, `PATCH /account/passkeys/{id}` (rename), `DELETE /account/passkeys/{id}`.
-- Sign-in: `POST /signin/passkey/options` → `POST /signin/passkey`. Uses discoverable credentials (usernameless), so the endpoint never reveals whether a username exists. User verification is `required`; a successful passkey sign-in satisfies 2FA.
-- As a second factor, user verification is `preferred` (a security-key touch is enough after the password).
+- Registration (signed in, re-authenticated): `POST /account/passkeys/registration-options` → `POST /account/passkeys` with `{ name, attestationResponse }`. Errors: `400 { error: "invalid_name" | "passkey_rejected" | "challenge_expired" }`, `409 { error: "passkey_already_registered" }`. Management: `GET /account/passkeys`, `PATCH /account/passkeys/{id}` (rename, session only), `DELETE /account/passkeys/{id}` (re-authenticated); another user's passkey is `404`.
+- Sign-in: `POST /signin/passkey/options` → `POST /signin/passkey` with `{ assertion }`. Uses discoverable credentials (usernameless, empty `allowCredentials`), so the endpoint never reveals whether a username exists. The challenge in the answer's `clientDataJSON` finds the anonymous `PasskeySignIn` row, so no separate challenge token is needed. User verification is `required`; a successful passkey sign-in satisfies 2FA and returns the session token and cookie like `POST /signin/login`. Every failure is the same `401 { error: "passkey_rejected" }`. The web sign-in and CLI sign-in pages offer a "Sign in with a passkey" button and, where the browser supports conditional mediation, the passkeys in the username field (`autocomplete="username webauthn"`).
+- As a second factor, user verification is `preferred` (a security-key touch is enough after the password). The same holds for a passkey that comes with the password in a re-authentication. On its own, a passkey must verify the user; the server checks the UV flag in the signed authenticator data, not only the options.
 - Attestation conveyance `none`; no FIDO Metadata Service.
 - The WebAuthn user handle is the user's GUID bytes (no PII).
 - Configuration section `WebAuthn`:
   - `RelyingPartyId`: `opengitbase.com` in production. It covers `www.` and `api.` subdomains.
   - `RelyingPartyName`: `OpenGitBase`.
   - `Origins`: the exact allowed origins.
-  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. Local compose sets `localhost`, which WebAuthn allows over plain HTTP.
-- The relying-party ID is permanent for an installation: changing the domain invalidates every registered passkey. This goes in the operations docs.
+  - Passkeys are disabled (endpoints return `404`, UI hidden) while `RelyingPartyId` is empty. `docker-compose.e2e.yml` and `docker-compose.override.example.yml` set `localhost`, which WebAuthn allows over plain HTTP; `docker-compose.yml` leaves it empty, so production stays off until the mfa-06 rollout.
+- The relying-party ID is permanent for an installation: changing the domain invalidates every registered passkey (see the operations doc).
 - WebAuthn does not work when the site is opened by IP address.
 
 ### Challenges across replicas
@@ -158,15 +160,18 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 
 ### Account endpoints
 
-- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, and later the passkeys and the unused recovery-code count. `/account/me` gains `twoFactorEnabled`.
+- `GET /account/security` returns `twoFactorAvailable` (the rollout switch), `twoFactorEnabled`, `totpConfigured`, `hasPassword`, `recoveryCodesRemaining` (unused codes) and `passkeysAvailable` (`WebAuthn:RelyingPartyId` is set); the passkeys themselves come from `GET /account/passkeys`. `/account/me` gains `twoFactorEnabled`.
 - TOTP:
   - `POST /account/two-factor/totp/setup` returns `{ otpauthUri, secret }` and stores the pending secret.
   - `POST /account/two-factor/totp/confirm` with `{ code }`. The first confirmation sets `TwoFactorEnabledAt` and returns 10 recovery codes once.
-  - `DELETE /account/two-factor/totp` is allowed only if another second factor remains or 2FA is being disabled. It arrives with the last-factor rule in mfa-05; until then the authenticator is removed by disabling 2FA.
-- `POST /account/two-factor/enable` (requires at least one passkey) turns 2FA on without an authenticator app and returns recovery codes.
+  - There is no endpoint that removes the authenticator app on its own (mfa-05 left out `DELETE /account/two-factor/totp`). Setting it up again replaces it, and disabling 2FA removes it. To move to passkeys only, a user turns 2FA off and on again with the passkeys.
+- `POST /account/two-factor/enable` turns 2FA on without an authenticator app.
+  - It requires re-authentication, at least one passkey, `TwoFactor:Enabled` and passkeys switched on.
+  - It returns 10 recovery codes once, revokes every session and re-issues the caller's.
+  - Errors: `400 no_passkeys`, `409 two_factor_already_enabled`, and `404` while a switch is off.
 - `POST /account/two-factor/disable` takes no body. Like every sensitive change it needs a recent re-authentication of the session, which already asks for the password and a second factor. It removes the TOTP authenticator and recovery codes and clears `TwoFactorEnabledAt`. Passkeys stay as sign-in methods.
-- `POST /account/two-factor/recovery-codes` regenerates the set.
-- Deleting the last second factor while 2FA is on returns `409`.
+- `POST /account/two-factor/recovery-codes` regenerates the set and returns it once (`400 two_factor_not_enabled` without 2FA).
+- While 2FA is on, deleting the last passkey of an account without an authenticator app returns `409 { error: "last_second_factor" }`.
 - Turning 2FA on or off sets `SessionsValidAfter` and re-issues the caller's token, reusing the change-password pattern.
 - otpauth label: `{issuer}:{username}` with `issuer={issuer}`. The issuer comes from configuration (`TwoFactor:Issuer`, default `OpenGitBase`) so self-hosted instances show their own name.
 
@@ -174,23 +179,30 @@ Synced passkeys often report a `SignCount` of 0, so single-use challenges — no
 
 Turning 2FA on or off, adding or removing a passkey, setting up or removing TOTP, and regenerating recovery codes require a recent confirmation. Any of these counts:
 
-- the current password (and, with 2FA on, a second factor) via `POST /account/reauthenticate`;
-- a passkey assertion within the last 10 minutes;
-- for accounts without a password and without passkeys (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim).
+- the current password (and, with 2FA on, a second factor; a recovery code counts, so a lost phone can still be replaced) via `POST /account/reauthenticate`;
+- a passkey assertion: `POST /account/reauthenticate/passkey-options` (`400 no_passkeys` without one), then `POST /account/reauthenticate`.
+  - With `{ passkeyAssertion }` alone, user verification is required, so no code is asked for.
+  - With `{ password, passkeyAssertion }`, the passkey stands in for the code, and a security-key touch is enough. A wrong password is `401 invalid_credentials`.
+  - A used or expired challenge is `401 challenge_expired`, anything else `401 passkey_rejected`;
+- for accounts without a password (Google/Apple-only), a session issued within the last 10 minutes (`ogb_iat_ms` claim). Adding a passkey keeps this rule; such an account can also confirm with the passkey.
 
 A sensitive endpoint without a recent confirmation answers `403 { error: "reauthentication_required" }`; the web app then asks for it and repeats the action. The confirmation is recorded as a 10-minute `ReAuthentication` challenge bound to the user and the session's `jti`. This prevents someone holding a stolen session from enabling 2FA on the victim's account and locking them out.
 
 ### Notifications and logging
 
-- Emails via the existing SendGrid service: 2FA turned on/off, passkey added, recovery code used, second-factor lockout, admin reset.
-- The same events are logged as structured `ILogger` events with user id and remote IP. A persistent audit-log table is out of scope.
+- Emails via the existing SendGrid service: 2FA turned on/off, passkey added, recovery code used to sign in, second-factor lockout, admin reset.
+  - Each states the time, the remote IP (left out for the admin reset) and a link to the security settings (`TwoFactor:SecuritySettingsUrl`).
+  - A failed send is logged (`security.notification.failed`) and never fails the action.
+- Every security event is one `ILogger` entry named `security.<area>.<event>`, with user id and client IP; the list is in the operations doc. A persistent audit-log table is out of scope.
 
 ### Administration
 
 `POST /admin/users/{username}/two-factor/reset` (`role=admin`):
 - deletes the TOTP authenticator, recovery codes and all passkeys;
-- clears `TwoFactorEnabledAt`;
-- revokes all sessions and emails the user.
+- clears `TwoFactorEnabledAt` and the lockout;
+- revokes all sessions, emails the user and logs the admin's id.
+
+An unknown username is `404`. The endpoint works with `TwoFactor:Enabled` on or off.
 
 There is no admin user management UI yet, so v1 exposes the API only; the operations docs describe how to call it.
 
@@ -204,6 +216,7 @@ There is no admin user management UI yet, so v1 exposes the API only; the operat
   - the settings page hides the 2FA section.
 - Disabling 2FA, regenerating recovery codes and the second sign-in step stay available. An account that already has 2FA on is never weakened by switching it off.
 - Production switches it on only once recovery codes, notifications and admin reset have shipped. Until then no account can lock itself out without a recovery path.
+- Rollout (mfa-06): passkeys and the admin reset are smoke-tested before the switch, because TOTP setup answers `404` until then; 2FA right after it.
 - Passkeys as a sign-in method have their own gate (`WebAuthn:RelyingPartyId`).
 
 ### Web UI
@@ -211,9 +224,9 @@ There is no admin user management UI yet, so v1 exposes the API only; the operat
 - `sign-in.vue`:
   - "Sign in with a passkey" button.
   - Conditional mediation on the username field (`autocomplete="username webauthn"`).
-  - Second-step view with a 6-digit code field (`autocomplete="one-time-code"`, `inputmode="numeric"`) and switches to "Use a passkey" and "Use a recovery code".
+  - Second-step view with a 6-digit code field (`autocomplete="one-time-code"`, `inputmode="numeric"`) and switches to "Use a passkey" and "Use a recovery code". Accounts with passkey-only 2FA get the passkey as the main action and no code field.
 - New `settings/security.vue`:
-  - 2FA status.
+  - 2FA status, with "Turn on with your passkeys" once the account has a passkey.
   - Authenticator setup dialog with QR code and setup key.
   - Recovery codes (show once, copy, download as `.txt`, regenerate).
   - Passkey list (add, rename, delete).
@@ -283,21 +296,16 @@ Tests cover external behavior at the lowest layer that proves it, per the engine
 
 - **Which phone apps work:** Google Authenticator and Microsoft Authenticator act as TOTP apps for OpenGitBase. Neither stores passkeys for OpenGitBase: Microsoft Authenticator holds passkeys only for Microsoft Entra ID accounts. Passkeys live in the platform credential managers (iCloud Keychain, Google Password Manager, Windows Hello), in password managers (1Password, Bitwarden), or on hardware keys.
 - **Clock sync:** TOTP depends on accurate server time; API hosts must run NTP.
-- **Suggested slice order:**
-  1. Two-step sign-in infrastructure + TOTP
+- **Slice order** (#245 to #250):
+  1. Two-step sign-in infrastructure + TOTP, with re-authentication, which TOTP setup needs
   2. Recovery codes
   3. Passkey registration and management
   4. Passkey sign-in (button + conditional UI)
   5. Passkey as second factor and passkey-only 2FA
   6. Notifications, lockout email and admin reset
-
-  Re-authentication lands with slice 1 because TOTP setup already needs it.
 - **Existing gaps noticed while mapping the auth surface:**
-  - Google/Apple sign-in endpoints are anonymous and not rate-limited.
-  - Provider registration state lives in per-replica `IMemoryCache`.
-  - Sign-out does not revoke the token server-side.
-
-  The first is fixed here; the other two are left for separate work.
+  - Google/Apple sign-in endpoints were anonymous and not rate-limited; fixed here.
+  - Left for separate work: provider registration state lives in per-replica `IMemoryCache`, and sign-out does not revoke the token server-side.
 - References:
   - [Google Authenticator Key URI Format](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
   - [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238)

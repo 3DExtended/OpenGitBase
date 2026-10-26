@@ -46,6 +46,8 @@ Each new feature adds its assembly to that list. Avoid manual edits unless you u
 - `--withDatabase` scaffolds entity + EF configuration under the feature's `database/` folder
 - Initial migration is created at project init; new features with database get `Add{Feature}` migrations
 - Apply migrations: `agentGenCli project efmigrate`
+- Every API replica applies pending migrations on startup (`DependencyInjectionHelpers.RunDatabaseMigrationsAsync`, also used by the `api-migrate` one-shot). A Postgres advisory lock (key `84007001`) serialises them, so `api-1` and `api-2` can start together on a fresh database. A failed startup migration exits the API with code 1 so the container restart policy retries it.
+- With `AdminSeed__Enabled`, every replica then seeds the admin user and organization (`AdminUserSeedService`) under advisory lock `84007002`, so they are created exactly once.
 
 ## API and Swagger
 

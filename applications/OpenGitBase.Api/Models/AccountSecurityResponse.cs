@@ -11,4 +11,10 @@ public class AccountSecurityResponse
 
     /// <summary>False for Google/Apple-only accounts; they re-authenticate by signing in again.</summary>
     public bool HasPassword { get; set; }
+
+    /// <summary>Unused recovery codes.</summary>
+    public int RecoveryCodesRemaining { get; set; }
+
+    /// <summary>Whether passkeys can be used here (<c>WebAuthn:RelyingPartyId</c> is set).</summary>
+    public bool PasskeysAvailable { get; set; }
 }

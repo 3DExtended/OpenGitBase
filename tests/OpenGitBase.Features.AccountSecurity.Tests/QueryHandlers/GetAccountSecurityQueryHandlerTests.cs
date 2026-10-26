@@ -19,6 +19,7 @@ public class GetAccountSecurityQueryHandlerTests
         Assert.False(status.TwoFactorEnabled);
         Assert.False(status.TotpConfigured);
         Assert.True(status.HasPassword);
+        Assert.Equal(0, status.RecoveryCodesRemaining);
     }
 
     [Fact]
@@ -48,6 +49,31 @@ public class GetAccountSecurityQueryHandlerTests
         Assert.True(status.TwoFactorEnabled);
         Assert.True(status.TotpConfigured);
         Assert.False(status.HasPassword);
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_CountsOnlyUnusedRecoveryCodes()
+    {
+        await using var scope = await AccountSecurityTestScope.CreateAsync();
+        var userId = await scope.SeedUserAsync();
+        var codes = await scope.EnableTotpWithRecoveryCodesAsync(userId);
+        Assert.Equal(10, (await GetAsync(scope, userId)).RecoveryCodesRemaining);
+        await scope
+            .GetHandler<ReauthenticateQueryHandler>()
+            .RunQueryAsync(
+                new ReauthenticateQuery
+                {
+                    UserId = userId,
+                    SessionId = "session",
+                    Password = AccountSecurityTestScope.Password,
+                    RecoveryCode = codes[0],
+                },
+                CancellationToken.None
+            );
+
+        var status = await GetAsync(scope, userId);
+
+        Assert.Equal(9, status.RecoveryCodesRemaining);
     }
 
     private static async Task<AccountSecurityStatus> GetAsync(AccountSecurityTestScope scope, UserId userId) =>

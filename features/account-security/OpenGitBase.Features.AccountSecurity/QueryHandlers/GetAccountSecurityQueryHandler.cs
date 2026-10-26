@@ -3,6 +3,7 @@ using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
 using OpenGitBase.Features.AccountSecurity.Contracts.Queries;
 using OpenGitBase.Features.AccountSecurity.Entities;
+using OpenGitBase.Features.AccountSecurity.SecondFactor;
 using OpenGitBase.Features.Users.Entities;
 
 namespace OpenGitBase.Features.AccountSecurity.QueryHandlers;
@@ -39,7 +40,8 @@ public class GetAccountSecurityQueryHandler : IQueryHandler<GetAccountSecurityQu
         return new AccountSecurityStatus(
             credentials.TwoFactorEnabledAt is not null,
             totpConfigured,
-            credentials.PasswordHash is not null
+            credentials.PasswordHash is not null,
+            await RecoveryCodes.CountUnusedAsync(context, query.UserId.Value, cancellationToken)
         );
     }
 }
