@@ -25,10 +25,10 @@ public static partial class Program
         }
         catch (Exception ex)
         {
-            // An exception that escapes Main aborts the runtime with SIGABRT. In the container
-            // dotnet runs as PID 1, and the kernel drops that signal for PID 1, so a failed startup
-            // such as a failed migration left a running, unhealthy API that the restart policy never
-            // recovered. Exit with a code instead.
+            // An exception that escapes Main aborts the runtime with SIGABRT. Wherever dotnet runs as
+            // PID 1 (the image now starts it under tini), the kernel drops that signal, so a failed
+            // startup such as a failed migration left a running, unhealthy API that the restart
+            // policy never recovered. Exit with a code instead.
             await Console.Error.WriteLineAsync($"Unhandled exception. {ex}");
             Environment.Exit(1);
         }
