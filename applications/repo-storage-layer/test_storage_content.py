@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import io
 import os
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +14,7 @@ from pathlib import Path
 from storage_content import (
     INLINE_MAX_BYTES,
     GitContentError,
+    build_workspace_archive,
     count_commits_ahead,
     get_blob,
     get_disk_usage,
@@ -23,6 +26,10 @@ from storage_content import (
     resolve_readme,
     resolve_ref,
 )
+
+
+def lfs_pointer(oid: str, size: int) -> bytes:
+    return f"version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n".encode("ascii")
 
 
 class StorageContentTests(unittest.TestCase):
@@ -86,6 +93,41 @@ class StorageContentTests(unittest.TestCase):
         self.assertEqual(blob["previewKind"], "text")
         self.assertIn("export const ok", blob["textContent"])
 
+    def _commit_files(self, files: dict[str, bytes]) -> None:
+        work = Path(self.temp_dir) / "work"
+        for name, content in files.items():
+            (work / name).parent.mkdir(parents=True, exist_ok=True)
+            (work / name).write_bytes(content)
+        for command in (["add", "."], ["commit", "-m", "files"], ["push", self.repo_path, "main"]):
+            subprocess.run(["git", *command], cwd=work, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def test_get_blob_of_an_lfs_pointer_describes_the_lfs_object(self) -> None:
+        oid = "c" * 64
+        self._commit_files({"assets/logo.png": lfs_pointer(oid, 5_000_000), "assets/data.bin": lfs_pointer(oid, 7)})
+
+        image = get_blob(self.repo_path, "main", "assets/logo.png")
+        binary = get_blob(self.repo_path, "main", "assets/data.bin")
+
+        self.assertEqual({"oid": oid, "size": 5_000_000}, image["lfs"])
+        self.assertEqual(5_000_000, image["size"])
+        self.assertEqual("image", image["previewKind"])
+        self.assertTrue(image["isBinary"])
+        self.assertNotIn("contentBase64", image)
+        self.assertNotIn("textContent", image)
+        self.assertEqual({"oid": oid, "size": 7}, binary["lfs"])
+        self.assertEqual("binary", binary["previewKind"])
+        self.assertNotIn("textContent", binary)
+
+    def test_get_blob_of_text_that_only_looks_like_a_pointer_returns_the_text(self) -> None:
+        crlf = lfs_pointer("d" * 64, 3).replace(b"\n", b"\r\n")
+        self._commit_files({"notes.txt": crlf})
+
+        blob = get_blob(self.repo_path, "main", "notes.txt")
+
+        self.assertNotIn("lfs", blob)
+        self.assertEqual("text", blob["previewKind"])
+        self.assertIn("git-lfs.github.com", blob["textContent"])
+
     def test_get_raw_bytes(self) -> None:
         raw, path = get_raw_bytes(self.repo_path, "main", "README.md")
         self.assertEqual(path, "README.md")
@@ -140,16 +182,18 @@ class StorageContentTests(unittest.TestCase):
         usage = get_disk_usage(empty_repo)
         self.assertGreaterEqual(usage, 0)
 
-    def test_get_disk_usage_matches_du_sk(self) -> None:
-        usage = get_disk_usage(self.repo_path)
-        du_result = subprocess.run(
-            ["du", "-sk", self.repo_path],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        expected_kb = int(du_result.stdout.split()[0])
-        self.assertGreaterEqual(usage, expected_kb * 1024)
+    def test_get_disk_usage_counts_the_bytes_stored(self) -> None:
+        # GNU du answers -sb with apparent bytes, which for a repository of small files is less
+        # than its 1 KiB blocks (-sk, the fallback on macOS and busybox). Either way a
+        # 200 000-byte file counts as about 200 000 bytes.
+        directory = Path(self.temp_dir) / "sized"
+        directory.mkdir()
+        (directory / "blob").write_bytes(b"x" * 200_000)
+
+        usage = get_disk_usage(str(directory))
+
+        self.assertGreaterEqual(usage, 200_000)
+        self.assertLess(usage, 200_000 + 64 * 1024)
 
     def test_empty_repository(self) -> None:
         empty_repo = os.path.join(self.temp_dir, "empty.git")
@@ -288,6 +332,74 @@ class StorageContentResolveRefTests(unittest.TestCase):
             with self.subTest(ref=ref):
                 with self.assertRaises(GitContentError) as ctx:
                     resolve_ref(self.repo_path, ref)
+                self.assertEqual(ctx.exception.code, "invalid_ref")
+
+
+class StorageContentWorkspaceArchiveTests(unittest.TestCase):
+    """A CI job's workspace is a tar.gz of the pushed commit, built where the bare repository lives.
+
+    Depth 0 packs the commit's files alone; depth N packs a shallow clone of that commit with
+    its last N commits and .git, for jobs that need history.
+    """
+
+    setUp = StorageContentTests.setUp
+    tearDown = StorageContentTests.tearDown
+
+    def _push_second_commit(self) -> tuple[str, str]:
+        first = resolve_ref(self.repo_path, "main")
+        work = Path(self.temp_dir) / "work"
+        (work / "README.md").write_text("# Changed\n", encoding="utf-8")
+        (work / "later.txt").write_text("later\n", encoding="utf-8")
+        for command in (["add", "-A"], ["commit", "-m", "second"], ["push", self.repo_path, "main"]):
+            subprocess.run(["git", *command], cwd=work, check=True, capture_output=True)
+        return first, resolve_ref(self.repo_path, "main")
+
+    def _extract(self, archive: bytes) -> Path:
+        target = Path(tempfile.mkdtemp(dir=self.temp_dir))
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+            tar.extractall(target, filter="data")
+        return target
+
+    def test_depth_zero_packs_the_files_of_the_requested_commit_without_history(self) -> None:
+        first, _ = self._push_second_commit()
+
+        workspace = self._extract(build_workspace_archive(self.repo_path, first, 0))
+
+        self.assertEqual("# Hello\n", (workspace / "README.md").read_text(encoding="utf-8"))
+        self.assertEqual("export const ok = true;\n", (workspace / "src" / "app.ts").read_text(encoding="utf-8"))
+        self.assertFalse((workspace / "later.txt").exists())
+        self.assertFalse((workspace / ".git").exists())
+
+    def test_depth_packs_a_shallow_clone_checked_out_at_the_requested_commit(self) -> None:
+        first, second = self._push_second_commit()
+
+        for sha, depth, readme in ((first, 1, "# Hello\n"), (second, 2, "# Changed\n")):
+            with self.subTest(sha=sha, depth=depth):
+                workspace = self._extract(build_workspace_archive(self.repo_path, sha, depth))
+
+                def git(*args: str) -> str:
+                    return subprocess.run(
+                        ["git", "-C", str(workspace), *args], check=True, capture_output=True, text=True
+                    ).stdout.strip()
+
+                self.assertEqual(readme, (workspace / "README.md").read_text(encoding="utf-8"))
+                self.assertEqual(sha, git("rev-parse", "HEAD"))
+                self.assertEqual("true", git("rev-parse", "--is-shallow-repository"))
+                self.assertEqual(str(depth), git("rev-list", "--count", "HEAD"))
+                self.assertEqual("", git("status", "--porcelain"))
+
+    def test_a_commit_the_repository_lacks_is_an_invalid_ref(self) -> None:
+        for depth in (0, 1):
+            with self.subTest(depth=depth):
+                with self.assertRaises(GitContentError) as ctx:
+                    build_workspace_archive(self.repo_path, "1" * 40, depth)
+                self.assertEqual(ctx.exception.code, "invalid_ref")
+
+    def test_only_a_full_commit_id_is_accepted(self) -> None:
+        for sha in ("main", resolve_ref(self.repo_path, "main")[:12], "--output=/tmp/x"):
+            with self.subTest(sha=sha):
+                with self.assertRaises(GitContentError) as ctx:
+                    build_workspace_archive(self.repo_path, sha, 0)
                 self.assertEqual(ctx.exception.code, "invalid_ref")
 
 

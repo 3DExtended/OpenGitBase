@@ -1,4 +1,10 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using OpenGitBase.Api.Controllers;
+using OpenGitBase.Api.Services;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Common.Tests.Testing;
 using OpenGitBase.Cqrs;
@@ -8,6 +14,7 @@ using OpenGitBase.Features.Pipeline;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
+using OpenGitBase.Features.Pipeline.Services;
 
 namespace OpenGitBase.Api.Tests.Integration;
 
@@ -39,7 +46,8 @@ public class WorkspaceArchiveAuthenticationTests
         var nodeToken = register.Get().NodeIdentityToken;
         var handler = new MaterializeWorkspaceArchiveQueryHandler(
             scope.ContextFactory,
-            new PasswordHasherService()
+            new PasswordHasherService(),
+            Substitute.For<IRepositoryArchiveReader>()
         );
         var result = await handler.RunQueryAsync(
             new MaterializeWorkspaceArchiveQuery
@@ -98,7 +106,11 @@ public class WorkspaceArchiveAuthenticationTests
             await context.SaveChangesAsync();
         }
 
-        var handler = new MaterializeWorkspaceArchiveQueryHandler(scope.ContextFactory, hasher);
+        var handler = new MaterializeWorkspaceArchiveQueryHandler(
+            scope.ContextFactory,
+            hasher,
+            Substitute.For<IRepositoryArchiveReader>()
+        );
         var result = await handler.RunQueryAsync(
             new MaterializeWorkspaceArchiveQuery
             {
@@ -108,5 +120,35 @@ public class WorkspaceArchiveAuthenticationTests
             CancellationToken.None
         );
         Assert.True(result.IsNone);
+    }
+
+    // The agent fails the job on any error; 503 tells it storage was down, not that its token
+    // was rejected.
+    [Fact]
+    public async Task DownloadWorkspaceArchive_WhenStorageCannotBuildIt_ReturnsServiceUnavailable()
+    {
+        await using var scope = await OrgComputeTestScope.CreateAsync();
+        var jobId = Guid.NewGuid();
+        var queryProcessor = Substitute.For<IQueryProcessor>();
+        queryProcessor
+            .RunQueryAsync(Arg.Any<MaterializeWorkspaceArchiveQuery>(), Arg.Any<CancellationToken>())
+            .Returns<Option<WorkspaceArchiveResult>>(_ =>
+                throw new RepositoryFileUnavailableException("storage node unreachable")
+            );
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers.Authorization = $"Bearer {JobIdentityTokens.Mint(jobId)}";
+        var controller = new PipelineController(
+            queryProcessor,
+            new RepositoryContentAuthorizationService(queryProcessor, new HttpContextAccessor()),
+            new ComputeNodeIdentityService(scope.ContextFactory, new PasswordHasherService())
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        var result = await controller.DownloadWorkspaceArchive(jobId, CancellationToken.None);
+
+        var status = Assert.IsAssignableFrom<IStatusCodeActionResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, status.StatusCode);
     }
 }

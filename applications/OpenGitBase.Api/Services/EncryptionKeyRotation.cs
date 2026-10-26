@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
+using OpenGitBase.Features.AccountSecurity.Entities;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Repository.Entities;
 using OpenGitBase.Features.StorageNode.Entities;
@@ -87,6 +88,25 @@ public static class EncryptionKeyRotation
                 fleetSecrets.DispatcherSshPrivateKeyProtected
             );
             reprotected++;
+        }
+
+        foreach (var authenticator in await context
+                     .Set<UserTotpAuthenticatorEntity>()
+                     .Where(entity => entity.SecretProtected != null || entity.PendingSecretProtected != null)
+                     .ToListAsync(cancellationToken)
+                     .ConfigureAwait(false))
+        {
+            if (!string.IsNullOrEmpty(authenticator.SecretProtected))
+            {
+                authenticator.SecretProtected = protection.Reprotect(authenticator.SecretProtected);
+                reprotected++;
+            }
+
+            if (!string.IsNullOrEmpty(authenticator.PendingSecretProtected))
+            {
+                authenticator.PendingSecretProtected = protection.Reprotect(authenticator.PendingSecretProtected);
+                reprotected++;
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

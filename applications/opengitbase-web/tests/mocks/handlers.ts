@@ -5,6 +5,47 @@ const mockUser = {
   username: 'demo-user',
   emailVerified: false,
   isAdmin: false,
+  twoFactorEnabled: false,
+}
+
+// A fixed secret, so the setup QR code stays the same in every snapshot.
+export const mockTotpSetup = {
+  otpauthUri: 'otpauth://totp/OpenGitBase:demo-user?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=OpenGitBase',
+  secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+}
+
+export const mockRecoveryCodes = [
+  'abcde-fghij',
+  'klmno-pqrst',
+  'uvwxy-z2345',
+  '67abc-defgh',
+  'ijklm-nopqr',
+  'stuvw-xyz23',
+  '4567a-bcdef',
+  'ghijk-lmnop',
+  'qrstu-vwxyz',
+  '23456-7abcd',
+]
+
+// mfa-03: passkeys the mock accepts without checking the attestation.
+const mockPasskeys: Array<{ id: string, name: string, createdAt: string, lastUsedAt: string | null, isBackedUp: boolean }> = [
+  {
+    id: '66666666-6666-6666-6666-666666666666',
+    name: 'MacBook',
+    createdAt: '2026-06-01T12:00:00Z',
+    lastUsedAt: '2026-08-29T12:00:00Z',
+    isBackedUp: true,
+  },
+]
+
+// mfa-05: 2FA turned on with the passkeys alone has no authenticator app.
+const mockTwoFactor = { passkeysOnly: false }
+
+function mockChallenge(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 const mockRepos = [
@@ -334,6 +375,133 @@ export const handlers = [
 
   http.post('/api/signin/login', async () => {
     return HttpResponse.json('mock-token')
+  }),
+
+  http.post('/api/signin/two-factor', async () => {
+    return HttpResponse.json('mock-token')
+  }),
+
+  http.post('/api/signin/two-factor/passkey-options', () => {
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, allowCredentials: [], userVerification: 'preferred' })
+  }),
+
+  http.post('/api/signin/passkey/options', () => {
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, allowCredentials: [], userVerification: 'required' })
+  }),
+
+  // The stand-in cannot verify a signature; any passkey of this site signs in.
+  http.post('/api/signin/passkey', async () => {
+    return HttpResponse.json('mock-token')
+  }),
+
+  http.get('/api/account/security', () => {
+    return HttpResponse.json({
+      twoFactorAvailable: true,
+      twoFactorEnabled: mockUser.twoFactorEnabled,
+      totpConfigured: mockUser.twoFactorEnabled && !mockTwoFactor.passkeysOnly,
+      hasPassword: true,
+      recoveryCodesRemaining: mockUser.twoFactorEnabled ? mockRecoveryCodes.length : 0,
+      passkeysAvailable: true,
+    })
+  }),
+
+  http.post('/api/account/reauthenticate/passkey-options', () => {
+    if (mockPasskeys.length === 0) {
+      return HttpResponse.json({ error: 'no_passkeys' }, { status: 400 })
+    }
+    return HttpResponse.json({ challenge: mockChallenge(), rpId: location.hostname, userVerification: 'preferred' })
+  }),
+
+  http.get('/api/account/passkeys', () => {
+    return HttpResponse.json(mockPasskeys)
+  }),
+
+  http.post('/api/account/passkeys/registration-options', () => {
+    return HttpResponse.json({
+      rp: { id: location.hostname, name: 'OpenGitBase' },
+      user: { id: 'IiIiIiIiIiIiIiIiIiIiIg', name: mockUser.username, displayName: mockUser.username },
+      challenge: mockChallenge(),
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      timeout: 60000,
+      attestation: 'none',
+      authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+      excludeCredentials: [],
+    })
+  }),
+
+  http.post('/api/account/passkeys', async ({ request }) => {
+    const body = await request.json() as { name: string }
+    const passkey = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+      isBackedUp: false,
+    }
+    mockPasskeys.push(passkey)
+    return HttpResponse.json(passkey, { status: 201 })
+  }),
+
+  http.patch('/api/account/passkeys/:id', async ({ params, request }) => {
+    const passkey = mockPasskeys.find(candidate => candidate.id === params.id)
+    if (!passkey) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    passkey.name = (await request.json() as { name: string }).name
+    return HttpResponse.json(passkey)
+  }),
+
+  http.delete('/api/account/passkeys/:id', ({ params }) => {
+    const index = mockPasskeys.findIndex(candidate => candidate.id === params.id)
+    if (index < 0) {
+      return new HttpResponse(null, { status: 404 })
+    }
+    if (mockUser.twoFactorEnabled && mockTwoFactor.passkeysOnly && mockPasskeys.length === 1) {
+      return HttpResponse.json({ error: 'last_second_factor' }, { status: 409 })
+    }
+    mockPasskeys.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('/api/account/reauthenticate', () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('/api/account/two-factor/totp/setup', () => {
+    return HttpResponse.json(mockTotpSetup)
+  }),
+
+  http.post('/api/account/two-factor/totp/confirm', () => {
+    const newlyEnabled = !mockUser.twoFactorEnabled
+    mockUser.twoFactorEnabled = true
+    mockTwoFactor.passkeysOnly = false
+    return HttpResponse.json({ twoFactorEnabled: true, recoveryCodes: newlyEnabled ? mockRecoveryCodes : null })
+  }),
+
+  http.post('/api/account/two-factor/recovery-codes', () => {
+    if (!mockUser.twoFactorEnabled) {
+      return HttpResponse.json({ error: 'two_factor_not_enabled' }, { status: 400 })
+    }
+    return HttpResponse.json({ recoveryCodes: mockRecoveryCodes })
+  }),
+
+  // mfa-05: 2FA with the passkeys alone.
+  http.post('/api/account/two-factor/enable', () => {
+    if (mockUser.twoFactorEnabled) {
+      return HttpResponse.json({ error: 'two_factor_already_enabled' }, { status: 409 })
+    }
+    if (mockPasskeys.length === 0) {
+      return HttpResponse.json({ error: 'no_passkeys' }, { status: 400 })
+    }
+    mockUser.twoFactorEnabled = true
+    mockTwoFactor.passkeysOnly = true
+    return HttpResponse.json({ twoFactorEnabled: true, recoveryCodes: mockRecoveryCodes })
+  }),
+
+  http.post('/api/account/two-factor/disable', () => {
+    mockUser.twoFactorEnabled = false
+    mockTwoFactor.passkeysOnly = false
+    return HttpResponse.json({ twoFactorEnabled: false })
   }),
 
   http.post('/api/register/register', async () => {

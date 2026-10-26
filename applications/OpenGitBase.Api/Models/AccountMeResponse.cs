@@ -10,5 +10,7 @@ public class AccountMeResponse
 
     public bool IsAdmin { get; set; }
 
+    public bool TwoFactorEnabled { get; set; }
+
     public AccountDebugFeaturesDto? Debug { get; set; }
 }

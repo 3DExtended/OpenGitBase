@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.GitAccessToken.Contracts;
 using OpenGitBase.Features.GitAccessToken.Entities;
 
@@ -67,8 +68,15 @@ public class CreateGitAccessTokenQueryHandler
         };
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        context.Set<GitAccessTokenEntity>().Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
+        await context.InsertOnceAsync(
+            ct =>
+            {
+                context.Set<GitAccessTokenEntity>().Add(entity);
+                return context.SaveChangesAsync(ct);
+            },
+            ct => context.Set<GitAccessTokenEntity>().AnyAsync(x => x.Id == entity.Id, ct),
+            cancellationToken
+        );
 
         var metadata = _mapper.Map<GitAccessTokenDto>(entity);
         return Option.From(

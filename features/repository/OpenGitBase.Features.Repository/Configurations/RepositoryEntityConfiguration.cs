@@ -20,6 +20,7 @@ public class RepositoryEntityConfiguration : IEntityTypeConfiguration<Entities.R
         builder.Property(entity => entity.ReplicationEpoch).IsRequired();
         builder.Property(entity => entity.PrimaryWatermark).IsRequired();
         builder.Property(entity => entity.ReplicationState).IsRequired();
+        builder.Property(entity => entity.GitBytesUsed).IsRequired();
         builder.HasIndex(e => new { e.Slug, e.OwnerUserId }).IsUnique();
         builder.Property(entity => entity.DefaultBranchName).HasMaxLength(256);
     }

@@ -109,4 +109,24 @@ public sealed class AuthCommandTests
         Assert.True(credentialStore.HasToken("https://forge.example.com"));
         Assert.Contains("/cli/auth?port=54321", browser.LastUrl, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Auth_login_waits_five_minutes_for_the_browser()
+    {
+        // Long enough to sign in with password and an authenticator code in the browser.
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var loopback = new FakeLoopbackAuthServer { TokenToReturn = AuthCommandTestsHelpers.CreateJwt("alice") };
+        var overrides = new CliServiceOverrides
+        {
+            CredentialStore = new InMemoryCredentialStore(),
+            ConfigStore = new FileConfigStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "hosts.yml")),
+            LoopbackAuthServer = loopback,
+            BrowserLauncher = new RecordingBrowserLauncher(),
+        };
+
+        await CliApp.RunAsync(["--hostname", "https://forge.example.com", "auth", "login"], output, error, overrides);
+
+        Assert.Equal(TimeSpan.FromMinutes(5), loopback.RequestedTimeout);
+    }
 }

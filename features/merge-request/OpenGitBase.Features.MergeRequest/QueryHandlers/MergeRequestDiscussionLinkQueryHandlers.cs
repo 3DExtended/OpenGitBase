@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Discussion.Contracts;
 using OpenGitBase.Features.MergeRequest.Contracts;
 using OpenGitBase.Features.MergeRequest.Entities;
@@ -140,18 +141,18 @@ public class CreateMergeRequestDiscussionLinkQueryHandler
         }
 
         var discussion = discussionResult.Get();
-        var exists = await context
-            .Set<MergeRequestDiscussionLinkEntity>()
-            .AnyAsync(
-                link =>
-                    link.MergeRequestId == mergeRequest.Id
-                    && link.DiscussionId == discussion.Id.Value
-                    && link.RelationshipType == (int)query.RelationshipType,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        Task<bool> LinkExistsAsync(CancellationToken ct) =>
+            context
+                .Set<MergeRequestDiscussionLinkEntity>()
+                .AnyAsync(
+                    link =>
+                        link.MergeRequestId == mergeRequest.Id
+                        && link.DiscussionId == discussion.Id.Value
+                        && link.RelationshipType == (int)query.RelationshipType,
+                    ct
+                );
 
-        if (exists)
+        if (await LinkExistsAsync(cancellationToken).ConfigureAwait(false))
         {
             return Option.From(
                 new MergeRequestDiscussionLinkDto
@@ -164,15 +165,26 @@ public class CreateMergeRequestDiscussionLinkQueryHandler
             );
         }
 
-        context.Set<MergeRequestDiscussionLinkEntity>().Add(
-            new MergeRequestDiscussionLinkEntity
-            {
-                MergeRequestId = mergeRequest.Id,
-                DiscussionId = discussion.Id.Value,
-                RelationshipType = (int)query.RelationshipType,
-            }
-        );
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // The link is keyed by its ends and relationship, so a replayed COMMIT that already landed creates it once.
+        await context
+            .InsertOnceAsync(
+                async ct =>
+                {
+                    context.Set<MergeRequestDiscussionLinkEntity>().Add(
+                        new MergeRequestDiscussionLinkEntity
+                        {
+                            MergeRequestId = mergeRequest.Id,
+                            DiscussionId = discussion.Id.Value,
+                            RelationshipType = (int)query.RelationshipType,
+                        }
+                    );
+                    await context.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return true;
+                },
+                LinkExistsAsync,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         return Option.From(
             new MergeRequestDiscussionLinkDto

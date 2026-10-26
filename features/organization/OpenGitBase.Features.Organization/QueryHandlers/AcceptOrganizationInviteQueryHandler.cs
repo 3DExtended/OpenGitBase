@@ -2,6 +2,7 @@
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 using OpenGitBase.Features.Users.Entities;
@@ -80,17 +81,29 @@ public class AcceptOrganizationInviteQueryHandler
             return Option.From(AcceptOrganizationInviteResult.AlreadyMember);
         }
 
-        context.Set<OrganizationMemberEntity>().Add(
-            new OrganizationMemberEntity
+        var memberId = Guid.NewGuid();
+        await context.InsertOnceAsync(
+            async ct =>
             {
-                Id = Guid.NewGuid(),
-                OrganizationId = invite.OrganizationId,
-                UserId = query.UserId.Value,
-                Role = invite.Role,
-            }
+                // Every attempt starts with an empty change tracker, so the invite is loaded again to be updated.
+                var pendingInvite = await context
+                    .Set<OrganizationInviteEntity>()
+                    .SingleAsync(x => x.Id == invite.Id, ct);
+                pendingInvite.Status = OrganizationInviteStatus.Accepted;
+                context.Set<OrganizationMemberEntity>().Add(
+                    new OrganizationMemberEntity
+                    {
+                        Id = memberId,
+                        OrganizationId = invite.OrganizationId,
+                        UserId = query.UserId.Value,
+                        Role = invite.Role,
+                    }
+                );
+                return await context.SaveChangesAsync(ct);
+            },
+            ct => context.Set<OrganizationMemberEntity>().AnyAsync(x => x.Id == memberId, ct),
+            cancellationToken
         );
-        invite.Status = OrganizationInviteStatus.Accepted;
-        await context.SaveChangesAsync(cancellationToken);
         return Option.From(AcceptOrganizationInviteResult.Accepted);
     }
 }

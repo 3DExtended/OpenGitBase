@@ -3,50 +3,69 @@ using OpenGitBase.Cqrs;
 using OpenGitBase.Features.Pipeline.Contracts;
 using OpenGitBase.Features.Pipeline.Entities;
 using OpenGitBase.Features.Pipeline.QueryHandlers;
+using OpenGitBase.Features.Pipeline.Services;
 using OpenGitBase.Features.Repository.Entities;
 
 namespace OpenGitBase.Features.Pipeline.Tests.QueryHandlers;
 
 public sealed class MaterializeWorkspaceArchiveQueryHandlerTests
 {
-    private static readonly Dictionary<string, string> WorkspaceFiles = new()
-    {
-        ["README.md"] = "workspace\n",
-    };
+    private const string CommitSha = "3f786850e387550fdab836ed7e6dc881de23001b";
+
+    // Bare repositories live on the storage nodes, so this path never exists next to the API.
+    private const string StoragePhysicalPath = "/srv/git/3e0e5f0e8f1a4a8c9d6b2f7a1c4e9b30.git";
+
+    private static readonly byte[] Archive = [0x1f, 0x8b, 0x08, 0x00];
 
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
-    public async Task RunQueryAsync_WithCommitSha_ReturnsWorkspaceArchive(int gitDepth)
+    public async Task RunQueryAsync_ReturnsTheArchiveStorageBuiltAtThePushedCommit(int gitDepth)
     {
-        using var repository = await GitTestRepository.CreateAsync(WorkspaceFiles);
+        var reader = FakeRepositoryArchiveReader.WithArchive(Archive);
         await using var scope = await PipelineHandlerTestScope.CreateAsync();
-        var (handler, query) = await SeedJobAsync(scope, repository.Path, repository.CommitSha, gitDepth);
+        var (handler, query, repositoryId) = await SeedJobAsync(scope, reader, CommitSha, gitDepth);
 
         var result = await handler.RunQueryAsync(query, CancellationToken.None);
 
         Assert.True(result.IsSome);
-        Assert.NotEmpty(result.Get().ArchiveBytes);
+        Assert.Equal(Archive, result.Get().ArchiveBytes);
         Assert.Equal(gitDepth > 0, result.Get().IsShallow);
+        Assert.Equal((repositoryId, StoragePhysicalPath, CommitSha, gitDepth), Assert.Single(reader.Reads));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    public async Task RunQueryAsync_WhenAfterShaIsNotAnObjectId_ReturnsNone(int gitDepth)
+    [Fact]
+    public async Task RunQueryAsync_WhenAfterShaIsNotAnObjectId_ReturnsNoneWithoutReadingStorage()
     {
-        using var repository = await GitTestRepository.CreateAsync(WorkspaceFiles);
+        var reader = FakeRepositoryArchiveReader.WithArchive(Archive);
         await using var scope = await PipelineHandlerTestScope.CreateAsync();
-        var (handler, query) = await SeedJobAsync(scope, repository.Path, "HEAD", gitDepth);
+        var (handler, query, _) = await SeedJobAsync(scope, reader, "HEAD", 0);
 
         var result = await handler.RunQueryAsync(query, CancellationToken.None);
 
         Assert.True(result.IsNone);
+        Assert.Empty(reader.Reads);
     }
 
-    private static async Task<(MaterializeWorkspaceArchiveQueryHandler Handler, MaterializeWorkspaceArchiveQuery Query)> SeedJobAsync(
+    // An outage is not an authentication failure: the caller answers it as unavailable, and the
+    // agent fails the job instead of running its script in an empty workspace.
+    [Fact]
+    public async Task RunQueryAsync_WhenStorageCannotBuildTheArchive_Throws()
+    {
+        var reader = FakeRepositoryArchiveReader.Failing(
+            new RepositoryFileUnavailableException("storage node unreachable")
+        );
+        await using var scope = await PipelineHandlerTestScope.CreateAsync();
+        var (handler, query, _) = await SeedJobAsync(scope, reader, CommitSha, 0);
+
+        await Assert.ThrowsAsync<RepositoryFileUnavailableException>(() =>
+            handler.RunQueryAsync(query, CancellationToken.None)
+        );
+    }
+
+    private static async Task<(MaterializeWorkspaceArchiveQueryHandler Handler, MaterializeWorkspaceArchiveQuery Query, Guid RepositoryId)> SeedJobAsync(
         PipelineHandlerTestScope scope,
-        string repositoryPath,
+        IRepositoryArchiveReader reader,
         string afterSha,
         int gitDepth
     )
@@ -66,7 +85,7 @@ public sealed class MaterializeWorkspaceArchiveQueryHandlerTests
                     Name = "repo",
                     OwnerUserId = Guid.NewGuid(),
                     Slug = "repo",
-                    PhysicalPath = repositoryPath,
+                    PhysicalPath = StoragePhysicalPath,
                 }
             );
             context.Set<PipelineRunEntity>().Add(
@@ -106,12 +125,12 @@ public sealed class MaterializeWorkspaceArchiveQueryHandlerTests
             await context.SaveChangesAsync();
         }
 
-        var handler = new MaterializeWorkspaceArchiveQueryHandler(scope.ContextFactory, hasher);
+        var handler = new MaterializeWorkspaceArchiveQueryHandler(scope.ContextFactory, hasher, reader);
         var query = new MaterializeWorkspaceArchiveQuery
         {
             JobId = PipelineJobId.From(jobId),
             JobIdentityToken = token,
         };
-        return (handler, query);
+        return (handler, query, repositoryId);
     }
 }

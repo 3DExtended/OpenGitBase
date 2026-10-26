@@ -34,6 +34,7 @@ COPY storage_commit.py /usr/local/bin/storage_commit.py
 COPY storage_merge.py /usr/local/bin/storage_merge.py
 COPY storage_push_validation.py /usr/local/bin/storage_push_validation.py
 COPY storage_artifact_crypto.py /usr/local/bin/storage_artifact_crypto.py
+COPY storage_lfs.py /usr/local/bin/storage_lfs.py
 COPY storage-pre-receive.sh /usr/local/bin/storage-pre-receive.sh
 COPY storage-git-http.sh /usr/local/bin/storage-git-http.sh
 COPY scripts/storage-quorum-replicate.sh /usr/local/bin/storage-quorum-replicate.sh

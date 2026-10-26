@@ -32,6 +32,31 @@ public static class PostgresAdvisoryLockService
         return acquired;
     }
 
+    /// <summary>
+    /// Waits until the lock is free and takes it. Like <see cref="TryAcquireAsync"/>, the lock is
+    /// held on the context's connection, which stays open until <see cref="ReleaseAsync"/>. The
+    /// context's command timeout bounds the wait.
+    /// </summary>
+    public static async Task AcquireAsync(
+        OpenGitBaseDbContext context,
+        long key,
+        CancellationToken cancellationToken
+    )
+    {
+        await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await context.Database
+                .ExecuteSqlAsync($"SELECT pg_advisory_lock({key})", cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await context.Database.CloseConnectionAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public static async Task ReleaseAsync(
         OpenGitBaseDbContext context,
         long key,

@@ -2,6 +2,7 @@
 using OpenGitBase.Common.Data;
 using OpenGitBase.Common.Services;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Users.Contracts.Models;
 using OpenGitBase.Features.Users.Contracts.Queries.Users;
 using OpenGitBase.Features.Users.Entities;
@@ -32,19 +33,28 @@ public class UserCreateQueryHandler : IQueryHandler<UserCreateQuery, UserId>
     {
         var userId = Guid.NewGuid();
 
+        var createdAt = _systemClock.UtcNow;
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        context
-            .Set<UserEntity>()
-            .Add(
-                new UserEntity
-                {
-                    Id = userId,
-                    Username = query.ModelToCreate.Username,
-                    NormalizedUsername = query.ModelToCreate.Username.Trim().ToLowerInvariant(),
-                    CreatedAt = _systemClock.UtcNow,
-                }
-            );
-        await context.SaveChangesAsync(cancellationToken);
+        await context.InsertOnceAsync(
+            ct =>
+            {
+                context
+                    .Set<UserEntity>()
+                    .Add(
+                        new UserEntity
+                        {
+                            Id = userId,
+                            Username = query.ModelToCreate.Username,
+                            NormalizedUsername = query.ModelToCreate.Username.Trim().ToLowerInvariant(),
+                            CreatedAt = createdAt,
+                        }
+                    );
+                return context.SaveChangesAsync(ct);
+            },
+            ct => context.Set<UserEntity>().AnyAsync(user => user.Id == userId, ct),
+            cancellationToken
+        );
 
         if (query.UserCredentials != null)
         {

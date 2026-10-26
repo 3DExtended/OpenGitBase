@@ -19,6 +19,7 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
             .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(dest => dest.GitBytesUsed, src => src.GitBytesUsed)
             .Map(dest => dest.DefaultBranchName, src => src.DefaultBranchName)
             .Map(
                 dest => dest.StorageNodeId,
@@ -37,6 +38,7 @@ public class RepositoryMapsterConfig : IRegister
             .Map(dest => dest.PhysicalPath, src => src.PhysicalPath)
             .Map(dest => dest.IsPrivate, src => src.IsPrivate)
             .Map(dest => dest.StorageBytesUsed, src => src.StorageBytesUsed)
+            .Map(dest => dest.GitBytesUsed, src => src.GitBytesUsed)
             .Map(dest => dest.DefaultBranchName, src => src.DefaultBranchName)
             .Map(
                 dest => dest.StorageNodeId,

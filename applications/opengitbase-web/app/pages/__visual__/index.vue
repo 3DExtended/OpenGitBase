@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import type { AccountSecurity, TotpSetup } from '~/utils/twoFactor'
+import type { AdminLfsFleetSummaryDto, AdminRepositoryLfsStatusDto } from '~/utils/api'
+import type { Passkey } from '~/utils/webauthn'
+import DiscussionSubThread from '~/components/discussions/DiscussionSubThread.vue'
+import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
+
 definePageMeta({
   layout: false,
   middleware: 'visual-dev-only',
@@ -7,7 +13,103 @@ definePageMeta({
 const { instanceName, instanceLogoUrl } = useInstanceBranding()
 const { t } = useI18n()
 const colorMode = useColorMode()
-import { visualDiscussionSubThreads } from '~/components/discussions/discussionSubThreadVisualFixtures'
+
+// mfa-01: a fixed secret keeps the setup QR code identical in every snapshot.
+const totpSetupFixture: TotpSetup = {
+  otpauthUri: 'otpauth://totp/OpenGitBase:demo-user?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=OpenGitBase',
+  secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+}
+const securityOffFixture: AccountSecurity = {
+  twoFactorAvailable: true,
+  twoFactorEnabled: false,
+  totpConfigured: false,
+  hasPassword: true,
+  recoveryCodesRemaining: 0,
+  passkeysAvailable: true,
+}
+const securityOnFixture: AccountSecurity = {
+  ...securityOffFixture,
+  twoFactorEnabled: true,
+  totpConfigured: true,
+  recoveryCodesRemaining: 10,
+}
+// mfa-02: two codes left shows the warning.
+const securityLowFixture: AccountSecurity = { ...securityOnFixture, recoveryCodesRemaining: 2 }
+// mfa-05: 2FA on with the passkeys alone, no authenticator app.
+const securityPasskeysOnlyFixture: AccountSecurity = { ...securityOnFixture, totpConfigured: false }
+// mfa-03: one synced passkey in use and one never used; dates relative to the frozen visual clock.
+const passkeysFixture: Passkey[] = [
+  {
+    id: 'passkey-macbook',
+    name: 'MacBook',
+    createdAt: '2026-06-01T12:00:00Z',
+    lastUsedAt: '2026-08-29T12:00:00Z',
+    isBackedUp: true,
+  },
+  {
+    id: 'passkey-yubikey',
+    name: 'YubiKey 5C',
+    createdAt: '2026-08-25T12:00:00Z',
+    lastUsedAt: null,
+    isBackedUp: false,
+  },
+]
+const recoveryCodesFixture = [
+  'abcde-fghij',
+  'klmno-pqrst',
+  'uvwxy-z2345',
+  '67abc-defgh',
+  'ijklm-nopqr',
+  'stuvw-xyz23',
+  '4567a-bcdef',
+  'ghijk-lmnop',
+  'qrstu-vwxyz',
+  '23456-7abcd',
+]
+
+// A fixed inline image, so the LFS preview snapshot does not depend on the network.
+const lfsImageFixtureUrl = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120">'
+  + '<rect width="240" height="120" fill="#0b1416"/>'
+  + '<circle cx="60" cy="60" r="34" fill="#38e0e6"/>'
+  + '<rect x="112" y="40" width="96" height="14" rx="3" fill="#38e0e6" opacity="0.7"/>'
+  + '<rect x="112" y="66" width="64" height="14" rx="3" fill="#38e0e6" opacity="0.4"/>'
+  + '</svg>',
+)}`
+
+function lfsBlobFixture(path: string, previewKind: string, size: number, available: boolean) {
+  return {
+    ref: 'main',
+    path,
+    size,
+    isBinary: true,
+    isTooLarge: size > 1_048_576,
+    previewKind,
+    textContent: null,
+    contentBase64: null,
+    lfs: { oid: '4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393', size, available },
+    replicationLag: null,
+  }
+}
+
+// lfs-08: a cold-recovered primary (storage-4) halfway through its LFS restore, one encrypted copy missing.
+const adminLfsRestoringFixture: AdminRepositoryLfsStatusDto = {
+  objectCount: 240,
+  totalBytes: 1_932_735_283,
+  missingCopies: 131,
+  nodes: [
+    { storageNodeId: 'n4', nodeId: 'storage-4', kind: 'Plaintext', isPrimary: true, copies: 110, missing: 130 },
+    { storageNodeId: 'n2', nodeId: 'storage-2', kind: 'Encrypted', isPrimary: false, copies: 240, missing: 0 },
+    { storageNodeId: 'n3', nodeId: 'storage-3', kind: 'Encrypted', isPrimary: false, copies: 239, missing: 1 },
+  ],
+}
+
+const adminLfsFleetFixture: AdminLfsFleetSummaryDto = {
+  objectCount: 1284,
+  totalBytes: 48_318_382_080,
+  missingCopies: 131,
+  repositoriesWithMissingCopies: 2,
+}
 
 const visualNow = Date.now()
 
@@ -287,6 +389,26 @@ const selfHostOptions = [
         >
           {{ t('auth.signIn.submit') }}
         </UButton>
+        <AuthPasskeySignInButton
+          class="mt-4"
+          :loading="false"
+          :error="null"
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-passkey-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Passkey sign-in, rejected
+      </h2>
+      <UCard>
+        <AuthPasskeySignInButton
+          :loading="false"
+          error="auth.signIn.passkey.rejected"
+        />
       </UCard>
     </section>
 
@@ -321,6 +443,217 @@ const selfHostOptions = [
         >
           {{ t('auth.signIn.submit') }}
         </UButton>
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          initial-code="123 456"
+          :error="t('auth.twoFactor.errors.invalidCode')"
+          recovery-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-passkey-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in with a passkey
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          passkey-available
+          recovery-available
+        />
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          :code-available="false"
+          passkey-available
+          recovery-available
+          :error="t('settings.security.passkeys.errors.rejected')"
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-md space-y-4"
+      data-testid="visual-two-factor-recovery-sign-in"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-step sign-in with a recovery code
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('auth.twoFactor.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-[var(--ogb-text-muted)]">
+            {{ t('auth.twoFactor.subtitle') }}
+          </p>
+        </template>
+        <AuthTwoFactorCodeForm
+          initial-code="abcde-fghij"
+          initial-recovery
+          recovery-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-security-passkey-two-factor"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Two-factor authentication with passkeys
+      </h2>
+      <SettingsTwoFactorStatusCard
+        :status="securityOffFixture"
+        :passkey-count="2"
+      />
+      <SettingsTwoFactorStatusCard
+        :status="securityPasskeysOnlyFixture"
+        :passkey-count="2"
+      />
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          needs-code
+          :totp-configured="false"
+          recovery-available
+          passkey-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-security-status"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Security settings
+      </h2>
+      <SettingsTwoFactorStatusCard :status="securityOffFixture" />
+      <SettingsTwoFactorStatusCard :status="securityOnFixture" />
+      <SettingsTwoFactorStatusCard :status="securityLowFixture" />
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-passkeys"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Passkeys
+      </h2>
+      <SettingsPasskeysCard :passkeys="passkeysFixture" />
+      <SettingsPasskeysCard
+        :passkeys="passkeysFixture"
+        initial-editing-id="passkey-yubikey"
+        adding
+      />
+      <SettingsPasskeysCard :passkeys="[]" />
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          :needs-code="false"
+          passkey-available
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-recovery-codes"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Recovery codes
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.recoveryCodes.title') }}
+          </h3>
+        </template>
+        <SettingsRecoveryCodesPanel
+          :codes="recoveryCodesFixture"
+          account="demo-user"
+          initial-stored
+        />
+      </UCard>
+    </section>
+
+    <section
+      class="mb-10 max-w-2xl space-y-4"
+      data-testid="visual-totp-setup"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Authenticator setup
+      </h2>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.setup.title') }}
+          </h3>
+        </template>
+        <SettingsTotpSetupPanel
+          :setup="totpSetupFixture"
+          initial-code="123456"
+        />
+      </UCard>
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            {{ t('settings.security.reauth.title') }}
+          </h3>
+        </template>
+        <SettingsReauthenticateForm
+          needs-password
+          needs-code
+          recovery-available
+        />
       </UCard>
     </section>
 
@@ -377,35 +710,53 @@ const selfHostOptions = [
     </section>
 
     <section
-      class="mt-10 max-w-3xl space-y-4"
-      data-testid="visual-discussion-sub-threads"
+      class="mt-10 max-w-md"
+      data-testid="visual-storage-meter-lfs"
     >
-      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
-        Discussion sub-threads
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Storage meter (with Git LFS)
       </h2>
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.open as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
+      <StorageUsageMeter
+        :usage="{ bytesUsed: 314572800, bytesLimit: 1073741824, fileSizeLimit: 52428800, gitBytes: 12582912, lfsBytes: 301989888 }"
       />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.resolved as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="true"
-        :can-reply="true"
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-image"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (image preview)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('assets/logo.png', 'image', 2516582, true)"
+        :raw-url="lfsImageFixtureUrl"
       />
-      <DiscussionSubThread
-        :comment="visualDiscussionSubThreads.orphan as any"
-        owner="acme"
-        repo-slug="demo"
-        :member-label="memberLabel"
-        :can-resolve="false"
-        :can-reply="false"
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-download"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (download only)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('models/weights.bin', 'binary', 769654784, true)"
+        raw-url="#"
+      />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl"
+      data-testid="visual-lfs-blob-unavailable"
+    >
+      <h2 class="mb-4 text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        LFS file (object not available)
+      </h2>
+      <RepoBlobViewer
+        :blob="lfsBlobFixture('assets/hero.psd', 'binary', 48234496, false)"
+        raw-url="#"
       />
     </section>
 
@@ -881,6 +1232,59 @@ const selfHostOptions = [
           </div>
         </div>
       </UCard>
+    </section>
+
+    <section
+      class="mt-10 max-w-5xl space-y-4"
+      data-testid="visual-admin-lfs-copy-status"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin Git LFS copies (restore in progress)
+      </h2>
+      <AdminLfsCopyStatus :lfs="adminLfsRestoringFixture" />
+    </section>
+
+    <section
+      class="mt-10 max-w-6xl space-y-4"
+      data-testid="visual-admin-lfs-fleet-summary"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Admin Git LFS fleet totals
+      </h2>
+      <AdminLfsFleetSummary :summary="adminLfsFleetFixture" />
+    </section>
+
+    <section
+      class="mt-10 max-w-3xl space-y-4"
+      data-testid="visual-discussion-sub-threads"
+    >
+      <h2 class="text-sm font-medium uppercase tracking-wider text-[var(--ogb-text-muted)]">
+        Discussion sub-threads
+      </h2>
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.open as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.resolved as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="true"
+        :can-reply="true"
+      />
+      <DiscussionSubThread
+        :comment="visualDiscussionSubThreads.orphan as any"
+        owner="acme"
+        repo-slug="demo"
+        :member-label="memberLabel"
+        :can-resolve="false"
+        :can-reply="false"
+      />
     </section>
   </div>
 </template>

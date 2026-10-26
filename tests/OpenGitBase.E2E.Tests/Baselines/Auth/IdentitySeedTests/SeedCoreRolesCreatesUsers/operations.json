@@ -19,4 +19,4 @@
 [HttpResponse] 200 OK | Email verified
 [Intent] Verify seeded admin can access account endpoint
 [HttpRequest] GET http://localhost:8089/api/account/me | GET http://localhost:8089/api/account/me
-[HttpResponse] 200 OK | {"userId":"{{GUID}}","username":"e2e-admin-{{RUN_SUFFIX}}","emailVerified":true,"isAdmin":false,"debug":{"emailVerification":true}}
+[HttpResponse] 200 OK | {"userId":"{{GUID}}","username":"e2e-admin-{{RUN_SUFFIX}}","emailVerified":true,"isAdmin":false,"twoFactorEnabled":false,"debug":{"emailVerification":true}}

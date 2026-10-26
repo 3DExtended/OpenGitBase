@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker } from './helpers'
+import { PAGE_READY_TIMEOUT, blockServiceWorker } from './helpers'
 
 type DiscussionLink = {
   discussionNumber: number
@@ -25,8 +25,8 @@ async function disableAnimations(page: import('@playwright/test').Page) {
 }
 
 async function waitForMergeRequestPage(page: import('@playwright/test').Page) {
-  await expect(page.getByRole('heading', { name: 'Refactor branch policy editor' })).toBeVisible()
-  await expect(page.getByTestId('mr-linked-discussions')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Refactor branch policy editor' })).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
+  await expect(page.getByTestId('mr-linked-discussions')).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
 }
 
 async function installLinkedDiscussionsRoutes(

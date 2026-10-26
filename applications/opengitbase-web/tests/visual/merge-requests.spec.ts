@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockServiceWorker, freezeClock } from './helpers'
+import { PAGE_READY_TIMEOUT, blockServiceWorker, freezeClock, waitForPageReady } from './helpers'
 
 async function disableAnimations(page: import('@playwright/test').Page) {
   await page.evaluate(async () => {
@@ -18,8 +18,8 @@ async function disableAnimations(page: import('@playwright/test').Page) {
 }
 
 async function waitForMergeRequestPage(page: import('@playwright/test').Page) {
-  await expect(page.getByRole('heading', { name: 'Refactor branch policy editor' })).toBeVisible()
-  await expect(page.getByTestId('mr-linked-discussions')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Refactor branch policy editor' })).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
+  await expect(page.getByTestId('mr-linked-discussions')).toBeVisible({ timeout: PAGE_READY_TIMEOUT })
 }
 
 async function installMergeRequestRoutes(page: import('@playwright/test').Page) {
@@ -197,7 +197,7 @@ test.describe('Merge request visuals', () => {
     })
     await freezeClock(page)
     await page.goto('/__visual__/?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await disableAnimations(page)
     await expect(page.getByTestId('visual-merge-requests-overview')).toHaveScreenshot('visual-merge-requests-overview.png')
     await expect(page.getByTestId('visual-merge-request-banner')).toHaveScreenshot('visual-merge-request-banner.png')

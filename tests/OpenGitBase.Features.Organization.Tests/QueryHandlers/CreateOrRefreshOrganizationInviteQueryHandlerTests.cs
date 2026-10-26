@@ -51,4 +51,44 @@ public class CreateOrRefreshOrganizationInviteQueryHandlerTests
             .SingleAsync(x => x.OrganizationId == organizationId.Value);
         Assert.Equal(OrganizationInviteStatus.Pending, invite.Status);
     }
+
+    [Fact]
+    public async Task RunQueryAsync_CreatesTheInviteOnceWhenTheCommitAcknowledgementIsLost()
+    {
+        var lostCommit = new LostCommitSimulator();
+        await using var scope = new InMemoryFeatureTestScope<OpenGitBaseDbContext, OrganizationMapsterConfig>(
+            lostCommit.Configure,
+            typeof(CreateOrRefreshOrganizationInviteQueryHandler).Assembly
+        );
+        await scope.EnsureCreatedAsync();
+
+        await using var seedContext = await scope.CreateDbContextAsync();
+        var (organizationId, _, ownerUserId) = await OrganizationTestData.SeedAsync(seedContext);
+        var passwordHasher = new PasswordHasherService();
+        var handler = new CreateOrRefreshOrganizationInviteQueryHandler(
+            scope.GetService<IDbContextFactory<OpenGitBaseDbContext>>(),
+            new EmailProtectionService(EncryptionOptions),
+            passwordHasher,
+            new FixedSystemClock(DateTimeOffset.UtcNow)
+        );
+
+        lostCommit.LoseNextCommitInserting("OrganizationInvite");
+        var result = await handler.RunQueryAsync(
+            new CreateOrRefreshOrganizationInviteQuery
+            {
+                OrganizationId = organizationId,
+                Email = "invitee@example.com",
+                Role = OrganizationMemberRole.Member,
+                InvitedByUserId = ownerUserId.Value,
+            },
+            CancellationToken.None
+        );
+
+        Assert.Equal(1, lostCommit.LostCommits);
+        var created = QueryHandlerResultAssert.AssertSome(result);
+        await using var verifyContext = await scope.CreateDbContextAsync();
+        var invite = Assert.Single(await verifyContext.Set<OrganizationInviteEntity>().ToListAsync());
+        Assert.Equal(created.InviteId.Value, invite.Id);
+        Assert.True(passwordHasher.VerifyPassword(invite.TokenHash, created.Token));
+    }
 }

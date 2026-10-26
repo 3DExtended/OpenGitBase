@@ -40,6 +40,8 @@ Both modes:
 
 Pass `--no-republish` to skip step 5.
 
+`--wipe` removes the named volumes of the compose project that compose itself resolves (`COMPOSE_PROJECT_NAME`, a top-level `name:` in the compose files, else the checkout directory). It reads the project from `compose config` before anything is stopped. When that fails (broken compose files, or Compose older than v2), the script exits without stopping or removing anything. The project is never taken from containers: every checkout names its brokers `opengitbase_kafka_N`, so a lookup by container name can return another stack's project. `scripts/test-kafka-quorum-reset.sh` covers this.
+
 ## Rolling updates
 
 `./scripts/rolling-update.sh` does **not** touch Kafka by default. Pass `--kafka` to atomically restart the quorum (keep volumes) after the app roll:
