@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OpenGitBase.Common.Data;
 using OpenGitBase.Cqrs;
+using OpenGitBase.Cqrs.EfCore;
 using OpenGitBase.Features.Organization.Contracts;
 using OpenGitBase.Features.Organization.Entities;
 
@@ -35,18 +36,26 @@ public class AddOrganizationMemberQueryHandler : IQueryHandler<AddOrganizationMe
             return Option<Unit>.None;
         }
 
-        context
-            .Set<OrganizationMemberEntity>()
-            .Add(
-                new OrganizationMemberEntity
-                {
-                    Id = Guid.Empty,
-                    OrganizationId = query.OrganizationId.Value,
-                    UserId = query.UserId.Value,
-                    Role = query.Role,
-                }
-            );
-        await context.SaveChangesAsync(cancellationToken);
+        var memberId = Guid.NewGuid();
+        await context.InsertOnceAsync(
+            ct =>
+            {
+                context
+                    .Set<OrganizationMemberEntity>()
+                    .Add(
+                        new OrganizationMemberEntity
+                        {
+                            Id = memberId,
+                            OrganizationId = query.OrganizationId.Value,
+                            UserId = query.UserId.Value,
+                            Role = query.Role,
+                        }
+                    );
+                return context.SaveChangesAsync(ct);
+            },
+            ct => context.Set<OrganizationMemberEntity>().AnyAsync(x => x.Id == memberId, ct),
+            cancellationToken
+        );
         return Unit.Value;
     }
 }

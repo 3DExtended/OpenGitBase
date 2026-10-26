@@ -10,6 +10,7 @@ See skills [`cli-goldens`](skills/cli-goldens/SKILL.md) and [`visual-snapshots`]
 | Feature scoped | `dotnet test tests/OpenGitBase.Features.{Feature}.Tests` | Faster TDD |
 | CLI unit | `dotnet test tests/OpenGitBase.Cli.Tests` | `ogb` changes |
 | CLI integration | `dotnet test tests/OpenGitBase.Cli.Integration.Tests` | CLI + in-process API |
+| Real Postgres | `dotnet test tests/OpenGitBase.Api.Tests` with Docker running | `[RequiresDockerFact]` tests start Postgres through Testcontainers (startup migrations); skipped without Docker, as in ogb-hosted CI |
 | Compose E2E | `dotnet test tests/OpenGitBase.E2E.Tests --filter "RequiresCompose"` | Real stack |
 | Domain E2E scripts | `./scripts/test-*-e2e.sh` | See script name for domain |
 | Web unit | `cd applications/opengitbase-web && pnpm test` | TS/Vue logic |

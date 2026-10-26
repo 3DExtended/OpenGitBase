@@ -809,7 +809,7 @@
       "reply": "Reply",
       "postReply": "Post reply",
       "replyPlaceholder": "Write a reply in Markdown…",
-      "replyCount": "{count} replies",
+      "replyCount": "{count} reply | {count} replies",
       "resolveSubThread": "Resolve thread",
       "unresolveSubThread": "Unresolve thread",
       "subThreadResolved": "Resolved",
