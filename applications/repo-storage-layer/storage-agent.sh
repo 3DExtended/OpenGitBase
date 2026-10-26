@@ -180,9 +180,3 @@ configure_dispatcher_authorized_keys() {
   chmod 600 /home/git/.ssh/authorized_keys
   chown git:git /home/git/.ssh/authorized_keys
 }
-
-start_storage_agent_background() {
-  (
-    heartbeat_loop
-  ) &
-}

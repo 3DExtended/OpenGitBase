@@ -8,6 +8,7 @@ import type {
   DiscussionStatus,
   RepositoryMember,
 } from '~/utils/api'
+import { resolveDiscussionOpening, type DiscussionOpening } from '~/utils/discussionBodyEcho'
 import { resolveCommentsFallbackLoad, resolveDiscussionDetailLoad } from '~/utils/discussionDetailLoad'
 import { parseAnchorFromRouteQuery } from '~/utils/discussionAnchorQuery'
 import {
@@ -44,6 +45,7 @@ export function useDiscussionDetailPage() {
     isClosed: false,
     discussion: null as Discussion | null,
     comments: [] as DiscussionComment[],
+    opening: { body: null, comment: null, comments: [] } as DiscussionOpening,
     commentsLoading: false,
     commentsError: null as string | null,
     members: [] as RepositoryMember[],
@@ -82,6 +84,9 @@ export function useDiscussionDetailPage() {
     ctx.notFound = notFound.value
     ctx.isWriterPlus = isWriterPlus.value
     ctx.isClosed = isClosed.value
+    ctx.opening = ctx.discussion
+      ? resolveDiscussionOpening(ctx.discussion, ctx.comments)
+      : { body: null, comment: null, comments: ctx.comments }
   })
 
   useHead({

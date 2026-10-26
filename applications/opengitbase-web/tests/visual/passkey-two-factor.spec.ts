@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import type { CDPSession, Page, Route } from '@playwright/test'
-import { blockServiceWorker, expect, test } from './helpers'
+import { PAGE_READY_TIMEOUT, blockServiceWorker, expect, test } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -135,7 +135,7 @@ test.describe('passkey as second factor', () => {
     await expect(page.getByLabel('Authentication code')).toBeVisible()
     await page.getByTestId('two-factor-use-passkey').click()
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/settings')
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: PAGE_READY_TIMEOUT }).toBe('/settings')
     expect(api.optionsTokens).toEqual([CHALLENGE_TOKEN])
     expect(api.answers).toHaveLength(1)
     expect(flags(api.answers[0]!)).toEqual({ present: true, verified: false })
@@ -154,7 +154,7 @@ test.describe('passkey as second factor', () => {
     await expect(page.getByTestId('two-factor-toggle-method')).toHaveText('Use a recovery code')
     await page.getByTestId('two-factor-use-passkey').click()
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/settings')
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: PAGE_READY_TIMEOUT }).toBe('/settings')
     expect(api.signedIn).toBe(true)
   })
 

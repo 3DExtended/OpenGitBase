@@ -129,6 +129,30 @@ services:
   web-2:
     <<: *web-build
 
+  # Production (Unraid) only — uncomment on Tower. Tower runs docker-compose.yml + this file, not
+  # docker-compose.prod.yml, so it needs the Kafka SSD cache pool mounts from there itself: on the
+  # array-backed docker.img the KRaft quorum churns elections forever (#232). rolling-update.sh and
+  # the kafka-quorum-* scripts refuse to run on a host with /mnt/cache/appdata/opengitbase/kafka1
+  # until all of these are present (docs/deployment/kafka-operations.md).
+  # Local dev: leave commented; Docker Desktop cannot mount /mnt/cache.
+  # kafka-vol-init:
+  #   volumes:
+  #     - /mnt/cache/appdata/opengitbase/kafka1:/kafka1
+  #     - /mnt/cache/appdata/opengitbase/kafka2:/kafka2
+  #     - /mnt/cache/appdata/opengitbase/kafka3:/kafka3
+  #
+  # kafka-1:
+  #   volumes:
+  #     - /mnt/cache/appdata/opengitbase/kafka1:/var/lib/kafka/data
+  #
+  # kafka-2:
+  #   volumes:
+  #     - /mnt/cache/appdata/opengitbase/kafka2:/var/lib/kafka/data
+  #
+  # kafka-3:
+  #   volumes:
+  #     - /mnt/cache/appdata/opengitbase/kafka3:/var/lib/kafka/data
+
   # Production (Unraid) only — requires COMPOSE_PROFILES=production-tunnel when running compose.
   # Local dev: do not enable this profile; use http://localhost:8089 instead.
   opengitbase_cloudflare_tunnel:

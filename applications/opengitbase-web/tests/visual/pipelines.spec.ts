@@ -1,11 +1,8 @@
-import { expect, test } from './helpers'
+import { expect, test, waitForPageReady } from './helpers'
 
 async function waitForApp(page: import('@playwright/test').Page) {
   await page.goto('/__visual__/?msw=1')
-  await page.waitForLoadState('networkidle')
-  await page.evaluate(async () => {
-    await document.fonts.ready
-  })
+  await waitForPageReady(page)
   await page.addStyleTag({
     content: `
       *, *::before, *::after {
@@ -32,7 +29,7 @@ test.describe('Pipeline visuals', () => {
 
   test('pipeline run detail page', async ({ page }) => {
     await page.goto('/demo-user/hello-world/pipelines/99999999-0000-0000-0000-000000000001?msw=1')
-    await page.waitForLoadState('networkidle')
+    await waitForPageReady(page)
     await expect(page.getByRole('heading', { name: 'Pipelines' })).toBeVisible()
     await expect(page.locator('body')).toHaveScreenshot('pipeline-run-detail-page.png', { fullPage: true })
   })
