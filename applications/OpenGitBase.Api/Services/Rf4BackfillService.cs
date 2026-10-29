@@ -52,6 +52,35 @@ public sealed class Rf4BackfillService
         }
     }
 
+    /// <summary>
+    /// The planner's layout around the repository's current primary, or null while that primary is not healthy
+    /// (failover moves it first). The planner always prefers its own primary (storage-1 on the platform layout) and
+    /// may name the current primary as an encrypted replica. Taking its roles as they stood left "Notes" (Oct 2026)
+    /// with storage-1's row Primary and storage-3's EncryptedReplica while PrimaryStorageNodeId stayed on storage-3:
+    /// every clone and push was denied. The current primary holds the up-to-date plaintext, so it stays the primary,
+    /// with the read replica colocated as the platform layout has it. The encrypted replicas are the planner's three
+    /// nodes without the current primary, encrypted slots first: where the planner put the current primary into an
+    /// encrypted slot, its own primary choice (healthy, with room, not the other encrypted replica) takes that slot.
+    /// </summary>
+    private static IReadOnlyList<(StorageNodeDto Node, RepositoryReplicaRole Role)>? TargetsAroundCurrentPrimary(
+        RepositoryEntity repository,
+        ReplicaSetSelection selection,
+        IReadOnlyList<StorageNodeDto> healthyNodes
+    )
+    {
+        var primary = healthyNodes.FirstOrDefault(node => node.Id.Value == repository.PrimaryStorageNodeId);
+        if (primary is null)
+        {
+            return null;
+        }
+
+        var encrypted = new[] { selection.EncryptedReplicaA, selection.EncryptedReplicaB, selection.Primary }
+            .Where(node => node.Id != primary.Id)
+            .Take(2)
+            .Select(node => (node, RepositoryReplicaRole.EncryptedReplica));
+        return [(primary, RepositoryReplicaRole.Primary), .. encrypted];
+    }
+
     private async Task MigrateRepositoryAsync(
         OpenGitBaseDbContext context,
         RepositoryEntity repository,
@@ -60,6 +89,13 @@ public sealed class Rf4BackfillService
     {
         if (repository.ReplicationState == ReplicationState.Rf3Healthy)
         {
+            // The roles are planned around the current primary, so it has to be unambiguous. An inconsistent one is
+            // left to an operator: planning from it could make a node without the repository the primary.
+            if (RepositoryPrimaryConsistency.FindProblems(repository).Count > 0)
+            {
+                return;
+            }
+
             repository.ReplicationState = ReplicationState.Rf4Migrating;
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -72,7 +108,8 @@ public sealed class Rf4BackfillService
                 .ConfigureAwait(false);
             var nodes = healthyNodes.IsSome ? healthyNodes.Get() : Array.Empty<StorageNodeDto>();
             var selection = ReplicaSetPlanner.SelectReplicaSet(nodes);
-            if (selection is null)
+            var targets = selection is null ? null : TargetsAroundCurrentPrimary(repository, selection, nodes);
+            if (targets is null)
             {
                 repository.ReplicationState = ReplicationState.Rf3Healthy;
                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -80,7 +117,7 @@ public sealed class Rf4BackfillService
             }
 
             var existingNodeIds = repository.Replicas.Select(replica => replica.StorageNodeId).ToHashSet();
-            foreach (var target in selection.ProvisionTargets)
+            foreach (var target in targets)
             {
                 if (existingNodeIds.Contains(target.Node.Id.Value))
                 {
@@ -124,10 +161,7 @@ public sealed class Rf4BackfillService
                 );
             }
 
-            repository.ReadReplicaStorageNodeId =
-                selection.ReadReplica.Id == selection.Primary.Id
-                    ? selection.Primary.Id.Value
-                    : selection.ReadReplica.Id.Value;
+            repository.ReadReplicaStorageNodeId = repository.PrimaryStorageNodeId;
             await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 

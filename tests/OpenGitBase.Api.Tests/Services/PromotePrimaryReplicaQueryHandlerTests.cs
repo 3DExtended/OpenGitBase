@@ -302,6 +302,148 @@ public class PromotePrimaryReplicaQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_WhenAnRf3ReplicaIsPromoted_KeepsTheEncryptedReplicaRoles()
+    {
+        // Mid-migration (Rf4Migrating still fails over the RF3 way) the encrypted replicas already hold only
+        // artifacts. Turning their rows into plaintext replicas would route clones to nodes without a repository.
+        var fleet = await CreateFleetHandlerAsync(
+            ReplicationState.Rf4Migrating,
+            primaryWatermark: 5,
+            new NodeCopy("storage-1", RepositoryReplicaRole.Primary, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-2", RepositoryReplicaRole.Replica, Healthy: true, AppliedWatermark: 5),
+            new NodeCopy("storage-3", RepositoryReplicaRole.EncryptedReplica, Healthy: true, AppliedWatermark: 3),
+            new NodeCopy("storage-4", RepositoryReplicaRole.EncryptedReplica, Healthy: true, AppliedWatermark: 3)
+        );
+
+        await using (fleet.Provider)
+        {
+            var result = await fleet.Handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(fleet.RepositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.True(result.Get().Promoted);
+            Assert.Equal(fleet.Nodes["storage-2"], result.Get().NewPrimaryStorageNodeId);
+            var roles = await LoadRolesAsync(fleet);
+            Assert.Equal(RepositoryReplicaRole.Replica, roles["storage-1"]);
+            Assert.Equal(RepositoryReplicaRole.Primary, roles["storage-2"]);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-3"]);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-4"]);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenAnEncryptedReplicaIsFurthestAhead_PromotesAPlaintextReplica()
+    {
+        // Watermark commits advance the encrypted replicas' rows too, so they are often the furthest ahead. They hold
+        // no plaintext repository: a primary there denies every clone and push.
+        var fleet = await CreateFleetHandlerAsync(
+            ReplicationState.Rf4Migrating,
+            primaryWatermark: 5,
+            new NodeCopy("storage-1", RepositoryReplicaRole.Primary, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-2", RepositoryReplicaRole.Replica, Healthy: true, AppliedWatermark: 4),
+            new NodeCopy("storage-3", RepositoryReplicaRole.EncryptedReplica, Healthy: true, AppliedWatermark: 5)
+        );
+
+        await using (fleet.Provider)
+        {
+            var result = await fleet.Handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(fleet.RepositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal(fleet.Nodes["storage-2"], result.Get().NewPrimaryStorageNodeId);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, (await LoadRolesAsync(fleet))["storage-3"]);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenTheMostCurrentReplicaIsOnAnUnhealthyNode_PromotesAHealthyOne()
+    {
+        var fleet = await CreateFleetHandlerAsync(
+            ReplicationState.Rf3Healthy,
+            primaryWatermark: 5,
+            new NodeCopy("storage-1", RepositoryReplicaRole.Primary, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-2", RepositoryReplicaRole.Replica, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-3", RepositoryReplicaRole.Replica, Healthy: true, AppliedWatermark: 4)
+        );
+
+        await using (fleet.Provider)
+        {
+            var result = await fleet.Handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(fleet.RepositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal(fleet.Nodes["storage-3"], result.Get().NewPrimaryStorageNodeId);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenADegradedRf4RepositoryHasOnlyALaggingPlaintextCopy_RecoversFromTheEncryptedCopies()
+    {
+        // RF4 commits a push on the primary plus one encrypted copy, so watermarks 4 and 5 may exist nowhere in
+        // plaintext but on the dead primary. Promoting storage-2 (the RF3 rule: highest watermark wins) loses them.
+        var fleet = await CreateFleetHandlerAsync(
+            ReplicationState.Degraded,
+            primaryWatermark: 5,
+            new NodeCopy("storage-1", RepositoryReplicaRole.Primary, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-2", RepositoryReplicaRole.Replica, Healthy: true, AppliedWatermark: 3),
+            new NodeCopy("storage-3", RepositoryReplicaRole.EncryptedReplica, Healthy: true, ArtifactWatermark: 5),
+            new NodeCopy("storage-4", RepositoryReplicaRole.EncryptedReplica, Healthy: true, ArtifactWatermark: 5)
+        );
+
+        await using (fleet.Provider)
+        {
+            var result = await fleet.Handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(fleet.RepositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.False(result.Get().Promoted);
+            Assert.Equal(fleet.Nodes["storage-1"], (await LoadRepositoryAsync(fleet.Provider, fleet.RepositoryId)).PrimaryStorageNodeId);
+            await fleet.Provider.GetRequiredService<IColdRecoveryService>()
+                .Received(1)
+                .TryRecoverAsync(fleet.RepositoryId, Arg.Any<CancellationToken>());
+            var roles = await LoadRolesAsync(fleet);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-3"]);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-4"]);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_WhenADegradedRf4RepositoryHasAnInSyncPlaintextCopy_PromotesItAndStaysRf4()
+    {
+        var fleet = await CreateFleetHandlerAsync(
+            ReplicationState.Degraded,
+            primaryWatermark: 5,
+            new NodeCopy("storage-1", RepositoryReplicaRole.Primary, Healthy: false, AppliedWatermark: 5),
+            new NodeCopy("storage-2", RepositoryReplicaRole.Replica, Healthy: true, AppliedWatermark: 5),
+            new NodeCopy("storage-3", RepositoryReplicaRole.EncryptedReplica, Healthy: true, ArtifactWatermark: 5),
+            new NodeCopy("storage-4", RepositoryReplicaRole.EncryptedReplica, Healthy: true, ArtifactWatermark: 5)
+        );
+
+        await using (fleet.Provider)
+        {
+            var result = await fleet.Handler.RunQueryAsync(
+                new PromotePrimaryReplicaQuery { RepositoryId = RepositoryId.From(fleet.RepositoryId) },
+                CancellationToken.None
+            );
+
+            Assert.Equal(fleet.Nodes["storage-2"], result.Get().NewPrimaryStorageNodeId);
+            var repository = await LoadRepositoryAsync(fleet.Provider, fleet.RepositoryId);
+            // Rf3Healthy would hand the repository to the RF4 backfill, which plans its roles all over again.
+            Assert.Equal(ReplicationState.Rf4Healthy, repository.ReplicationState);
+            Assert.Equal(fleet.Nodes["storage-2"], repository.StorageNodeId);
+            var roles = await LoadRolesAsync(fleet);
+            Assert.Equal(RepositoryReplicaRole.Replica, roles["storage-1"]);
+            Assert.Equal(RepositoryReplicaRole.Primary, roles["storage-2"]);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-3"]);
+            Assert.Equal(RepositoryReplicaRole.EncryptedReplica, roles["storage-4"]);
+        }
+    }
+
     private static async Task<RepositoryEntity> LoadRepositoryAsync(ServiceProvider provider, Guid repositoryId)
     {
         var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
@@ -514,6 +656,102 @@ public class PromotePrimaryReplicaQueryHandlerTests
         return (provider.GetRequiredService<PromotePrimaryReplicaQueryHandler>(), provider);
     }
 
+    /// <summary>
+    /// A repository with one row per <paramref name="copies"/>; the first Primary row is also
+    /// <c>PrimaryStorageNodeId</c> and <c>StorageNodeId</c>. Use storage-1 for that primary: the probe only knows it.
+    /// </summary>
+    private static async Task<Fleet> CreateFleetHandlerAsync(
+        ReplicationState state,
+        long primaryWatermark,
+        params NodeCopy[] copies
+    )
+    {
+        var repositoryId = Guid.NewGuid();
+        var nodes = copies.ToDictionary(copy => copy.NodeId, _ => Guid.NewGuid());
+        var primaryId = nodes[copies.First(copy => copy.Role == RepositoryReplicaRole.Primary).NodeId];
+        var connection = SqliteTestConnection.OpenInMemory();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(connection);
+        services.AddSingleton<IFeatureAssemblyProvider>(
+            new FeatureAssemblyProvider(
+                [
+                    typeof(RepositoryMapsterConfig).Assembly,
+                    typeof(global::OpenGitBase.Features.StorageNode.StorageNodeMapsterConfig).Assembly,
+                ]
+            )
+        );
+        services.AddTestDbContextFactory<OpenGitBaseDbContext>(connection);
+        services.AddSingleton<IColdRecoveryService>(_ => Substitute.For<IColdRecoveryService>());
+        services.AddSingleton(LivenessProbe(primaryAnswers: false));
+        services.AddLogging();
+        services.AddSingleton<RecordingLfsRepairQueue>();
+        services.AddSingleton<ILfsRepairQueue>(sp => sp.GetRequiredService<RecordingLfsRepairQueue>());
+        services.AddSingleton<PromotePrimaryReplicaQueryHandler>();
+
+        var provider = services.BuildServiceProvider();
+        var contextFactory = provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await context.Database.EnsureCreatedAsync();
+            context.Set<StorageNodeEntity>().AddRange(
+                copies.Select(copy => new StorageNodeEntity
+                {
+                    Id = nodes[copy.NodeId],
+                    NodeId = copy.NodeId,
+                    InternalHost = copy.NodeId,
+                    InternalHttpPort = 8081,
+                    IsHealthy = copy.Healthy,
+                    RegisteredAt = DateTimeOffset.UtcNow,
+                })
+            );
+            context.Set<RepositoryEntity>().Add(
+                new RepositoryEntity
+                {
+                    Id = repositoryId,
+                    Name = "repo",
+                    Slug = "repo",
+                    OwnerUserId = Guid.NewGuid(),
+                    PhysicalPath = $"/srv/git/{repositoryId}.git",
+                    StorageNodeId = primaryId,
+                    PrimaryStorageNodeId = primaryId,
+                    PrimaryWatermark = primaryWatermark,
+                    ReplicationEpoch = 1,
+                    ReplicationState = state,
+                    Replicas =
+                    [
+                        .. copies.Select(copy => new RepositoryReplicaEntity
+                        {
+                            RepositoryId = repositoryId,
+                            StorageNodeId = nodes[copy.NodeId],
+                            Role = copy.Role,
+                            AppliedWatermark = copy.AppliedWatermark,
+                            ArtifactWatermark = copy.ArtifactWatermark,
+                        }),
+                    ],
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        return new Fleet(provider.GetRequiredService<PromotePrimaryReplicaQueryHandler>(), provider, repositoryId, nodes);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, RepositoryReplicaRole>> LoadRolesAsync(Fleet fleet)
+    {
+        var contextFactory = fleet.Provider.GetRequiredService<IDbContextFactory<OpenGitBaseDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var replicas = await context
+            .Set<RepositoryReplicaEntity>()
+            .AsNoTracking()
+            .Where(replica => replica.RepositoryId == fleet.RepositoryId)
+            .ToListAsync();
+        return fleet.Nodes.ToDictionary(
+            node => node.Key,
+            node => replicas.Single(replica => replica.StorageNodeId == node.Value).Role
+        );
+    }
+
     /// <summary>A probe on which only storage-1, the old primary in both fixtures, may answer.</summary>
     private static IStorageNodeLivenessProbe LivenessProbe(bool primaryAnswers)
     {
@@ -521,4 +759,20 @@ public class PromotePrimaryReplicaQueryHandlerTests
         probe.AnswersAsync("storage-1", 8081, Arg.Any<CancellationToken>()).Returns(primaryAnswers);
         return probe;
     }
+
+    /// <summary>One copy of the repository in <see cref="CreateFleetHandlerAsync"/>: the node, its row's role and watermarks.</summary>
+    private sealed record NodeCopy(
+        string NodeId,
+        RepositoryReplicaRole Role,
+        bool Healthy,
+        long AppliedWatermark = 0,
+        long? ArtifactWatermark = null
+    );
+
+    private sealed record Fleet(
+        PromotePrimaryReplicaQueryHandler Handler,
+        ServiceProvider Provider,
+        Guid RepositoryId,
+        IReadOnlyDictionary<string, Guid> Nodes
+    );
 }

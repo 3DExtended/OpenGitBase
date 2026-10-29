@@ -87,23 +87,41 @@ public sealed class PromotePrimaryReplicaQueryHandler
             return Option.From(new PromotePrimaryReplicaResult { Promoted = false });
         }
 
-        if (entity.ReplicationState is ReplicationState.Rf4Healthy or ReplicationState.Recovering)
+        // A Degraded repository with encrypted replicas is an RF4 repository (ReplicationStateEvaluator applies the
+        // same test) and fails over the RF4 way. RF4 commits a push once the primary and one encrypted replica hold
+        // it, so no plaintext replica is sure to have every committed push. The RF3 rule, highest watermark wins, is
+        // only safe behind RF3's two-of-three plaintext quorum: here it would roll committed pushes back. The RF4 path
+        // promotes only a plaintext copy at PrimaryWatermark, otherwise restores from the encrypted copies or stays
+        // Degraded, and keeps the repository on RF4: Rf3Healthy would send it through the RF4 backfill again, which
+        // plans every role anew.
+        if (entity.ReplicationState is ReplicationState.Rf4Healthy or ReplicationState.Recovering
+            || (entity.ReplicationState == ReplicationState.Degraded
+                && entity.Replicas.Any(replica => replica.Role == RepositoryReplicaRole.EncryptedReplica)))
         {
             return await PromoteRf4Async(context, entity, nodes, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        return await PromoteRf3Async(context, entity, cancellationToken).ConfigureAwait(false);
+        return await PromoteRf3Async(context, entity, nodes, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<Option<PromotePrimaryReplicaResult>> PromoteRf3Async(
         OpenGitBaseDbContext context,
         RepositoryEntity entity,
+        IReadOnlyDictionary<Guid, StorageNodeEntity> nodes,
         CancellationToken cancellationToken
     )
     {
+        // An encrypted replica holds no plaintext repository, and a node that is down cannot serve one: either as
+        // primary denies every clone and push. Watermark commits advance encrypted rows too, so without this filter
+        // they often win on watermark.
         var candidate = entity
-            .Replicas.Where(replica => replica.StorageNodeId != entity.PrimaryStorageNodeId)
+            .Replicas.Where(replica =>
+                replica.StorageNodeId != entity.PrimaryStorageNodeId
+                && replica.Role != RepositoryReplicaRole.EncryptedReplica
+                && nodes.TryGetValue(replica.StorageNodeId, out var node)
+                && node.IsHealthy
+            )
             .OrderByDescending(replica => replica.AppliedWatermark)
             .ThenBy(replica => replica.StorageNodeId)
             .FirstOrDefault();
@@ -120,11 +138,18 @@ public sealed class PromotePrimaryReplicaQueryHandler
         entity.PrimaryStorageNodeId = candidate.StorageNodeId;
         entity.StorageNodeId = candidate.StorageNodeId;
 
+        // Only the candidate and the old primary change roles. An encrypted replica holds artifacts, not a
+        // repository; made a plaintext replica, it would be routed clones it cannot serve.
         foreach (var replica in entity.Replicas)
         {
-            replica.Role = replica.StorageNodeId == candidate.StorageNodeId
-                ? RepositoryReplicaRole.Primary
-                : RepositoryReplicaRole.Replica;
+            if (replica.StorageNodeId == candidate.StorageNodeId)
+            {
+                replica.Role = RepositoryReplicaRole.Primary;
+            }
+            else if (replica.Role == RepositoryReplicaRole.Primary)
+            {
+                replica.Role = RepositoryReplicaRole.Replica;
+            }
         }
 
         entity.ReplicationState = ReplicationState.Rf3Healthy;
@@ -148,23 +173,30 @@ public sealed class PromotePrimaryReplicaQueryHandler
         CancellationToken cancellationToken
     )
     {
-        var readReplica = entity.Replicas.FirstOrDefault(replica =>
-            replica.Role == RepositoryReplicaRole.ReadReplica
-            && nodes.TryGetValue(replica.StorageNodeId, out var node)
-            && node.IsHealthy
-            && replica.AppliedWatermark >= entity.PrimaryWatermark
-        );
+        // The read replica first, then any other plaintext copy (an RF3 replica the migration left, a demoted
+        // primary), but only one at PrimaryWatermark: RF4 commits a push without the plaintext replicas.
+        var candidate = entity
+            .Replicas.Where(replica =>
+                replica.Role != RepositoryReplicaRole.EncryptedReplica
+                && replica.StorageNodeId != entity.PrimaryStorageNodeId
+                && nodes.TryGetValue(replica.StorageNodeId, out var node)
+                && node.IsHealthy
+                && ReplicationSync.IsInSync(replica.AppliedWatermark, entity.PrimaryWatermark)
+            )
+            .OrderByDescending(replica => replica.Role == RepositoryReplicaRole.ReadReplica)
+            .ThenBy(replica => replica.StorageNodeId)
+            .FirstOrDefault();
 
-        if (readReplica is not null)
+        if (candidate is not null)
         {
             entity.ReplicationState = ReplicationState.Promoting;
             entity.ReplicationEpoch += 1;
-            entity.PrimaryStorageNodeId = readReplica.StorageNodeId;
-            entity.StorageNodeId = readReplica.StorageNodeId;
+            entity.PrimaryStorageNodeId = candidate.StorageNodeId;
+            entity.StorageNodeId = candidate.StorageNodeId;
 
             foreach (var replica in entity.Replicas)
             {
-                if (replica.StorageNodeId == readReplica.StorageNodeId)
+                if (replica.StorageNodeId == candidate.StorageNodeId)
                 {
                     replica.Role = RepositoryReplicaRole.Primary;
                 }
@@ -184,7 +216,7 @@ public sealed class PromotePrimaryReplicaQueryHandler
                 new PromotePrimaryReplicaResult
                 {
                     Promoted = true,
-                    NewPrimaryStorageNodeId = readReplica.StorageNodeId,
+                    NewPrimaryStorageNodeId = candidate.StorageNodeId,
                     ReplicationEpoch = entity.ReplicationEpoch,
                 }
             );

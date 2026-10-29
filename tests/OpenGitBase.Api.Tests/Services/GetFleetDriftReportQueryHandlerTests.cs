@@ -195,6 +195,148 @@ public class GetFleetDriftReportQueryHandlerTests
         }
     }
 
+    [Fact]
+    public async Task RunQueryAsync_ReportsARepositoryWhosePrimaryPointerIsOnAnEncryptedReplica()
+    {
+        // Production, "Notes": PrimaryStorageNodeId stayed on storage-3 after the RF4 backfill made storage-3's row
+        // EncryptedReplica and storage-1's Primary. Every copy is where its row says, so no on-disk kind shows it.
+        var storage1 = Guid.NewGuid();
+        var storage3 = Guid.NewGuid();
+        var storage4 = Guid.NewGuid();
+        var repoId = Guid.NewGuid();
+        var provisioner = new FakeStorageProvisionerClient
+        {
+            InventoryProvider = node =>
+                node.Id.Value == storage3
+                    ? StorageInventoryResult.Ok([], [repoId])
+                    : StorageInventoryResult.Ok([repoId], []),
+        };
+
+        var (handler, provider) = await CreateHandlerAsync(
+            provisioner,
+            [storage1, storage3, storage4],
+            configure: context => context.Set<RepositoryEntity>().Add(
+                Repository(
+                    repoId,
+                    "notes",
+                    primaryPointer: storage3,
+                    (storage3, RepositoryReplicaRole.EncryptedReplica),
+                    (storage1, RepositoryReplicaRole.Primary),
+                    (storage4, RepositoryReplicaRole.Replica)
+                )
+            )
+        );
+
+        await using (provider)
+        {
+            var report = (await handler.RunQueryAsync(new GetFleetDriftReportQuery(), default)).Get();
+
+            var mismatch = Assert.Single(report.Drift);
+            Assert.Equal(FleetDriftKind.PrimaryMismatch, mismatch.Kind);
+            Assert.Equal(repoId, mismatch.RepositoryId);
+            Assert.Equal("notes", mismatch.RepositoryName);
+            Assert.Equal(storage3, mismatch.StorageNodeId);
+            Assert.Equal(storage3.ToString(), mismatch.NodeId);
+            Assert.Contains("EncryptedReplica", mismatch.Detail, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_DoesNotReportAConsistentPrimary()
+    {
+        var storage1 = Guid.NewGuid();
+        var storage2 = Guid.NewGuid();
+        var repoId = Guid.NewGuid();
+        var provisioner = new FakeStorageProvisionerClient
+        {
+            InventoryProvider = _ => StorageInventoryResult.Ok([repoId], []),
+        };
+
+        var (handler, provider) = await CreateHandlerAsync(
+            provisioner,
+            [storage1, storage2],
+            configure: context => context.Set<RepositoryEntity>().Add(
+                Repository(
+                    repoId,
+                    "repo",
+                    primaryPointer: storage1,
+                    (storage1, RepositoryReplicaRole.Primary),
+                    (storage2, RepositoryReplicaRole.Replica)
+                )
+            )
+        );
+
+        await using (provider)
+        {
+            var report = (await handler.RunQueryAsync(new GetFleetDriftReportQuery(), default)).Get();
+
+            Assert.Empty(report.Drift);
+        }
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_ReportsAPrimaryMismatchWhileNoNodeCanBeProbed()
+    {
+        // The check reads only the database, so unlike the on-disk kinds it does not wait for the nodes to answer.
+        var storage1 = Guid.NewGuid();
+        var storage2 = Guid.NewGuid();
+        var repoId = Guid.NewGuid();
+        var provisioner = new FakeStorageProvisionerClient
+        {
+            InventoryProvider = _ => StorageInventoryResult.Fail(502, "unreachable"),
+        };
+
+        var (handler, provider) = await CreateHandlerAsync(
+            provisioner,
+            [storage1, storage2],
+            configure: context => context.Set<RepositoryEntity>().Add(
+                Repository(
+                    repoId,
+                    "repo",
+                    primaryPointer: storage1,
+                    (storage1, RepositoryReplicaRole.Primary),
+                    (storage2, RepositoryReplicaRole.Primary)
+                )
+            )
+        );
+
+        await using (provider)
+        {
+            var report = (await handler.RunQueryAsync(new GetFleetDriftReportQuery(), default)).Get();
+
+            Assert.All(report.Nodes, node => Assert.False(node.Reachable));
+            var mismatch = Assert.Single(report.Drift);
+            Assert.Equal(FleetDriftKind.PrimaryMismatch, mismatch.Kind);
+            Assert.Equal(storage1, mismatch.StorageNodeId);
+        }
+    }
+
+    private static RepositoryEntity Repository(
+        Guid id,
+        string name,
+        Guid primaryPointer,
+        params (Guid Node, RepositoryReplicaRole Role)[] rows
+    ) =>
+        new()
+        {
+            Id = id,
+            Name = name,
+            Slug = name,
+            OwnerUserId = Guid.NewGuid(),
+            PhysicalPath = $"/srv/git/{id}.git",
+            StorageNodeId = primaryPointer,
+            PrimaryStorageNodeId = primaryPointer,
+            Replicas =
+            [
+                .. rows.Select(row => new RepositoryReplicaEntity
+                {
+                    RepositoryId = id,
+                    StorageNodeId = row.Node,
+                    Role = row.Role,
+                }),
+            ],
+        };
+
     private static async Task<(GetFleetDriftReportQueryHandler Handler, ServiceProvider Provider)>
         CreateHandlerAsync(
             IStorageProvisionerClient provisioner,

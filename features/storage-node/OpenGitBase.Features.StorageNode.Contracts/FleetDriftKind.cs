@@ -22,4 +22,10 @@ public enum FleetDriftKind
     /// <summary>LFS data (plaintext or encrypted) is on disk on the node for a repository that no longer
     /// exists. The reconciler deletes it on its next pass.</summary>
     OrphanLfs,
+
+    /// <summary>The repository's primary pointer and its Primary replica row disagree: the row on the node
+    /// <c>PrimaryStorageNodeId</c> names is missing or not Primary, the repository has no or several Primary rows, or
+    /// <c>StorageNodeId</c> differs from <c>PrimaryStorageNodeId</c>. Routing then finds no plaintext primary and
+    /// denies every clone and push. Read from the database alone; reported on the node the pointer names.</summary>
+    PrimaryMismatch,
 }
