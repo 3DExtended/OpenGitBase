@@ -83,15 +83,13 @@ public sealed class GitSessionProxyService
             async () =>
             {
                 await using var remoteInput = command.CreateInputStream();
-                if (receivePackPrefix is { Length: > 0 })
-                {
-                    await remoteInput
-                        .WriteAsync(receivePackPrefix.AsMemory(0, receivePackPrefix.Length), cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                await localInput
-                    .CopyToAsync(remoteInput, cancellationToken)
+                await ForwardInputAsync(
+                        localInput,
+                        remoteInput,
+                        receivePackPrefix,
+                        () => SshCommandEof.Send(command),
+                        cancellationToken
+                    )
                     .ConfigureAwait(false);
             },
             cancellationToken
@@ -102,5 +100,42 @@ public sealed class GitSessionProxyService
 
         await Task.WhenAll(executeTask, stdinTask, stdoutTask, stderrTask).ConfigureAwait(false);
         return command.ExitStatus ?? 1;
+    }
+
+    /// <summary>
+    /// Copies the client's input to the storage command. Disposing <paramref name="remoteInput"/> sends
+    /// EOF only when it carried at least one byte, so when the client closes its input without sending
+    /// anything, <paramref name="sendEof"/> sends it; otherwise the storage command, and with it this
+    /// session, waits for input forever.
+    /// </summary>
+    internal static async Task ForwardInputAsync(
+        Stream localInput,
+        Stream remoteInput,
+        byte[]? receivePackPrefix,
+        Action sendEof,
+        CancellationToken cancellationToken
+    )
+    {
+        var forwardedAny = false;
+        if (receivePackPrefix is { Length: > 0 })
+        {
+            await remoteInput
+                .WriteAsync(receivePackPrefix.AsMemory(0, receivePackPrefix.Length), cancellationToken)
+                .ConfigureAwait(false);
+            forwardedAny = true;
+        }
+
+        var buffer = new byte[81920];
+        int read;
+        while ((read = await localInput.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            await remoteInput.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+            forwardedAny = true;
+        }
+
+        if (!forwardedAny)
+        {
+            sendEof();
+        }
     }
 }

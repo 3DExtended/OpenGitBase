@@ -149,9 +149,9 @@ frontend api
   http-request return status 404
 CFG
 
-# Storage node stand-in: sshd that only accepts the storage key and echoes the command it got. It
-# reads stdin to EOF first, as git-upload-pack does; GitSessionProxyService opens the remote stdin
-# after starting the command and fails when the command has already exited.
+# Storage node stand-in: sshd that only accepts the storage key and echoes the command it got and
+# how many input bytes reached it. wc reads stdin to EOF, so a session whose EOF never arrives
+# hangs (SSH.NET sends EOF only after input; see SshCommandEof).
 cat "${TMP}/stub/storage_key.pub" >"${TMP}/stub/authorized_keys"
 cat >"${TMP}/stub/storage_sshd_config" <<'CFG'
 Port 22
@@ -164,7 +164,7 @@ PubkeyAuthentication yes
 AuthorizedKeysFile .ssh/authorized_keys
 AllowUsers git
 PidFile /var/run/sshd.pid
-ForceCommand cat >/dev/null; echo "storage reached: ${SSH_ORIGINAL_COMMAND}"
+ForceCommand echo "storage reached: ${SSH_ORIGINAL_COMMAND} with $(wc -c) input bytes"
 CFG
 chmod 755 "${TMP}/stub"
 chmod 644 "${TMP}/stub/"*
@@ -224,23 +224,31 @@ else
   fail "git cannot read ${KEY_PATH}: $(docker exec -u git "${DISPATCHER_NAME}" cat "${KEY_PATH}" 2>&1 >/dev/null | head -n 1)"
 fi
 
+# Runs one SSH git session from the storage container with $2 as the client's input. timeout turns a
+# session that never ends into a failure instead of a hung test.
+check_session() {
+  local description=$1 input=$2 expected session_output session_exit
+  expected="storage reached: git-upload-pack '${PHYSICAL_PATH}' with ${#input} input bytes"
+  set +e
+  session_output=$(printf '%s' "${input}" | docker exec -i "${STORAGE_NAME}" timeout 30 ssh -i /root/user_key \
+    -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+    -o ConnectTimeout=10 \
+    "git@${DISPATCHER_NAME}" "git-upload-pack 'alice/demo.git'" 2>&1)
+  session_exit=$?
+  set -e
+  if [ "${session_exit}" = "0" ] && grep -q -F "${expected}" <<<"${session_output}"; then
+    pass "${description}"
+  else
+    fail "${description}: session exit ${session_exit} (124: no EOF reached storage), want 0 and '${expected}'"
+    sed 's/^/      /' <<<"${session_output}" >&2
+    show_logs "${DISPATCHER_NAME}"
+    show_logs "${API_NAME}"
+  fi
+}
+
 echo "==> SSH git session reaches storage"
-set +e
-session_output=$(docker exec "${STORAGE_NAME}" ssh -i /root/user_key \
-  -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  -o ConnectTimeout=10 \
-  "git@${DISPATCHER_NAME}" "git-upload-pack 'alice/demo.git'" </dev/null 2>&1)
-session_exit=$?
-set -e
-expected="storage reached: git-upload-pack '${PHYSICAL_PATH}'"
-if [ "${session_exit}" = "0" ] && grep -q -F "${expected}" <<<"${session_output}"; then
-  pass "session proxied to storage with the bootstrapped key"
-else
-  fail "session exit ${session_exit}, want 0 and '${expected}'"
-  sed 's/^/      /' <<<"${session_output}" >&2
-  show_logs "${DISPATCHER_NAME}"
-  show_logs "${API_NAME}"
-fi
+check_session "session with no client input proxied to storage with the bootstrapped key" ""
+check_session "session forwards the client input and its EOF to storage" $'hello\n'
 
 if [ "${FAILURES}" -gt 0 ]; then
   echo "FAILED: ${FAILURES} check(s)" >&2
