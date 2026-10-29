@@ -94,6 +94,34 @@ export default defineNuxtConfig({
         },
       },
     },
+    // Dependencies Vite's startup scan misses (behind lazy routes and the MSW
+    // plugin's dynamic import). Discovering one at runtime re-optimizes deps and
+    // reloads the page; `nuxt dev` lists any new ones as "Vite discovered new
+    // dependencies at runtime".
+    optimizeDeps: {
+      include: [
+        '@tiptap/extension-link',
+        '@tiptap/extension-placeholder',
+        '@tiptap/extension-strike',
+        '@tiptap/extension-table',
+        '@tiptap/extension-table-cell',
+        '@tiptap/extension-table-header',
+        '@tiptap/extension-table-row',
+        '@tiptap/extension-task-item',
+        '@tiptap/extension-task-list',
+        '@tiptap/extension-underline',
+        '@tiptap/starter-kit',
+        '@tiptap/vue-3',
+        'isomorphic-dompurify',
+        'marked',
+        'msw',
+        'msw/browser',
+        'reveal.js',
+        'shiki',
+        'tiptap-markdown',
+        'uqr',
+      ],
+    },
   },
 
   compatibilityDate: '2025-06-21',

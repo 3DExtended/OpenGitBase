@@ -83,6 +83,43 @@ public class DependencyInjectionHelpersTests
         Assert.Null(provider.GetService<IDbContextFactory<OpenGitBaseDbContext>>());
     }
 
+    [Fact]
+    public async Task ConfigureGlobalServices_UnderEfDesignTime_RegistersDatabaseWithoutMigrating()
+    {
+        // `dotnet ef migrations add` builds the API host for its DbContext and must leave the
+        // configured database alone. Nothing listens on port 1, so a migration attempt would fail
+        // with "Database migration failed during API startup."
+        var services = new ServiceCollection();
+        services.AddSingleton(CreateEnvironment("Development"));
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Sql:ConnectionString"] = "Host=127.0.0.1;Port=1;Database=ogb;Username=ogb",
+                }
+            )
+            .Build();
+
+        var wasDesignTime = EF.IsDesignTime;
+        EF.IsDesignTime = true;
+        try
+        {
+            await DependencyInjectionHelpers.ConfigureGlobalServices(
+                services,
+                configuration,
+                Array.Empty<Assembly>()
+            );
+        }
+        finally
+        {
+            EF.IsDesignTime = wasDesignTime;
+        }
+
+        using var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<IDbContextFactory<OpenGitBaseDbContext>>());
+    }
+
     private static IHostEnvironment CreateEnvironment(string environmentName) =>
         new TestHostEnvironment(environmentName);
 }

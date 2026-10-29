@@ -25,3 +25,28 @@ services:
 
   redis:
     ports: !reset []
+
+  # Kafka KRaft data on the SSD cache pool, not the array-backed docker.img (#232): the
+  # metadata log fsyncs on every append, ~273ms array fsyncs blow the 2s
+  # controller.quorum.request.timeout.ms, and the quorum churns elections forever.
+  # Mounts merge by target, so these replace the kafka{N}_data named volumes from
+  # docker-compose.yml. Set OGB_KAFKA_DATA_ROOT to use another fast local disk.
+  # Tower runs docker-compose.yml + docker-compose.override.yml, so its override must carry
+  # the same mounts (docker-compose.override.example.yml; scripts/kafka-storage.sh checks).
+  kafka-vol-init:
+    volumes:
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka1:/kafka1
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka2:/kafka2
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka3:/kafka3
+
+  kafka-1:
+    volumes:
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka1:/var/lib/kafka/data
+
+  kafka-2:
+    volumes:
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka2:/var/lib/kafka/data
+
+  kafka-3:
+    volumes:
+      - ${OGB_KAFKA_DATA_ROOT:-/mnt/cache/appdata/opengitbase}/kafka3:/var/lib/kafka/data

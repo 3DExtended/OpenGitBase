@@ -18,6 +18,9 @@ namespace OpenGitBase.Common;
 
 public static class DependencyInjectionHelpers
 {
+    // Same numbering as the status aggregator (84007201) and BackgroundWorkerAdvisoryLocks (840073xx).
+    private const long DatabaseMigrationAdvisoryLockKey = 84007001;
+
     public static Task ConfigureGlobalServices(
         IServiceCollection services,
         IConfiguration configuration,
@@ -90,22 +93,7 @@ public static class DependencyInjectionHelpers
         {
             await using var context = await factory.CreateDbContextAsync(cancellationToken);
             context.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync(
-                cancellationToken
-            );
-
-            if (pendingMigrations.Any())
-            {
-                Console.WriteLine("Applying pending migrations...");
-
-                await context.Database.MigrateAsync(cancellationToken);
-                Console.WriteLine("Migrations applied successfully.");
-            }
-            else
-            {
-                Console.WriteLine("No pending migrations.");
-            }
-
+            await MigrateHoldingLockAsync(context, cancellationToken);
             context.Database.SetCommandTimeout(TimeSpan.FromSeconds(30));
 
             return 0;
@@ -137,6 +125,60 @@ public static class DependencyInjectionHelpers
         ConfigureDatabase(services, configuration, env);
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// Every API replica migrates on startup. EF Core's own lock on "__EFMigrationsHistory" is
+    /// released between migrations, so a replica that starts while another one migrates re-applies
+    /// a migration and fails with 42P07 "relation already exists". Holding this advisory lock across
+    /// the pending check and the migrate makes it wait and then find nothing pending. Advisory locks
+    /// are Postgres-only, so other providers migrate without it.
+    /// </summary>
+    private static async Task MigrateHoldingLockAsync(
+        OpenGitBaseDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var holdsLock = context.Database.IsNpgsql();
+        if (holdsLock)
+        {
+            Console.WriteLine("Acquiring database migration lock...");
+            await PostgresAdvisoryLockService.AcquireAsync(
+                context,
+                DatabaseMigrationAdvisoryLockKey,
+                cancellationToken
+            );
+        }
+
+        try
+        {
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync(
+                cancellationToken
+            );
+
+            if (pendingMigrations.Any())
+            {
+                Console.WriteLine("Applying pending migrations...");
+
+                await context.Database.MigrateAsync(cancellationToken);
+                Console.WriteLine("Migrations applied successfully.");
+            }
+            else
+            {
+                Console.WriteLine("No pending migrations.");
+            }
+        }
+        finally
+        {
+            if (holdsLock)
+            {
+                await PostgresAdvisoryLockService.ReleaseAsync(
+                    context,
+                    DatabaseMigrationAdvisoryLockKey,
+                    CancellationToken.None
+                );
+            }
+        }
     }
 
     private static void ConfigureDatabase(
@@ -243,23 +285,16 @@ public static class DependencyInjectionHelpers
         IReadOnlyList<Assembly> featureAssemblies
     )
     {
-        if (Debugger.IsAttached)
+        // EF Core design-time tooling (`dotnet ef migrations add`, `database update`) builds the
+        // API host for its DbContext and sets IsDesignTime before it does. Never guess this from
+        // the command line: any path or argument containing "ef" would skip startup migrations.
+        if (Debugger.IsAttached || EF.IsDesignTime)
         {
             return;
         }
 
         var env = services.BuildServiceProvider().GetRequiredService<IHostEnvironment>();
         if (env.IsEnvironment("E2ETest"))
-        {
-            return;
-        }
-
-        var isEfMigrations = Array.Exists(
-            Environment.GetCommandLineArgs(),
-            arg => arg.Contains("ef", StringComparison.OrdinalIgnoreCase)
-        );
-
-        if (isEfMigrations)
         {
             return;
         }

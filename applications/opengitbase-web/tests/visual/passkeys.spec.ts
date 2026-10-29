@@ -1,6 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { expect, test } from '@playwright/test'
-import { blockServiceWorker, freezeClock } from './helpers'
+import { blockServiceWorker, expect, test, waitForPageReady } from './helpers'
 
 const MOCK_USER = {
   userId: '22222222-2222-2222-2222-222222222222',
@@ -144,10 +143,7 @@ async function mockPasskeyApi(page: Page, origin: string) {
 
 async function waitForGallery(page: Page) {
   await page.goto('/__visual__/?msw=1')
-  await page.waitForLoadState('networkidle')
-  await page.evaluate(async () => {
-    await document.fonts.ready
-  })
+  await waitForPageReady(page)
   await page.addStyleTag({
     content: `
       *, *::before, *::after {
@@ -162,7 +158,6 @@ async function waitForGallery(page: Page) {
 
 test.describe('passkeys', () => {
   test('gallery passkeys section', async ({ page }) => {
-    await freezeClock(page)
     await page.addInitScript(() => {
       document.cookie = 'ogb-site-gate-unlocked=1; Path=/; SameSite=Lax'
     })

@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=docker-env.sh
 source "${SCRIPT_DIR}/docker-env.sh"
+# shellcheck source=kafka-storage.sh
+source "${SCRIPT_DIR}/kafka-storage.sh"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 OVERRIDE_FILE="${OVERRIDE_FILE:-${REPO_ROOT}/docker-compose.override.yml}"
 HAPROXY_CFG="${REPO_ROOT}/docker/haproxy/haproxy.cfg"
@@ -345,6 +347,11 @@ fi
 if production_tunnel_profile_enabled; then
   echo "    Cloudflare tunnel: enabled (COMPOSE_PROFILES=${COMPOSE_PROFILES})"
 fi
+
+# Fails before anything rolls: a later compose up that reaches Kafka (e.g. without --no-deps)
+# would otherwise recreate the brokers off the SSD cache pool.
+run_step "Check Kafka data placement" \
+  kafka_require_ssd_mounts
 
 run_step "Validate HAProxy configuration" \
   docker run --rm \

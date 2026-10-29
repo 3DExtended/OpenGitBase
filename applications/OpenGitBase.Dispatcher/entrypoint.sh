@@ -62,16 +62,58 @@ if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
   ssh-keygen -A
 fi
 
-# Smart HTTP never reads the storage SSH key, so it starts first and keeps running when the fetch fails.
-dotnet /app/OpenGitBase.Dispatcher.dll --serve-http &
-DISPATCHER_HTTP_PID=$!
+# Every long-running process is a background child of this script, and the container lives
+# exactly as long as all of them: when one exits, the others get SIGTERM and the script exits with
+# that child's status, so `restart: unless-stopped` restarts the dispatcher. (sshd used to be
+# exec'd as the main process with GIT_SSH_ENABLED=true, and a dead dotnet left the container
+# running without Smart HTTP.) docker stop's SIGTERM is passed on to every child; the script waits
+# for them and exits 143. Background children ignore SIGINT in a non-interactive shell, so they
+# always get SIGTERM.
+CHILD_PIDS=()
+CHILD_NAMES=()
 
-cleanup() {
-  if kill -0 "${DISPATCHER_HTTP_PID}" 2>/dev/null; then
-    kill "${DISPATCHER_HTTP_PID}" 2>/dev/null || true
-  fi
+start_child() {
+  local name="$1"
+  shift
+  "$@" &
+  CHILD_PIDS+=("$!")
+  CHILD_NAMES+=("${name}")
 }
-trap cleanup EXIT
+
+child_name() {
+  local i
+  for i in "${!CHILD_PIDS[@]}"; do
+    if [ "${CHILD_PIDS[i]}" = "$1" ]; then
+      echo "${CHILD_NAMES[i]}"
+      return
+    fi
+  done
+  echo "pid $1"
+}
+
+stop_children() {
+  kill -TERM "${CHILD_PIDS[@]}" 2>/dev/null || true
+  wait "${CHILD_PIDS[@]}" 2>/dev/null || true
+}
+
+on_stop_signal() {
+  log "received SIG$1; stopping ${CHILD_NAMES[*]}"
+  stop_children
+  exit "$2"
+}
+trap 'on_stop_signal TERM 143' TERM
+trap 'on_stop_signal INT 130' INT
+
+supervise_children() {
+  local pid="" status=0
+  wait -n -p pid "${CHILD_PIDS[@]}" || status=$?
+  log "$(child_name "${pid}") exited with status ${status}; stopping the container"
+  stop_children
+  exit "${status}"
+}
+
+# Smart HTTP never reads the storage SSH key, so it starts first and keeps running when the fetch fails.
+start_child dotnet dotnet /app/OpenGitBase.Dispatcher.dll --serve-http
 
 # -s: an empty file left by an older entrypoint's failed fetch counts as missing.
 if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -s "${PRIVATE_KEY_PATH}" ]; then
@@ -82,7 +124,7 @@ if [ -n "${FLEET_BOOTSTRAP_TOKEN}" ] && [ ! -s "${PRIVATE_KEY_PATH}" ]; then
 fi
 
 if [ "${GIT_SSH_ENABLED}" = "true" ]; then
-  exec /usr/sbin/sshd -D -e
+  start_child sshd /usr/sbin/sshd -D -e
 fi
 
-wait "${DISPATCHER_HTTP_PID}"
+supervise_children

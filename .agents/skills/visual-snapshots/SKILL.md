@@ -24,7 +24,11 @@ Add or extend a section in `applications/opengitbase-web/app/pages/__visual__/in
 
 Add or extend `applications/opengitbase-web/tests/visual/<feature>.spec.ts`:
 
+Import `test` and `expect` from `./helpers`, not `@playwright/test`: its `test` pins the browser clock (`PINNED_NOW`) so relative times in fixtures ("3 months ago") render the same on any day. `pinned-clock.spec.ts` fails for a spec that imports them from `@playwright/test`.
+
 ```typescript
+import { expect, test } from './helpers';
+
 await waitForApp(page);
 await page.goto('/__visual__/?msw=1');
 await expect(page.getByTestId('visual-<name>')).toHaveScreenshot('<name>.png');

@@ -19,7 +19,19 @@ public static partial class Program
             return;
         }
 
-        await CreateHostBuilder(args).Build().RunAsync();
+        try
+        {
+            await CreateHostBuilder(args).Build().RunAsync();
+        }
+        catch (Exception ex)
+        {
+            // An exception that escapes Main aborts the runtime with SIGABRT. Wherever dotnet runs as
+            // PID 1 (the image now starts it under tini), the kernel drops that signal, so a failed
+            // startup such as a failed migration left a running, unhealthy API that the restart
+            // policy never recovered. Exit with a code instead.
+            await Console.Error.WriteLineAsync($"Unhandled exception. {ex}");
+            Environment.Exit(1);
+        }
     }
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>
